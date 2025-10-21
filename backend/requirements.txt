@@ -1,0 +1,16 @@
+fastapi
+uvicorn[standard]
+httpx
+SQLAlchemy>=1.4
+alembic
+psycopg2-binary
+pydantic
+pydantic-settings
+python-dotenv
+celery[redis]
+redis
+passlib[bcrypt]
+python-jose[cryptography]
+python-multipart
+python-dateutil
+jinja2
