@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Seed admin user and demo VOS node"""
 import os
+import sys
+sys.path.insert(0, '/srv')
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from passlib.context import CryptContext

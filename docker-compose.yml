@@ -12,7 +12,8 @@ services:
       - redis
     volumes:
       - ./backend/app:/srv/app
-    command: /bin/sh -c "alembic upgrade head && python /srv/app/scripts/init_admin.py && uvicorn app.main:app --host 0.0.0.0 --port 8000"
+    working_dir: /srv
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
     restart: unless-stopped
 
   celery:
@@ -20,6 +21,7 @@ services:
     container_name: yk_vos_celery
     env_file:
       - ./backend/.env
+    working_dir: /srv
     command: celery -A app.tasks.celery_app worker --loglevel=info
     depends_on:
       - backend
@@ -33,6 +35,7 @@ services:
     container_name: yk_vos_celery_beat
     env_file:
       - ./backend/.env
+    working_dir: /srv
     command: celery -A app.tasks.celery_app beat --loglevel=info --pidfile=/tmp/celerybeat.pid
     depends_on:
       - redis

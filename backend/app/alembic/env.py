@@ -1,5 +1,7 @@
 from logging.config import fileConfig
 import os
+import sys
+sys.path.insert(0, '/srv')
 from sqlalchemy import engine_from_config
 from sqlalchemy import pool
 

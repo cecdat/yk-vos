@@ -1,4 +1,4 @@
-FROM python:3.11-slim
+FROM docker.1ms.run/python:3.11-slim
 WORKDIR /srv
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
