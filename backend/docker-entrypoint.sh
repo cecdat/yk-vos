@@ -38,7 +38,10 @@ fi
 # 检查是否需要创建管理员账户
 echo "Checking admin account..."
 cd /srv
-python -c "
+export PYTHONPATH=/srv:$PYTHONPATH
+python3 -c "
+import sys
+sys.path.insert(0, '/srv')
 try:
     from app.core.db import SessionLocal
     from app.models.user import User
@@ -56,9 +59,10 @@ try:
 except Exception as e:
     print(f'Warning: Could not check admin account: {e}')
     # 不因为这个失败而退出
-"
+" || true
 
 # 启动应用
 echo "Starting FastAPI application..."
+cd /srv
 exec "$@"
 
