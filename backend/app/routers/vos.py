@@ -13,6 +13,7 @@ from app.models.phone import Phone
 from app.models.customer import Customer
 from app.routers.auth import get_current_user
 from app.tasks.sync_tasks import sync_customers_for_instance
+from app.tasks.initial_sync_tasks import initial_sync_for_new_instance
 
 router = APIRouter(prefix='/vos', tags=['vos'])
 logger = logging.getLogger(__name__)
@@ -135,9 +136,12 @@ async def create_instance(
     db.commit()
     db.refresh(new_instance)
     
-    # 立即同步客户数据（异步任务）
+    # 触发初始化同步任务（异步）
+    # 1. 同步客户数据
+    # 2. 分批同步最近一周的历史话单
     if new_instance.enabled:
-        sync_customers_for_instance.delay(new_instance.id)
+        logger.info(f'🚀 触发新VOS节点 {new_instance.name} 的初始化同步任务')
+        initial_sync_for_new_instance.delay(new_instance.id)
     
     return {
         'id': new_instance.id,
@@ -145,7 +149,7 @@ async def create_instance(
         'base_url': new_instance.base_url,
         'description': new_instance.description,
         'enabled': new_instance.enabled,
-        'message': 'Instance created successfully. Customer data sync has been triggered.'
+        'message': 'VOS节点创建成功，正在后台初始化数据同步（客户数据 + 最近7天话单）...'
     }
 
 @router.put('/instances/{instance_id}')

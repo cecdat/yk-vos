@@ -10,9 +10,21 @@ interface Customer {
   limitMoney: number
 }
 
+interface CustomerResponse {
+  customers: Customer[]
+  count: number
+  instance_id: number
+  instance_name: string
+  from_cache: boolean
+  data_source: string
+  last_synced_at?: string
+}
+
 export default function CustomersPage() {
   const { currentVOS } = useVOS()
   const [customersData, setCustomersData] = useState<Customer[]>([])
+  const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null)
+  const [dataSource, setDataSource] = useState<string>('database')
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState<'all' | 'normal' | 'debt'>('all')
@@ -41,7 +53,11 @@ export default function CustomersPage() {
     try {
       // 只获取当前 VOS 的客户数据
       const res = await api.get(`/vos/instances/${currentVOS.id}/customers`)
-      setCustomersData(res.data?.customers || [])
+      const responseData: CustomerResponse = res.data
+      
+      setCustomersData(responseData.customers || [])
+      setLastSyncedAt(responseData.last_synced_at || null)
+      setDataSource(responseData.data_source || 'database')
       
       if (res.data?.error) {
         setError(res.data.error)
@@ -50,6 +66,7 @@ export default function CustomersPage() {
       console.error('获取客户数据失败:', e)
       setError(e.response?.data?.detail || '获取客户数据失败')
       setCustomersData([])
+      setLastSyncedAt(null)
     } finally {
       setLoading(false)
     }
@@ -122,10 +139,33 @@ export default function CustomersPage() {
       {/* 当前 VOS 提示和错误信息 */}
       {currentVOS && (
         <div className='mb-4 p-4 bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg border border-blue-200'>
-          <p className='text-sm text-gray-700'>
-            <span className='font-semibold text-blue-600'>当前 VOS 节点:</span> {currentVOS.name}
-            {error && <span className='ml-4 text-red-600'>⚠️ {error}</span>}
-          </p>
+          <div className='flex items-center justify-between flex-wrap gap-2'>
+            <div className='flex items-center gap-4'>
+              <p className='text-sm text-gray-700'>
+                <span className='font-semibold text-blue-600'>当前 VOS 节点:</span> {currentVOS.name}
+              </p>
+              {lastSyncedAt && (
+                <p className='text-sm text-gray-600'>
+                  <span className='font-semibold'>最后同步时间:</span>{' '}
+                  {new Date(lastSyncedAt).toLocaleString('zh-CN', {
+                    year: 'numeric',
+                    month: '2-digit',
+                    day: '2-digit',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit'
+                  })}
+                </p>
+              )}
+              <span className={`text-xs px-2 py-1 rounded-full ${
+                dataSource === 'vos_api' ? 'bg-green-100 text-green-700' : 
+                dataSource === 'database' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-700'
+              }`}>
+                {dataSource === 'vos_api' ? '实时数据' : '缓存数据'}
+              </span>
+            </div>
+            {error && <span className='text-sm text-red-600'>⚠️ {error}</span>}
+          </div>
         </div>
       )}
 
