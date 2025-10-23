@@ -12,8 +12,8 @@ services:
       # TimescaleDB优化配置
       TIMESCALEDB_TELEMETRY: "off"
       # PostgreSQL性能优化（适合16GB服务器，可根据实际内存调整）
-      TS_TUNE_MEMORY: "8GB"
-      TS_TUNE_NUM_CPUS: "4"
+      TS_TUNE_MEMORY: "4GB"
+      TS_TUNE_NUM_CPUS: "2"
     volumes:
       # 使用本地目录映射，方便备份和迁移
       - ./data/postgres:/var/lib/postgresql/data
