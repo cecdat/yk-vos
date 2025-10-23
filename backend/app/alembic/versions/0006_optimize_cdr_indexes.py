@@ -1,7 +1,7 @@
 """optimize CDR indexes
 
-Revision ID: 0006
-Revises: 0005
+Revision ID: 0006_optimize_cdr_indexes
+Revises: 0005_add_enhanced_models
 Create Date: 2025-10-23
 
 """
@@ -9,8 +9,8 @@ from alembic import op
 import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
-revision = '0006'
-down_revision = '0005'
+revision = '0006_optimize_cdr_indexes'
+down_revision = '0005_add_enhanced_models'
 branch_labels = None
 depends_on = None
 
