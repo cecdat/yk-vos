@@ -16,12 +16,35 @@ interface CustomerSummary {
   instance_count: number
 }
 
+interface TaskStatus {
+  workers: {
+    count: number
+    status: string
+  }
+  tasks: {
+    active: number
+    scheduled: number
+    reserved: number
+    active_list: Array<{
+      name: string
+      worker: string
+      id: string
+    }>
+  }
+  sync_tasks: {
+    registered_count: number
+    task_types: string[]
+  }
+  status: string
+}
+
 export default function Page(){
   const { currentVOS } = useVOS()
   const [instances, setInstances] = useState<any[]>([])
   const [onlineCount, setOnlineCount] = useState(0)
   const [cdrCount, setCdrCount] = useState(0)
   const [customerSummary, setCustomerSummary] = useState<CustomerSummary | null>(null)
+  const [taskStatus, setTaskStatus] = useState<TaskStatus | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -33,7 +56,8 @@ export default function Page(){
     await Promise.all([
       fetchInstances(),
       fetchCdrCount(),
-      fetchCustomerSummary()
+      fetchCustomerSummary(),
+      fetchTaskStatus()
     ])
     setLoading(false)
   }
@@ -63,6 +87,21 @@ export default function Page(){
     } catch (e) {
       console.error('获取客户统计失败:', e)
       setCustomerSummary({ total_customers: 0, instances: [], instance_count: 0 })
+    }
+  }
+
+  async function fetchTaskStatus() {
+    try {
+      const res = await api.get('/tasks/status')
+      setTaskStatus(res.data)
+    } catch (e) {
+      console.error('获取任务状态失败:', e)
+      setTaskStatus({
+        workers: { count: 0, status: 'unknown' },
+        tasks: { active: 0, scheduled: 0, reserved: 0, active_list: [] },
+        sync_tasks: { registered_count: 0, task_types: [] },
+        status: 'error'
+      })
     }
   }
 
@@ -142,6 +181,120 @@ export default function Page(){
           </div>
         </div>
       </div>
+
+      {/* 任务同步状态卡片 */}
+      {taskStatus && (
+        <div className='mb-8'>
+          <h2 className='text-xl font-bold mb-4 text-gray-800 flex items-center gap-2'>
+            <svg className='w-6 h-6 text-blue-600' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
+              <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01' />
+            </svg>
+            任务同步状态
+            <span className={`px-3 py-1 rounded-full text-sm ${
+              taskStatus.status === 'healthy' ? 'bg-green-100 text-green-700' :
+              taskStatus.status === 'warning' ? 'bg-yellow-100 text-yellow-700' :
+              'bg-red-100 text-red-700'
+            }`}>
+              {taskStatus.status === 'healthy' ? '✓ 正常' :
+               taskStatus.status === 'warning' ? '⚠ 警告' :
+               '✗ 异常'}
+            </span>
+          </h2>
+          
+          <div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4'>
+            {/* Worker状态 */}
+            <div className='bg-white bg-opacity-90 backdrop-filter backdrop-blur-lg rounded-xl p-5 shadow-lg border border-white border-opacity-30'>
+              <div className='flex items-center gap-3 mb-3'>
+                <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+                  taskStatus.workers.status === 'running' ? 'bg-green-100' :
+                  taskStatus.workers.status === 'stopped' ? 'bg-red-100' : 'bg-gray-100'
+                }`}>
+                  <svg className={`w-5 h-5 ${
+                    taskStatus.workers.status === 'running' ? 'text-green-600' :
+                    taskStatus.workers.status === 'stopped' ? 'text-red-600' : 'text-gray-600'
+                  }`} fill='none' viewBox='0 0 24 24' stroke='currentColor'>
+                    <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z' />
+                  </svg>
+                </div>
+                <div>
+                  <p className='text-sm text-gray-600'>Worker数量</p>
+                  <p className='text-2xl font-bold text-gray-900'>{taskStatus.workers.count}</p>
+                </div>
+              </div>
+              <div className='text-xs text-gray-500'>
+                状态: <span className={`font-semibold ${
+                  taskStatus.workers.status === 'running' ? 'text-green-600' :
+                  taskStatus.workers.status === 'stopped' ? 'text-red-600' : 'text-gray-600'
+                }`}>{taskStatus.workers.status}</span>
+              </div>
+            </div>
+
+            {/* 活跃任务 */}
+            <div className='bg-white bg-opacity-90 backdrop-filter backdrop-blur-lg rounded-xl p-5 shadow-lg border border-white border-opacity-30'>
+              <div className='flex items-center gap-3 mb-3'>
+                <div className='w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center'>
+                  <svg className='w-5 h-5 text-blue-600' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
+                    <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M13 10V3L4 14h7v7l9-11h-7z' />
+                  </svg>
+                </div>
+                <div>
+                  <p className='text-sm text-gray-600'>活跃任务</p>
+                  <p className='text-2xl font-bold text-gray-900'>{taskStatus.tasks.active}</p>
+                </div>
+              </div>
+              {taskStatus.tasks.active_list && taskStatus.tasks.active_list.length > 0 && (
+                <div className='text-xs text-gray-500 mt-2'>
+                  <p className='font-semibold mb-1'>当前执行:</p>
+                  {taskStatus.tasks.active_list.slice(0, 2).map((task, idx) => (
+                    <p key={idx} className='truncate'>• {task.name}</p>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* 计划任务 */}
+            <div className='bg-white bg-opacity-90 backdrop-filter backdrop-blur-lg rounded-xl p-5 shadow-lg border border-white border-opacity-30'>
+              <div className='flex items-center gap-3 mb-3'>
+                <div className='w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center'>
+                  <svg className='w-5 h-5 text-purple-600' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
+                    <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z' />
+                  </svg>
+                </div>
+                <div>
+                  <p className='text-sm text-gray-600'>计划任务</p>
+                  <p className='text-2xl font-bold text-gray-900'>{taskStatus.tasks.scheduled}</p>
+                </div>
+              </div>
+              <div className='text-xs text-gray-500'>
+                队列中: {taskStatus.tasks.reserved} 个
+              </div>
+            </div>
+
+            {/* 注册的同步任务类型 */}
+            <div className='bg-white bg-opacity-90 backdrop-filter backdrop-blur-lg rounded-xl p-5 shadow-lg border border-white border-opacity-30'>
+              <div className='flex items-center gap-3 mb-3'>
+                <div className='w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center'>
+                  <svg className='w-5 h-5 text-orange-600' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
+                    <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15' />
+                  </svg>
+                </div>
+                <div>
+                  <p className='text-sm text-gray-600'>同步任务</p>
+                  <p className='text-2xl font-bold text-gray-900'>{taskStatus.sync_tasks.registered_count}</p>
+                </div>
+              </div>
+              {taskStatus.sync_tasks.task_types && taskStatus.sync_tasks.task_types.length > 0 && (
+                <div className='text-xs text-gray-500 mt-2'>
+                  <p className='font-semibold mb-1'>任务类型:</p>
+                  {taskStatus.sync_tasks.task_types.slice(0, 2).map((type, idx) => (
+                    <p key={idx} className='truncate'>• {type}</p>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 各实例客户分布 */}
       {customerSummary && customerSummary.instances.length > 0 && (
