@@ -15,7 +15,7 @@ max_attempts=30
 attempt=0
 
 while [ $attempt -lt $max_attempts ]; do
-  if pg_isready -h postgres -U ${POSTGRES_USER:-vos_user} > /dev/null 2>&1; then
+  if pg_isready -h postgres -U ${POSTGRES_USER:-vos_user} -d ${POSTGRES_DB:-vosadmin} > /dev/null 2>&1; then
     echo "✅ 数据库已就绪"
     break
   fi

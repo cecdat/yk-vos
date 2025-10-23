@@ -237,7 +237,7 @@ wait_for_database() {
     attempt=0
     
     while [ $attempt -lt $max_attempts ]; do
-        if docker-compose exec -T postgres pg_isready -U vos_user &> /dev/null; then
+        if docker-compose exec -T postgres pg_isready -U vos_user -d vosadmin &> /dev/null; then
             print_success "PostgreSQL 已就绪"
             return 0
         fi

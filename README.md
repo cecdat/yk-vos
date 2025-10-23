@@ -579,7 +579,7 @@ docker-compose logs backend
 docker-compose ps postgres
 
 # 检查数据库连接
-docker-compose exec postgres pg_isready -U vos_user
+docker-compose exec postgres pg_isready -U vos_user -d vosadmin
 
 # 重启数据库
 docker-compose restart postgres

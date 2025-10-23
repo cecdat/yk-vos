@@ -15,7 +15,7 @@ echo ""
 
 echo "📋 步骤 2: 检查数据库连接"
 echo "----------------------------------------"
-if docker-compose exec postgres pg_isready -U vos_user; then
+if docker-compose exec postgres pg_isready -U vos_user -d vosadmin; then
     echo "✅ 数据库连接正常"
 else
     echo "❌ 数据库连接失败"

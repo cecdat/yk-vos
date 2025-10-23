@@ -123,7 +123,7 @@ show_status() {
         echo -e "  前端: ${RED}✗ 异常${NC}"
     fi
     
-    if docker-compose exec -T postgres pg_isready -U vos_user > /dev/null 2>&1; then
+    if docker-compose exec -T postgres pg_isready -U vos_user -d vosadmin > /dev/null 2>&1; then
         echo -e "  数据库: ${GREEN}✓ 正常${NC}"
     else
         echo -e "  数据库: ${RED}✗ 异常${NC}"

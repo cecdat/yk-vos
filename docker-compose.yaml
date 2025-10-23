@@ -18,7 +18,7 @@ services:
       - vos-network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-vos_user}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-vos_user} -d ${POSTGRES_DB:-vosadmin}"]
       interval: 10s
       timeout: 5s
       retries: 5

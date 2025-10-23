@@ -269,7 +269,7 @@ curl -I http://localhost:3000
 # 预期输出: HTTP/1.1 200 OK
 
 # 检查 PostgreSQL
-docker-compose exec postgres pg_isready -U vos_user
+docker-compose exec postgres pg_isready -U vos_user -d vosadmin
 # 预期输出: accepting connections
 
 # 检查 Redis
