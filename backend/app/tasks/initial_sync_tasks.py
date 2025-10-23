@@ -17,12 +17,26 @@ logger = logging.getLogger(__name__)
 
 
 @celery.task
-def initial_sync_for_new_instance(instance_id: int):
+def initial_sync_for_new_instance(instance_id: int, sync_days: int = 7):
     """
-    新增VOS节点后的初始化同步任务
+    新增VOS节点后的初始化同步任务（优化版 - 避免数据量过大）
+    
     1. 首先同步客户数据
-    2. 根据客户数据，同步最近一周的历史话单（分7批，每天一批）
+    2. 分批同步最近N天的历史话单（每天一批，间隔30秒）
+    
+    Args:
+        instance_id: VOS实例ID
+        sync_days: 同步最近多少天（默认7天，最大不超过30天）
+    
+    优化说明：
+    - 对于上亿级话单，限制首次同步范围避免超时
+    - 分批异步执行，避免并发过高
+    - 可在业务低峰期延长同步天数
     """
+    # ⚠️ 限制最大同步天数为30天（上亿级数据优化）
+    if sync_days > 30:
+        sync_days = 30
+        logger.warning(f'⚠️ 同步天数限制为30天，避免数据量过大导致超时')
     db = SessionLocal()
     try:
         inst = db.query(VOSInstance).filter(VOSInstance.id == instance_id).first()
@@ -42,12 +56,13 @@ def initial_sync_for_new_instance(instance_id: int):
         
         logger.info(f'✅ 客户数据同步完成: {customer_result.get("total", 0)} 个客户')
         
-        # 步骤2: 异步分批同步最近一周的历史话单
-        logger.info(f'📞 步骤2: 开始分批同步最近7天的历史话单...')
+        # 步骤2: 异步分批同步最近N天的历史话单
+        logger.info(f'📞 步骤2: 开始分批同步最近{sync_days}天的历史话单...')
+        logger.info(f'💡 提示: 如数据量过大，可在业务低峰期手动触发更多天数的同步')
         
-        # 创建7个异步任务，每个任务同步一天的数据
+        # 创建N个异步任务，每个任务同步一天的数据
         today = datetime.now().date()
-        for i in range(7):
+        for i in range(sync_days):
             sync_date = today - timedelta(days=i)
             # 延迟执行，避免并发过高
             delay_seconds = i * 30  # 每批间隔30秒
@@ -61,10 +76,12 @@ def initial_sync_for_new_instance(instance_id: int):
         
         return {
             'success': True,
-            'message': f'初始化同步已启动',
+            'message': f'初始化同步已启动（同步最近{sync_days}天数据）',
             'customers_synced': customer_result.get('total', 0),
-            'cdr_sync_tasks_created': 7,
-            'instance_name': inst.name
+            'cdr_sync_days': sync_days,
+            'cdr_sync_tasks_created': sync_days,
+            'instance_name': inst.name,
+            'note': '如需同步更多历史数据，请在业务低峰期手动触发'
         }
         
     except Exception as e:

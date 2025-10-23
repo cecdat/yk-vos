@@ -25,6 +25,8 @@ class CDRQueryRequest(BaseModel):
     callee_gateway: Optional[str] = None
     begin_time: str  # yyyyMMdd 格式
     end_time: str    # yyyyMMdd 格式
+    page: int = 1    # 页码（从1开始）
+    page_size: int = 20  # 每页数量（默认20，最大100）
 
 @router.get('/history')
 async def get_cdr_history(
@@ -50,20 +52,20 @@ async def get_cdr_history(
     
     return {
         'cdrs': [
-            {
-                'id': cdr.id,
-                'vos_id': cdr.vos_id,
-                'caller': cdr.caller,
-                'callee': cdr.callee,
-                'caller_gateway': cdr.caller_gateway,
-                'callee_gateway': cdr.callee_gateway,
-                'start_time': cdr.start_time.isoformat() if cdr.start_time else None,
-                'end_time': cdr.end_time.isoformat() if cdr.end_time else None,
-                'duration': cdr.duration,
-                'cost': float(cdr.cost) if cdr.cost else 0,
-                'disposition': cdr.disposition,
-            }
-            for cdr in cdrs
+        {
+            'id': cdr.id,
+            'vos_id': cdr.vos_id,
+            'caller': cdr.caller,
+            'callee': cdr.callee,
+            'caller_gateway': cdr.caller_gateway,
+            'callee_gateway': cdr.callee_gateway,
+            'start_time': cdr.start_time.isoformat() if cdr.start_time else None,
+            'end_time': cdr.end_time.isoformat() if cdr.end_time else None,
+            'duration': cdr.duration,
+            'cost': float(cdr.cost) if cdr.cost else 0,
+            'disposition': cdr.disposition,
+        }
+        for cdr in cdrs
         ],
         'count': len(cdrs),
         'data_source': 'local_database',
@@ -101,12 +103,17 @@ async def query_cdrs_from_vos(
     force_vos: bool = Query(False, description="强制从VOS查询，否则优先本地")
 ):
     """
-    智能话单查询（优化版）
+    智能话单查询（优化版 - 支持上亿级数据）
     
     查询策略：
     1. 优先查询本地数据库（极快，<10ms）
     2. 本地未找到或force_vos=true时，查询VOS API
     3. 查询结果自动存入数据库
+    
+    性能优化：
+    - ✅ 时间范围限制（最多31天）
+    - ✅ 结果集分页（默认20条/页，最大100条）
+    - ✅ 智能索引使用
     """
     start_time = time.time()
     
@@ -121,6 +128,25 @@ async def query_cdrs_from_vos(
         end_dt = datetime.strptime(query_params.end_time, '%Y%m%d') + timedelta(days=1)
     except:
         raise HTTPException(status_code=400, detail='时间格式错误，应为 yyyyMMdd')
+    
+    # ⚠️ 限制查询范围不超过31天（上亿级数据优化）
+    if (end_dt - begin_dt).days > 31:
+        raise HTTPException(
+            status_code=400,
+            detail='查询范围不能超过31天，避免性能问题。如需查询更长时间，请分批查询。'
+        )
+    
+    # ⚠️ 限制不能查询超过1年前的数据
+    if begin_dt < datetime.now() - timedelta(days=365):
+        raise HTTPException(
+            status_code=400,
+            detail='查询1年前的数据请联系管理员访问归档系统'
+        )
+    
+    # 分页参数验证
+    page = max(1, query_params.page)
+    page_size = min(100, max(1, query_params.page_size))  # 限制最大100条
+    offset = (page - 1) * page_size
     
     # 1. 如果不强制VOS，先查本地数据库
     if not force_vos:
@@ -145,10 +171,14 @@ async def query_cdrs_from_vos(
         if query_params.callee_gateway:
             query = query.filter(CDR.callee_gateway == query_params.callee_gateway)
         
-        local_cdrs = query.order_by(desc(CDR.start_time)).limit(1000).all()
+        # 查询总数
+        total_count = query.count()
+        
+        # 分页查询
+        local_cdrs = query.order_by(desc(CDR.start_time)).offset(offset).limit(page_size).all()
         
         # 如果本地有数据，直接返回
-        if local_cdrs:
+        if local_cdrs or total_count > 0:
             query_time = time.time() - start_time
             
             return {
@@ -167,11 +197,15 @@ async def query_cdrs_from_vos(
                     for cdr in local_cdrs
                 ],
                 'count': len(local_cdrs),
+                'total': total_count,
+                'page': page,
+                'page_size': page_size,
+                'total_pages': (total_count + page_size - 1) // page_size,
                 'instance_id': instance_id,
                 'instance_name': instance.name,
                 'data_source': 'local_database',
                 'query_time_ms': round(query_time * 1000, 2),
-                'message': f'从本地数据库查询到 {len(local_cdrs)} 条记录（速度：{round(query_time * 1000, 2)}ms）'
+                'message': f'从本地数据库查询到 {total_count} 条记录（第{page}/{(total_count + page_size - 1) // page_size}页，速度：{round(query_time * 1000, 2)}ms）'
             }
     
     # 2. 本地没有数据或强制VOS，查询VOS API
