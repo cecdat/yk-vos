@@ -138,9 +138,27 @@ export default function CdrPage() {
     const h = Math.floor(seconds / 3600)
     const m = Math.floor((seconds % 3600) / 60)
     const s = seconds % 60
-    if (h > 0) return `${h}h ${m}m ${s}s`
-    if (m > 0) return `${m}m ${s}s`
+    if (h > 0) return `${h}h${m}m${s}s`
+    if (m > 0) return `${m}m${s}s`
     return `${s}s`
+  }
+
+  // 格式化时间戳为简洁格式（避免换行）
+  function formatDateTime(dateTimeStr: string | null | undefined): string {
+    if (!dateTimeStr) return '-'
+    try {
+      // 如果已经是格式化的字符串，直接显示简短格式
+      if (dateTimeStr.includes(' ')) {
+        // 格式: "2025-10-23 08:30:15" -> "10-23 08:30"
+        const parts = dateTimeStr.split(' ')
+        const datePart = parts[0].split('-').slice(1).join('-') // 取月-日
+        const timePart = parts[1].split(':').slice(0, 2).join(':') // 取时:分
+        return `${datePart} ${timePart}`
+      }
+      return dateTimeStr
+    } catch {
+      return dateTimeStr || '-'
+    }
   }
 
   return (
@@ -152,66 +170,18 @@ export default function CdrPage() {
       </div>
 
       {/* 查询表单 */}
-      <div className='bg-white bg-opacity-90 backdrop-filter backdrop-blur-lg rounded-xl p-6 shadow-lg border border-white border-opacity-30 mb-6'>
-        {/* 查询模式选择器 */}
-        <div className='mb-4 space-y-3'>
-          <div className='flex items-center gap-4 p-3 bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg border border-blue-200'>
-            <span className='text-sm font-medium text-gray-700'>查询范围:</span>
-            <label className='flex items-center gap-2 cursor-pointer'>
-              <input
-                type='radio'
-                value='current'
-                checked={queryMode === 'current'}
-                onChange={e => setQueryMode(e.target.value as 'current' | 'all')}
-                className='w-4 h-4 text-blue-600'
-              />
-              <span className='text-sm text-gray-700'>
-                当前 VOS 节点 
-                {currentVOS && <span className='ml-1 font-semibold text-blue-600'>({currentVOS.name})</span>}
-              </span>
-            </label>
-            <label className='flex items-center gap-2 cursor-pointer'>
-              <input
-                type='radio'
-                value='all'
-                checked={queryMode === 'all'}
-                onChange={e => setQueryMode(e.target.value as 'current' | 'all')}
-                className='w-4 h-4 text-blue-600'
-              />
-              <span className='text-sm text-gray-700'>
-                所有 VOS 节点 <span className='ml-1 text-gray-500'>({allVOS.length} 个)</span>
-              </span>
-            </label>
-          </div>
-          
-          {queryMode === 'current' && (
-            <div className='flex items-center gap-4 p-3 bg-gradient-to-r from-green-50 to-teal-50 rounded-lg border border-green-200'>
-              <span className='text-sm font-medium text-gray-700'>查询策略:</span>
-              <label className='flex items-center gap-2 cursor-pointer'>
-                <input
-                  type='checkbox'
-                  checked={forceVOS}
-                  onChange={e => setForceVOS(e.target.checked)}
-                  className='w-4 h-4 text-green-600 rounded'
-                />
-                <span className='text-sm text-gray-700'>
-                  强制从 VOS 查询
-                  <span className='ml-1 text-gray-500'>(否则优先本地数据库)</span>
-                </span>
-              </label>
-              <div className='flex items-center gap-2 text-xs text-gray-600'>
-                <svg className='w-4 h-4 text-green-600' fill='currentColor' viewBox='0 0 20 20'>
-                  <path fillRule='evenodd' d='M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z' clipRule='evenodd' />
-                </svg>
-                <span>本地查询极快(&lt;10ms)，VOS查询可能需要1-5秒</span>
-              </div>
-            </div>
-          )}
+      <div className='bg-white bg-opacity-90 backdrop-filter backdrop-blur-lg rounded-xl p-4 shadow-lg border border-white border-opacity-30 mb-4'>
+        {/* 当前VOS节点显示 */}
+        <div className='mb-3 flex items-center gap-2 text-sm'>
+          <span className='text-gray-600'>当前VOS节点:</span>
+          <span className='font-semibold text-blue-600'>
+            {currentVOS ? currentVOS.name : '未选择'}
+          </span>
         </div>
 
-        <div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-4'>
+        <div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 mb-3'>
           <div>
-            <label className='block text-sm font-medium mb-1 text-gray-700'>开始日期</label>
+            <label className='block text-xs font-medium mb-1 text-gray-700'>开始日期</label>
             <input
               type='date'
               value={parseDate(beginTime)}
@@ -219,12 +189,12 @@ export default function CdrPage() {
                 const date = e.target.value.replace(/-/g, '')
                 setBeginTime(date)
               }}
-              className='w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none'
+              className='w-full p-2 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none'
               disabled={loading}
             />
           </div>
           <div>
-            <label className='block text-sm font-medium mb-1 text-gray-700'>结束日期</label>
+            <label className='block text-xs font-medium mb-1 text-gray-700'>结束日期</label>
             <input
               type='date'
               value={parseDate(endTime)}
@@ -232,39 +202,39 @@ export default function CdrPage() {
                 const date = e.target.value.replace(/-/g, '')
                 setEndTime(date)
               }}
-              className='w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none'
+              className='w-full p-2 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none'
               disabled={loading}
             />
           </div>
           <div>
-            <label className='block text-sm font-medium mb-1 text-gray-700'>客户账号</label>
+            <label className='block text-xs font-medium mb-1 text-gray-700'>客户账号</label>
             <input
               type='text'
               value={accounts}
               onChange={e => setAccounts(e.target.value)}
-              className='w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none'
+              className='w-full p-2 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none'
               placeholder='多个账号用逗号分隔'
               disabled={loading}
             />
           </div>
           <div>
-            <label className='block text-sm font-medium mb-1 text-gray-700'>主叫号码</label>
+            <label className='block text-xs font-medium mb-1 text-gray-700'>主叫号码</label>
             <input
               type='text'
               value={caller}
               onChange={e => setCaller(e.target.value)}
-              className='w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none'
+              className='w-full p-2 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none'
               placeholder='例如: 86138xxxx'
               disabled={loading}
             />
           </div>
           <div>
-            <label className='block text-sm font-medium mb-1 text-gray-700'>被叫号码</label>
+            <label className='block text-xs font-medium mb-1 text-gray-700'>被叫号码</label>
             <input
               type='text'
               value={callee}
               onChange={e => setCallee(e.target.value)}
-              className='w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none'
+              className='w-full p-2 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none'
               placeholder='例如: 86139xxxx'
               disabled={loading}
             />
@@ -273,10 +243,10 @@ export default function CdrPage() {
             <button
               onClick={handleQuery}
               disabled={loading}
-              className='w-full py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg font-medium hover:from-blue-700 hover:to-purple-700 transition disabled:opacity-50 flex items-center justify-center gap-2'
+              className='w-full py-2 text-sm bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg font-medium hover:from-blue-700 hover:to-purple-700 transition disabled:opacity-50 flex items-center justify-center gap-2'
             >
               {loading && (
-                <svg className='animate-spin h-5 w-5' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
+                <svg className='animate-spin h-4 w-4' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
                   <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15' />
                 </svg>
               )}
@@ -284,64 +254,7 @@ export default function CdrPage() {
             </button>
           </div>
         </div>
-
-        {/* 查询提示 */}
-        <div className='mt-4 p-3 bg-blue-50 rounded-lg border border-blue-200 text-sm text-gray-700'>
-          <p className='flex items-center gap-2'>
-            <svg className='w-4 h-4 text-blue-600' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
-              <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z' />
-            </svg>
-            <span>
-              默认查询前一天的数据。
-              {queryMode === 'current' 
-                ? forceVOS 
-                  ? ' 强制VOS查询模式：直接从VOS获取最新数据（较慢）。' 
-                  : ' 智能查询模式：优先本地数据库，极速响应（&lt;10ms）。'
-                : ' 当前查询所有 VOS 节点，可能需要较长时间。'}
-            </span>
-          </p>
-        </div>
       </div>
-
-      {/* 实例查询结果摘要 */}
-      {instanceResults.length > 0 && (
-        <div className='mb-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4'>
-          {instanceResults.map(inst => (
-            <div key={inst.instance_id} className='bg-white rounded-lg p-4 shadow-sm border'>
-              <div className='flex items-center justify-between mb-2'>
-                <h3 className='font-semibold text-gray-800'>{inst.instance_name}</h3>
-                <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                  inst.success ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                }`}>
-                  {inst.success ? `${inst.count} 条` : '查询失败'}
-                </span>
-              </div>
-              {inst.success && inst.data_source && (
-                <div className='mt-2 space-y-1 text-xs'>
-                  <div className='flex items-center gap-2'>
-                    <span className={`px-2 py-0.5 rounded-full font-medium ${
-                      inst.data_source === 'local_database' 
-                        ? 'bg-green-100 text-green-700'
-                        : 'bg-orange-100 text-orange-700'
-                    }`}>
-                      {inst.data_source === 'local_database' ? '📦 本地数据库' : '🌐 VOS API'}
-                    </span>
-                    <span className='text-gray-600'>
-                      ⚡ {inst.query_time}ms
-                    </span>
-                  </div>
-                  {inst.data_source === 'local_database' && (
-                    <p className='text-green-600'>✓ 极速查询，索引命中</p>
-                  )}
-                </div>
-              )}
-              {inst.error && (
-                <p className='text-xs text-red-600'>⚠️ {inst.error}</p>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
 
       {/* 话单列表 */}
       {loading ? (
@@ -400,58 +313,58 @@ export default function CdrPage() {
             <table className='min-w-full divide-y divide-gray-200'>
               <thead className='bg-gray-50'>
                 <tr>
-                  <th className='px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase'>话单ID</th>
-                  <th className='px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase'>VOS节点</th>
-                  <th className='px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase'>账户</th>
-                  <th className='px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase'>主叫号码</th>
-                  <th className='px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase'>被叫号码</th>
-                  <th className='px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase'>网关</th>
-                  <th className='px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase'>开始时间</th>
-                  <th className='px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase'>结束时间</th>
-                  <th className='px-4 py-3 text-right text-xs font-semibold text-gray-700 uppercase'>通话时长</th>
-                  <th className='px-4 py-3 text-right text-xs font-semibold text-gray-700 uppercase'>计费时长</th>
-                  <th className='px-4 py-3 text-right text-xs font-semibold text-gray-700 uppercase'>费用</th>
-                  <th className='px-4 py-3 text-center text-xs font-semibold text-gray-700 uppercase'>挂断方</th>
-                  <th className='px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase'>终止原因</th>
+                  <th className='px-2 py-2 text-left text-xs font-semibold text-gray-700'>话单ID</th>
+                  <th className='px-2 py-2 text-left text-xs font-semibold text-gray-700'>VOS节点</th>
+                  <th className='px-2 py-2 text-left text-xs font-semibold text-gray-700'>账户</th>
+                  <th className='px-2 py-2 text-left text-xs font-semibold text-gray-700'>主叫号码</th>
+                  <th className='px-2 py-2 text-left text-xs font-semibold text-gray-700'>被叫号码</th>
+                  <th className='px-2 py-2 text-left text-xs font-semibold text-gray-700'>网关</th>
+                  <th className='px-2 py-2 text-left text-xs font-semibold text-gray-700'>开始时间</th>
+                  <th className='px-2 py-2 text-left text-xs font-semibold text-gray-700'>结束时间</th>
+                  <th className='px-2 py-2 text-right text-xs font-semibold text-gray-700'>通话时长</th>
+                  <th className='px-2 py-2 text-right text-xs font-semibold text-gray-700'>计费时长</th>
+                  <th className='px-2 py-2 text-right text-xs font-semibold text-gray-700'>费用</th>
+                  <th className='px-2 py-2 text-center text-xs font-semibold text-gray-700'>挂断方</th>
+                  <th className='px-2 py-2 text-left text-xs font-semibold text-gray-700'>终止原因</th>
                 </tr>
               </thead>
               <tbody className='divide-y divide-gray-200'>
                 {paginatedCdrs.map((cdr, index) => (
                   <tr key={index} className='hover:bg-gray-50 transition'>
-                    <td className='px-4 py-3 text-sm'>
-                      <span className='px-2 py-1 bg-gray-100 text-gray-700 rounded text-xs font-mono'>
+                    <td className='px-2 py-2 text-xs'>
+                      <span className='px-1.5 py-0.5 bg-gray-100 text-gray-700 rounded text-xs font-mono'>
                         {cdr.flowNo || '-'}
                       </span>
                     </td>
-                    <td className='px-4 py-3 text-sm'>
-                      <span className='px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs font-medium'>
+                    <td className='px-2 py-2 text-xs'>
+                      <span className='px-1.5 py-0.5 bg-blue-100 text-blue-800 rounded text-xs font-medium'>
                         {cdr._instance_name || '-'}
                       </span>
                     </td>
-                    <td className='px-4 py-3 text-sm'>
+                    <td className='px-2 py-2 text-xs'>
                       <div>
                         <div className='font-medium text-gray-900'>{cdr.accountName || '-'}</div>
                         <div className='text-xs text-gray-500'>{cdr.account || '-'}</div>
                       </div>
                     </td>
-                    <td className='px-4 py-3 text-sm text-gray-600 font-mono'>{cdr.callerE164 || '-'}</td>
-                    <td className='px-4 py-3 text-sm text-gray-600 font-mono'>{cdr.calleeAccessE164 || '-'}</td>
-                    <td className='px-4 py-3 text-sm text-gray-600 truncate max-w-xs' title={cdr.calleeGateway}>
+                    <td className='px-2 py-2 text-xs text-gray-600 font-mono'>{cdr.callerE164 || '-'}</td>
+                    <td className='px-2 py-2 text-xs text-gray-600 font-mono'>{cdr.calleeAccessE164 || '-'}</td>
+                    <td className='px-2 py-2 text-xs text-gray-600 truncate max-w-xs' title={cdr.calleeGateway}>
                       {cdr.calleeGateway || '-'}
                     </td>
-                    <td className='px-4 py-3 text-sm text-gray-600'>{cdr.start || '-'}</td>
-                    <td className='px-4 py-3 text-sm text-gray-600'>{cdr.stop || '-'}</td>
-                    <td className='px-4 py-3 text-sm text-right text-gray-900'>
+                    <td className='px-2 py-2 text-xs text-gray-600 whitespace-nowrap'>{formatDateTime(cdr.start)}</td>
+                    <td className='px-2 py-2 text-xs text-gray-600 whitespace-nowrap'>{formatDateTime(cdr.stop)}</td>
+                    <td className='px-2 py-2 text-xs text-right text-gray-900'>
                       {formatDuration(cdr.holdTime || 0)}
                     </td>
-                    <td className='px-4 py-3 text-sm text-right text-gray-600'>
+                    <td className='px-2 py-2 text-xs text-right text-gray-600'>
                       {formatDuration(cdr.feeTime || 0)}
                     </td>
-                    <td className='px-4 py-3 text-sm text-right font-semibold text-green-600'>
+                    <td className='px-2 py-2 text-xs text-right font-semibold text-green-600'>
                       {cdr.fee ? `¥${Number(cdr.fee).toFixed(4)}` : '-'}
                     </td>
-                    <td className='px-4 py-3 text-center'>
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                    <td className='px-2 py-2 text-center'>
+                      <span className={`px-1.5 py-0.5 rounded-full text-xs font-medium ${
                         cdr.endDirection === 0 ? 'bg-blue-100 text-blue-700' :
                         cdr.endDirection === 1 ? 'bg-purple-100 text-purple-700' :
                         cdr.endDirection === 2 ? 'bg-gray-100 text-gray-700' :
@@ -462,8 +375,8 @@ export default function CdrPage() {
                          cdr.endDirection === 2 ? '服务器' : '-'}
                       </span>
                     </td>
-                    <td className='px-4 py-3 text-sm text-gray-600'>
-                      <span className={`px-2 py-1 rounded text-xs ${
+                    <td className='px-2 py-2 text-xs text-gray-600'>
+                      <span className={`px-1.5 py-0.5 rounded text-xs ${
                         cdr.endReason === '200' || cdr.endReason === '0' ? 'bg-green-100 text-green-700' :
                         'bg-red-100 text-red-700'
                       }`}>
