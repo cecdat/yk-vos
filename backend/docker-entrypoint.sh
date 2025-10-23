@@ -3,40 +3,44 @@
 
 set -e
 
-echo "Starting YK-VOS Backend..."
+# 设置 UTF-8 编码
+export LANG=C.UTF-8
+export LC_ALL=C.UTF-8
+
+echo "🚀 正在启动 YK-VOS Backend..."
 
 # 等待数据库就绪
-echo "Waiting for PostgreSQL..."
+echo "⏳ 等待 PostgreSQL 数据库就绪..."
 max_attempts=30
 attempt=0
 
 while [ $attempt -lt $max_attempts ]; do
   if pg_isready -h postgres -U ${POSTGRES_USER:-vos_user} > /dev/null 2>&1; then
-    echo "PostgreSQL is ready"
+    echo "✅ 数据库已就绪"
     break
   fi
   attempt=$((attempt + 1))
-  echo "Waiting for database... ($attempt/$max_attempts)"
+  echo "   等待数据库... ($attempt/$max_attempts)"
   sleep 2
 done
 
 if [ $attempt -eq $max_attempts ]; then
-  echo "ERROR: PostgreSQL not ready after $max_attempts attempts"
+  echo "❌ 错误: PostgreSQL 在 $max_attempts 次尝试后仍未就绪"
   exit 1
 fi
 
 # 运行数据库迁移
-echo "Running database migrations..."
+echo "📦 运行数据库迁移..."
 cd /srv/app
 if alembic upgrade head; then
-  echo "Database migration completed"
+  echo "✅ 数据库迁移完成"
 else
-  echo "Database migration failed"
+  echo "❌ 数据库迁移失败"
   exit 1
 fi
 
 # 检查是否需要创建管理员账户
-echo "Checking admin account..."
+echo "👤 检查管理员账户..."
 cd /srv
 export PYTHONPATH=/srv:$PYTHONPATH
 python3 -c "
@@ -45,14 +49,14 @@ sys.path.insert(0, '/srv')
 try:
     from app.scripts.init_admin import run as create_admin
     create_admin()
-    print('Admin account initialized')
+    print('✅ 管理员账户已初始化')
 except Exception as e:
-    print(f'Warning: Could not initialize admin account: {e}')
+    print(f'⚠️  警告: 无法初始化管理员账户: {e}')
     # 不因为这个失败而退出
 " || true
 
 # 启动应用
-echo "Starting FastAPI application..."
+echo "🎉 启动 FastAPI 应用..."
 cd /srv
 exec "$@"
 
