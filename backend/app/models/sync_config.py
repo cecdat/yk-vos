@@ -3,7 +3,7 @@
 """
 from sqlalchemy import Column, Integer, String, Boolean, DateTime
 from sqlalchemy.sql import func
-from app.core.db import Base
+from app.models.base import Base
 
 
 class SyncConfig(Base):
