@@ -216,22 +216,24 @@ def sync_cdrs_for_single_day(instance_id: int, date_str: str):
             logger.exception(f'从VOS {inst.name} 获取 {date_str} 话单数据失败: {e}')
             return {'success': False, 'message': str(e), 'date': date_str}
         
+        # VOS API可能返回数组或对象
+        if isinstance(result, list) and len(result) > 0:
+            result = result[0]  # 取第一个元素
+        
         if not isinstance(result, dict):
             logger.warning(f'VOS {inst.name} 返回的话单数据格式异常')
             return {'success': False, 'message': '返回数据格式异常', 'date': date_str}
         
         if result.get('retCode') != 0:
             error_msg = result.get('exception', '未知错误')
-            logger.warning(f'VOS {inst.name} API错误: {error_msg}')
+            logger.warning(f'VOS {inst.name} API错误 (retCode={result.get("retCode")}): {error_msg}')
             return {'success': False, 'message': error_msg, 'date': date_str}
         
-        # 提取话单列表
+        # 提取话单列表（优先使用infoCdrs）
         cdrs = result.get('infoCdrs') or result.get('cdrs') or result.get('CDRList') or []
         if not isinstance(cdrs, list):
-            for v in result.values():
-                if isinstance(v, list):
-                    cdrs = v
-                    break
+            logger.warning(f'VOS {inst.name} 话单数据格式错误，不是列表类型')
+            return {'success': False, 'message': '话单数据格式错误', 'date': date_str}
         
         if not cdrs:
             logger.info(f'VOS {inst.name} 在 {date_str} 没有话单数据')
@@ -241,74 +243,83 @@ def sync_cdrs_for_single_day(instance_id: int, date_str: str):
         new_count = 0
         
         for c in cdrs:
-            # 提取话单唯一标识（flowNo）
-            flow_no = c.get('flowNo') or c.get('flow_no') or c.get('FlowNo')
+            # 提取话单唯一标识（flowNo）- VOS返回的是整数
+            flow_no = c.get('flowNo')
             if not flow_no:
-                # 如果没有flowNo，使用时间戳+主被叫生成
-                import time
-                flow_no = f"{int(time.time() * 1000)}_{c.get('callerE164', '')}_{c.get('calleeAccessE164', '')}"
+                logger.warning(f'话单缺少flowNo字段，跳过: {c}')
+                continue
+            
+            # 转换为字符串存储
+            flow_no_str = str(flow_no)
             
             # 检查是否已存在（使用flowNo去重）
-            exists = db.query(CDR).filter(CDR.flow_no == flow_no).first()
+            exists = db.query(CDR).filter(CDR.flow_no == flow_no_str).first()
             if exists:
                 continue
             
-            # 提取账户信息
-            account_name = c.get('accountName') or c.get('account_name') or ''
-            account = c.get('account') or c.get('Account') or ''
+            # 提取账户信息（完全匹配VOS字段名）
+            account_name = c.get('accountName', '')
+            account = c.get('account', '')
             
-            # 提取呼叫信息
-            caller_e164 = c.get('callerE164') or c.get('caller') or c.get('src') or ''
-            callee_access_e164 = c.get('calleeAccessE164') or c.get('callee') or c.get('dst') or ''
+            # 提取呼叫信息（完全匹配VOS字段名）
+            caller_e164 = c.get('callerE164', '')
+            callee_access_e164 = c.get('calleeAccessE164', '')
             
-            # 提取时间信息
-            start_time = c.get('start') or c.get('startTime') or c.get('start_time') or None
-            stop_time = c.get('stop') or c.get('endTime') or c.get('end_time') or None
+            # 提取时间信息（VOS返回的是毫秒时间戳）
+            start_timestamp = c.get('start')  # 毫秒时间戳，如 1760922383500
+            stop_timestamp = c.get('stop')
             
-            # 时间格式转换
-            try:
-                if isinstance(start_time, str):
-                    start_time_parsed = dateparser.parse(start_time)
-                else:
-                    start_time_parsed = start_time
-            except Exception:
-                start_time_parsed = start_time
+            # 时间戳转换（毫秒 → datetime）
+            start_dt = None
+            stop_dt = None
             
-            try:
-                if isinstance(stop_time, str):
-                    stop_time_parsed = dateparser.parse(stop_time)
-                else:
-                    stop_time_parsed = stop_time
-            except Exception:
-                stop_time_parsed = stop_time
+            if start_timestamp:
+                try:
+                    # 毫秒转秒，然后转datetime
+                    start_dt = datetime.fromtimestamp(start_timestamp / 1000.0)
+                except Exception as e:
+                    logger.warning(f'start时间戳转换失败: {start_timestamp}, 错误: {e}')
             
-            # 提取时长和费用
-            hold_time = c.get('holdTime') or c.get('duration') or c.get('billsec') or 0
-            fee_time = c.get('feeTime') or c.get('fee_time') or hold_time
-            fee_value = c.get('fee') or c.get('cost') or 0
+            if stop_timestamp:
+                try:
+                    stop_dt = datetime.fromtimestamp(stop_timestamp / 1000.0)
+                except Exception as e:
+                    logger.warning(f'stop时间戳转换失败: {stop_timestamp}, 错误: {e}')
             
-            # 提取终止信息
-            end_reason = c.get('endReason') or c.get('releaseCause') or c.get('disposition') or ''
-            end_direction = c.get('endDirection') or c.get('end_direction')
+            # 如果start转换失败，跳过这条记录
+            if not start_dt:
+                logger.warning(f'话单缺少有效的start时间，跳过: flowNo={flow_no}')
+                continue
+            
+            # 提取时长和费用（完全匹配VOS字段名）
+            hold_time = c.get('holdTime', 0)
+            fee_time = c.get('feeTime', 0)
+            fee_value = c.get('fee', 0)
+            
+            # 提取终止信息（完全匹配VOS字段名）
+            end_reason_raw = c.get('endReason')
+            end_reason = str(end_reason_raw) if end_reason_raw is not None else ''
+            
+            end_direction = c.get('endDirection')
             if end_direction is not None:
                 try:
                     end_direction = int(end_direction)
                 except:
                     end_direction = None
             
-            # 提取网关和IP
-            callee_gateway = c.get('calleeGateway') or c.get('callerGateway') or c.get('gateway') or ''
-            callee_ip = c.get('calleeip') or c.get('callee_ip') or c.get('calleeIp') or ''
+            # 提取网关和IP（完全匹配VOS字段名）
+            callee_gateway = c.get('calleeGateway', '')
+            callee_ip = c.get('calleeip', '')
             
-            # 创建新记录（使用新字段结构）
+            # 创建新记录
             newc = CDR(
                 vos_id=inst.id,
                 account_name=account_name,
                 account=account,
                 caller_e164=caller_e164,
                 callee_access_e164=callee_access_e164,
-                start=start_time_parsed,
-                stop=stop_time_parsed,
+                start=start_dt,
+                stop=stop_dt,
                 hold_time=hold_time,
                 fee_time=fee_time,
                 fee=fee_value,
@@ -317,7 +328,7 @@ def sync_cdrs_for_single_day(instance_id: int, date_str: str):
                 callee_gateway=callee_gateway,
                 callee_ip=callee_ip,
                 raw=c,  # 保存原始JSON数据（JSONB格式）
-                flow_no=flow_no
+                flow_no=flow_no_str
             )
             db.add(newc)
             new_count += 1
