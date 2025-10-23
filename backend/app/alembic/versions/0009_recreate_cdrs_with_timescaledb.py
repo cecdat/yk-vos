@@ -42,11 +42,11 @@ def upgrade():
         END $$;
     """)
     
-    # 2. 创建新的cdrs表
+    # 2. 创建新的cdrs表（使用复合主键以满足TimescaleDB要求）
     op.create_table(
         'cdrs',
-        # 主键和外键
-        sa.Column('id', sa.Integer(), autoincrement=True, nullable=False, comment='自增主键'),
+        # 基础字段
+        sa.Column('id', sa.Integer(), autoincrement=True, unique=True, nullable=False, comment='自增ID（非主键）'),
         sa.Column('vos_id', sa.Integer(), nullable=False, comment='VOS实例ID'),
         
         # 账户信息
@@ -57,8 +57,8 @@ def upgrade():
         sa.Column('caller_e164', sa.String(length=64), nullable=True, comment='主叫号码'),
         sa.Column('callee_access_e164', sa.String(length=64), nullable=True, comment='被叫号码'),
         
-        # 时间信息（TimescaleDB分区键）
-        sa.Column('start', sa.DateTime(), nullable=False, comment='起始时间'),
+        # 时间信息（TimescaleDB分区键 + 主键之一）
+        sa.Column('start', sa.DateTime(), nullable=False, comment='起始时间（主键之一）'),
         sa.Column('stop', sa.DateTime(), nullable=True, comment='终止时间'),
         
         # 时长和费用
@@ -76,24 +76,26 @@ def upgrade():
         
         # 原始数据和唯一标识
         sa.Column('raw', JSONB, nullable=True, comment='原始话单数据(JSONB格式)'),
-        sa.Column('flow_no', sa.String(length=64), nullable=False, comment='话单唯一标识'),
+        sa.Column('flow_no', sa.String(length=64), nullable=False, comment='话单唯一标识（主键之一）'),
         
-        sa.PrimaryKeyConstraint('id')
+        # 复合主键（满足TimescaleDB要求：包含分区列start）
+        sa.PrimaryKeyConstraint('start', 'flow_no'),
+        
+        comment='VOS话单记录表（TimescaleDB超表）'
     )
     
-    # 3. 创建索引
-    op.create_index('ix_cdrs_id', 'cdrs', ['id'], unique=False)
+    # 3. 创建索引（注意：start和flow_no已是主键，自动有索引）
+    op.create_index('ix_cdrs_id', 'cdrs', ['id'], unique=True)  # id需要唯一索引
     op.create_index('ix_cdrs_vos_id', 'cdrs', ['vos_id'], unique=False)
     op.create_index('ix_cdrs_account', 'cdrs', ['account'], unique=False)
     op.create_index('ix_cdrs_caller_e164', 'cdrs', ['caller_e164'], unique=False)
     op.create_index('ix_cdrs_callee_access_e164', 'cdrs', ['callee_access_e164'], unique=False)
-    op.create_index('ix_cdrs_start', 'cdrs', ['start'], unique=False)
     op.create_index('ix_cdrs_callee_gateway', 'cdrs', ['callee_gateway'], unique=False)
-    op.create_index('ix_cdrs_flow_no', 'cdrs', ['flow_no'], unique=True)
     
     # 创建复合索引（优化常见查询）
     op.create_index('idx_cdrs_vos_start', 'cdrs', ['vos_id', 'start'], unique=False)
     op.create_index('idx_cdrs_account_start', 'cdrs', ['account', 'start'], unique=False)
+    op.create_index('idx_cdrs_flow_no_start', 'cdrs', ['flow_no', 'start'], unique=False)
     
     # 4. 安装TimescaleDB扩展（如果未安装）
     op.execute("CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE;")
