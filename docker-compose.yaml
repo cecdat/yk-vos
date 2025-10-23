@@ -1,0 +1,148 @@
+# YK-VOS 生产环境配置
+# 特点：使用基础镜像 + 代码挂载，修改代码后重启容器即可生效
+
+version: '3.8'
+
+services:
+  postgres:
+    image: docker.1ms.run/postgres:15
+    container_name: yk_vos_postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-vos_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-vos_password}
+      POSTGRES_DB: ${POSTGRES_DB:-vos_db}
+    volumes:
+      # 使用本地目录映射，方便备份和迁移
+      - ./data/postgres:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - vos-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-vos_user}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: docker.1ms.run/redis:7
+    container_name: yk_vos_redis
+    ports:
+      - "6379:6379"
+    networks:
+      - vos-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    image: yk-vos-backend-base:latest
+    container_name: yk_vos_backend
+    working_dir: /srv
+    command: sh -c "chmod +x docker-entrypoint.sh && ./docker-entrypoint.sh uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-vos_user}:${POSTGRES_PASSWORD:-vos_password}@postgres:5432/${POSTGRES_DB:-vos_db}
+      REDIS_URL: redis://redis:6379
+      SECRET_KEY: ${SECRET_KEY:-your-secret-key-change-in-production}
+      ALGORITHM: HS256
+      ACCESS_TOKEN_EXPIRE_MINUTES: 30
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+    volumes:
+      # 挂载代码目录（核心）
+      - ./backend:/srv
+      # 排除缓存目录
+      - /srv/__pycache__
+      - /srv/.venv
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - vos-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  frontend:
+    image: yk-vos-frontend-base:latest
+    container_name: yk_vos_frontend
+    command: npm run dev
+    ports:
+      - "3000:3000"
+    environment:
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+    volumes:
+      # 挂载代码目录（核心）
+      - ./frontend:/usr/src/app
+      # 排除 node_modules 和 .next（使用镜像中的）
+      - /usr/src/app/node_modules
+      - /usr/src/app/.next
+    depends_on:
+      - backend
+    networks:
+      - vos-network
+    restart: unless-stopped
+
+  celery-worker:
+    image: yk-vos-backend-base:latest
+    container_name: yk_vos_celery_worker
+    working_dir: /srv
+    command: celery -A app.tasks.celery_app worker -l info
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-vos_user}:${POSTGRES_PASSWORD:-vos_password}@postgres:5432/${POSTGRES_DB:-vos_db}
+      REDIS_URL: redis://redis:6379
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+    volumes:
+      # 挂载代码目录
+      - ./backend:/srv
+      - /srv/__pycache__
+      - /srv/.venv
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - vos-network
+    restart: unless-stopped
+
+  celery-beat:
+    image: yk-vos-backend-base:latest
+    container_name: yk_vos_celery_beat
+    working_dir: /srv
+    command: celery -A app.tasks.celery_app beat -l info
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-vos_user}:${POSTGRES_PASSWORD:-vos_password}@postgres:5432/${POSTGRES_DB:-vos_db}
+      REDIS_URL: redis://redis:6379
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+    volumes:
+      # 挂载代码目录
+      - ./backend:/srv
+      - /srv/__pycache__
+      - /srv/.venv
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - vos-network
+    restart: unless-stopped
+
+networks:
+  vos-network:
+    driver: bridge
+

@@ -1,54 +1,47 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+ENV/
+
+# Node
+node_modules/
+.next/
+out/
+
 # Git
-.git
+.git/
 .gitignore
 
-# Python
-__pycache__
-*.pyc
-*.pyo
-*.pyd
-.Python
-*.so
-*.egg
-*.egg-info
-dist
-build
-.pytest_cache
-.coverage
-htmlcov
-
-# Virtual environments
-venv
-env
-ENV
-
-# IDEs
-.vscode
-.idea
+# IDE
+.vscode/
+.idea/
 *.swp
 *.swo
 
-# OS
-.DS_Store
-Thumbs.db
+# Data
+data/
+*.db
+*.sqlite
 
-# Node
-node_modules
-npm-debug.log
-yarn-error.log
-.next
+# Logs
+*.log
 
 # Documentation
 *.md
 !README.md
 
-# Env files (will be copied explicitly if needed)
+# Test
+tests/
+pytest_cache/
+.coverage
+
+# Environment
 .env
-.env.*
-
-# Logs
-*.log
-
-# Alembic
-alembic/versions/__pycache__
-
+.env.local
+*.local

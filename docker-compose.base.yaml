@@ -1,0 +1,21 @@
+# 基础镜像构建配置
+# 用途：构建只包含依赖的基础镜像
+# 使用：docker-compose -f docker-compose.base.yaml build
+
+version: '3.8'
+
+services:
+  backend-base:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.base
+    image: yk-vos-backend-base:latest
+    command: echo "Backend base image built successfully"
+
+  frontend-base:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.base
+    image: yk-vos-frontend-base:latest
+    command: echo "Frontend base image built successfully"
+

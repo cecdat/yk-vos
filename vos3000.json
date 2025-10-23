@@ -1,0 +1,1725 @@
+{
+  "info": {
+    "title": "默认模块",
+    "description": "基于《昆石VOS2009/VOS3000 Web接口说明书 V2.1.7.03》生成的查询类接口集合。",
+    "version": "1.0.0"
+  },
+  "tags": [],
+  "paths": {
+    "/external/server/GetCustomer": {
+      "post": {
+        "summary": "查询账户",
+        "deprecated": false,
+        "description": "根据账户号码列表查询账户详细信息。",
+        "tags": [],
+        "parameters": [
+          {
+            "name": "Content-Type",
+            "in": "header",
+            "description": "",
+            "required": true,
+            "type": "string",
+            "x-example": "text/html;charset=UTF-8"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "accounts": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "required": [
+                "accounts"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "headers": {},
+            "schema": {
+              "type": "object",
+              "properties": {}
+            }
+          }
+        },
+        "security": [],
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/json"
+        ]
+      }
+    },
+    "/external/server/GetAllCustomers": {
+      "post": {
+        "summary": "获取所有账户账号",
+        "deprecated": false,
+        "description": "获取所有账户的简要信息列表 (type: 0 获取账号列表, 1 获取简要信息)。",
+        "tags": [],
+        "parameters": [
+          {
+            "name": "Content-Type",
+            "in": "header",
+            "description": "",
+            "required": true,
+            "type": "string",
+            "x-example": "text/html;charset=UTF-8"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "type"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "headers": {},
+            "schema": {
+              "type": "object",
+              "properties": {}
+            }
+          }
+        },
+        "security": [],
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/json"
+        ]
+      }
+    },
+    "/external/server/GetPayHistory": {
+      "post": {
+        "summary": "查询缴费记录",
+        "deprecated": false,
+        "description": "查询指定账户在时间范围内的缴费历史。",
+        "tags": [],
+        "parameters": [
+          {
+            "name": "Content-Type",
+            "in": "header",
+            "description": "",
+            "required": true,
+            "type": "string",
+            "x-example": "text/html;charset=UTF-8"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "account": {
+                  "type": "string"
+                },
+                "beginTime": {
+                  "type": "string"
+                },
+                "endTime": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "account",
+                "beginTime",
+                "endTime"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "headers": {},
+            "schema": {
+              "type": "object",
+              "properties": {}
+            }
+          }
+        },
+        "security": [],
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/json"
+        ]
+      }
+    },
+    "/external/server/GetConsumption": {
+      "post": {
+        "summary": "查询其它收入记录",
+        "deprecated": false,
+        "description": "查询账户的套餐租金、月租等非话单消费记录。",
+        "tags": [],
+        "parameters": [
+          {
+            "name": "Content-Type",
+            "in": "header",
+            "description": "",
+            "required": true,
+            "type": "string",
+            "x-example": "text/html;charset=UTF-8"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "account": {
+                  "type": "string"
+                },
+                "beginTime": {
+                  "type": "string"
+                },
+                "endTime": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "account",
+                "beginTime",
+                "endTime"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "headers": {},
+            "schema": {
+              "type": "object",
+              "properties": {}
+            }
+          }
+        },
+        "security": [],
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/json"
+        ]
+      }
+    },
+    "/external/server/GetCustomerPhoneBook": {
+      "post": {
+        "summary": "查询账户电话簿",
+        "deprecated": false,
+        "description": "查询指定账户的电话簿信息。",
+        "tags": [],
+        "parameters": [
+          {
+            "name": "Content-Type",
+            "in": "header",
+            "description": "",
+            "required": true,
+            "type": "string",
+            "x-example": "text/html;charset=UTF-8"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "account": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "account"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "headers": {},
+            "schema": {
+              "type": "object",
+              "properties": {}
+            }
+          }
+        },
+        "security": [],
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/json"
+        ]
+      }
+    },
+    "/external/server/GetPhone": {
+      "post": {
+        "summary": "查询话机",
+        "deprecated": false,
+        "description": "根据话机号码列表查询话机详细信息。",
+        "tags": [],
+        "parameters": [
+          {
+            "name": "Content-Type",
+            "in": "header",
+            "description": "",
+            "required": true,
+            "type": "string",
+            "x-example": "text/html;charset=UTF-8"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "e164s": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "required": [
+                "e164s"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "headers": {},
+            "schema": {
+              "type": "object",
+              "properties": {}
+            }
+          }
+        },
+        "security": [],
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/json"
+        ]
+      }
+    },
+    "/external/server/GetPhoneOnline": {
+      "post": {
+        "summary": "查询在线话机",
+        "deprecated": false,
+        "description": "查询指定话机当前的在线注册状态。",
+        "tags": [],
+        "parameters": [
+          {
+            "name": "Content-Type",
+            "in": "header",
+            "description": "",
+            "required": true,
+            "type": "string",
+            "x-example": "text/html;charset=UTF-8"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "e164s": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "required": [
+                "e164s"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "headers": {},
+            "schema": {
+              "type": "object",
+              "properties": {}
+            }
+          }
+        },
+        "security": [],
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/json"
+        ]
+      }
+    },
+    "/external/server/GetAllPhoneOnline": {
+      "post": {
+        "summary": "获取所有在线话机",
+        "deprecated": false,
+        "description": "获取当前系统中所有在线话机的电话号码列表。",
+        "tags": [],
+        "parameters": [
+          {
+            "name": "Content-Type",
+            "in": "header",
+            "description": "",
+            "required": true,
+            "type": "string",
+            "x-example": "text/html;charset=UTF-8"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "schema": {
+              "type": "object",
+              "properties": {}
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "headers": {},
+            "schema": {
+              "type": "object",
+              "properties": {}
+            }
+          }
+        },
+        "security": [],
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/json"
+        ]
+      }
+    },
+    "/external/server/GetGatewayMapping": {
+      "post": {
+        "summary": "查询对接网关",
+        "deprecated": false,
+        "description": "根据网关名称查询详细配置。names为空数组表示获取所有对接网关信息。",
+        "tags": [],
+        "parameters": [
+          {
+            "name": "Content-Type",
+            "in": "header",
+            "description": "",
+            "required": true,
+            "type": "string",
+            "x-example": "text/html;charset=UTF-8"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "names": {
+                  "type": "array",
+                  "items": {}
+                }
+              },
+              "required": [
+                "names"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "headers": {},
+            "schema": {
+              "type": "object",
+              "properties": {}
+            }
+          }
+        },
+        "security": [],
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/json"
+        ]
+      }
+    },
+    "/external/server/GetGatewayMappingOnline": {
+      "post": {
+        "summary": "查询在线对接网关",
+        "deprecated": false,
+        "description": "查询对接网关的在线状态、ASR、ACD等实时信息。names为空表示查询所有。",
+        "tags": [],
+        "parameters": [
+          {
+            "name": "Content-Type",
+            "in": "header",
+            "description": "",
+            "required": true,
+            "type": "string",
+            "x-example": "text/html;charset=UTF-8"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "names": {
+                  "type": "array",
+                  "items": {}
+                }
+              },
+              "required": [
+                "names"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "headers": {},
+            "schema": {
+              "type": "object",
+              "properties": {}
+            }
+          }
+        },
+        "security": [],
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/json"
+        ]
+      }
+    },
+    "/external/server/GetGatewayRouting": {
+      "post": {
+        "summary": "查询落地网关",
+        "deprecated": false,
+        "description": "根据网关名称查询落地网关的详细配置。names为空数组表示查询所有。",
+        "tags": [],
+        "parameters": [
+          {
+            "name": "Content-Type",
+            "in": "header",
+            "description": "",
+            "required": true,
+            "type": "string",
+            "x-example": "text/html;charset=UTF-8"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "names": {
+                  "type": "array",
+                  "items": {}
+                }
+              },
+              "required": [
+                "names"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "headers": {},
+            "schema": {
+              "type": "object",
+              "properties": {}
+            }
+          }
+        },
+        "security": [],
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/json"
+        ]
+      }
+    },
+    "/external/server/GetGatewayRoutingOnline": {
+      "post": {
+        "summary": "查询在线落地网关",
+        "deprecated": false,
+        "description": "查询落地网关的在线状态、ASR、ACD等实时信息。names为空表示查询所有。",
+        "tags": [],
+        "parameters": [
+          {
+            "name": "Content-Type",
+            "in": "header",
+            "description": "",
+            "required": true,
+            "type": "string",
+            "x-example": "text/html;charset=UTF-8"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "names": {
+                  "type": "array",
+                  "items": {}
+                }
+              },
+              "required": [
+                "names"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "headers": {},
+            "schema": {
+              "type": "object",
+              "properties": {}
+            }
+          }
+        },
+        "security": [],
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/json"
+        ]
+      }
+    },
+    "/external/server/GetCurrentCall": {
+      "post": {
+        "summary": "查询当前通话",
+        "deprecated": false,
+        "description": "查询系统当前正在进行的通话。不建议频繁使用。",
+        "tags": [],
+        "parameters": [
+          {
+            "name": "Content-Type",
+            "in": "header",
+            "description": "",
+            "required": true,
+            "type": "string",
+            "x-example": "text/html;charset=UTF-8"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "callerE164s": {
+                  "type": "array",
+                  "items": {}
+                },
+                "calleeE164s": {
+                  "type": "array",
+                  "items": {}
+                }
+              },
+              "required": [
+                "callerE164s",
+                "calleeE164s"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "headers": {},
+            "schema": {
+              "type": "object",
+              "properties": {}
+            }
+          }
+        },
+        "security": [],
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/json"
+        ]
+      }
+    },
+    "/external/server/GetCdr": {
+      "post": {
+        "summary": "查询历史话单(CDR)",
+        "deprecated": false,
+        "description": "根据账户、时间范围等条件查询历史通话记录。",
+        "tags": [],
+        "parameters": [
+          {
+            "name": "Content-Type",
+            "in": "header",
+            "description": "",
+            "required": true,
+            "type": "string",
+            "x-example": "text/html;charset=UTF-8"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "accounts": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "beginTime": {
+                  "type": "string"
+                },
+                "endTime": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "accounts",
+                "beginTime",
+                "endTime"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "headers": {},
+            "schema": {
+              "type": "object",
+              "properties": {}
+            }
+          }
+        },
+        "security": [],
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/json"
+        ]
+      }
+    },
+    "/external/server/GetAvailableTime": {
+      "post": {
+        "summary": "获取可用通话时长",
+        "deprecated": false,
+        "description": "获取指定主叫对指定被叫的可用通话时长(秒)。",
+        "tags": [],
+        "parameters": [
+          {
+            "name": "Content-Type",
+            "in": "header",
+            "description": "",
+            "required": true,
+            "type": "string",
+            "x-example": "text/html;charset=UTF-8"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "billingName": {
+                  "type": "string"
+                },
+                "billingMode": {
+                  "type": "integer"
+                },
+                "calleeE164": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "billingName",
+                "billingMode",
+                "calleeE164"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "headers": {},
+            "schema": {
+              "type": "object",
+              "properties": {}
+            }
+          }
+        },
+        "security": [],
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/json"
+        ]
+      }
+    },
+    "/external/server/GetIvrSecondAvailableTime": {
+      "post": {
+        "summary": "获取IVR第二路可用通话时长",
+        "deprecated": false,
+        "description": "在IVR场景下，获取第二路外呼的可用通话时长。",
+        "tags": [],
+        "parameters": [
+          {
+            "name": "Content-Type",
+            "in": "header",
+            "description": "",
+            "required": true,
+            "type": "string",
+            "x-example": "text/html;charset=UTF-8"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "billingNumber": {
+                  "type": "string"
+                },
+                "billingType": {
+                  "type": "integer"
+                },
+                "calleeE164": {
+                  "type": "string"
+                },
+                "firstE164": {
+                  "type": "string"
+                },
+                "firstConnectTime": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "billingNumber",
+                "billingType",
+                "calleeE164",
+                "firstE164",
+                "firstConnectTime"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "headers": {},
+            "schema": {
+              "type": "object",
+              "properties": {}
+            }
+          }
+        },
+        "security": [],
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/json"
+        ]
+      }
+    },
+    "/external/server/GetFeeRateGroup": {
+      "post": {
+        "summary": "查询费率组",
+        "deprecated": false,
+        "description": "查询一个或所有费率组。names为空表示查询所有。",
+        "tags": [],
+        "parameters": [
+          {
+            "name": "Content-Type",
+            "in": "header",
+            "description": "",
+            "required": true,
+            "type": "string",
+            "x-example": "text/html;charset=UTF-8"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "names": {
+                  "type": "array",
+                  "items": {}
+                }
+              },
+              "required": [
+                "names"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "headers": {},
+            "schema": {
+              "type": "object",
+              "properties": {}
+            }
+          }
+        },
+        "security": [],
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/json"
+        ]
+      }
+    },
+    "/external/server/GetFeeRate": {
+      "post": {
+        "summary": "查询费率",
+        "deprecated": false,
+        "description": "查询指定费率组下的费率详情。",
+        "tags": [],
+        "parameters": [
+          {
+            "name": "Content-Type",
+            "in": "header",
+            "description": "",
+            "required": true,
+            "type": "string",
+            "x-example": "text/html;charset=UTF-8"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "feeRateGroup": {
+                  "type": "string"
+                },
+                "areaCodes": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "required": [
+                "feeRateGroup",
+                "areaCodes"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "headers": {},
+            "schema": {
+              "type": "object",
+              "properties": {}
+            }
+          }
+        },
+        "security": [],
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/json"
+        ]
+      }
+    },
+    "/external/server/GetSuite": {
+      "post": {
+        "summary": "查询套餐",
+        "deprecated": false,
+        "description": "查询一个或所有套餐的详细信息。ids为空表示查询所有。",
+        "tags": [],
+        "parameters": [
+          {
+            "name": "Content-Type",
+            "in": "header",
+            "description": "",
+            "required": true,
+            "type": "string",
+            "x-example": "text/html;charset=UTF-8"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "ids": {
+                  "type": "array",
+                  "items": {}
+                }
+              },
+              "required": [
+                "ids"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "headers": {},
+            "schema": {
+              "type": "object",
+              "properties": {}
+            }
+          }
+        },
+        "security": [],
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/json"
+        ]
+      }
+    },
+    "/external/server/GetSuiteOrder": {
+      "post": {
+        "summary": "查询套餐订单",
+        "deprecated": false,
+        "description": "查询指定所有者的套餐订单列表。ownerType: 2-账户, 6-话机。",
+        "tags": [],
+        "parameters": [
+          {
+            "name": "Content-Type",
+            "in": "header",
+            "description": "",
+            "required": true,
+            "type": "string",
+            "x-example": "text/html;charset=UTF-8"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "ownerName": {
+                  "type": "string"
+                },
+                "ownerType": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "ownerName",
+                "ownerType"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "headers": {},
+            "schema": {
+              "type": "object",
+              "properties": {}
+            }
+          }
+        },
+        "security": [],
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/json"
+        ]
+      }
+    },
+    "/external/server/GetCurrentSuite": {
+      "post": {
+        "summary": "查询生效套餐",
+        "deprecated": false,
+        "description": "查询指定所有者当前正在生效的套餐。ownerType: 2-账户, 6-话机。",
+        "tags": [],
+        "parameters": [
+          {
+            "name": "Content-Type",
+            "in": "header",
+            "description": "",
+            "required": true,
+            "type": "string",
+            "x-example": "text/html;charset=UTF-8"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "ownerName": {
+                  "type": "string"
+                },
+                "ownerType": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "ownerName",
+                "ownerType"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "headers": {},
+            "schema": {
+              "type": "object",
+              "properties": {}
+            }
+          }
+        },
+        "security": [],
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/json"
+        ]
+      }
+    },
+    "/external/server/GetActivePhoneCard": {
+      "post": {
+        "summary": "查询在用电话卡",
+        "deprecated": false,
+        "description": "根据卡号列表(pins)或账户列表(accounts)查询在用电话卡信息。",
+        "tags": [],
+        "parameters": [
+          {
+            "name": "Content-Type",
+            "in": "header",
+            "description": "",
+            "required": true,
+            "type": "string",
+            "x-example": "text/html;charset=UTF-8"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "pins": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "required": [
+                "pins"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "headers": {},
+            "schema": {
+              "type": "object",
+              "properties": {}
+            }
+          }
+        },
+        "security": [],
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/json"
+        ]
+      }
+    },
+    "/external/server/GetBindedE164": {
+      "post": {
+        "summary": "查询绑定号码",
+        "deprecated": false,
+        "description": "根据电话卡卡号(pin)或账户(account)或号码列表(e164s)查询绑定号码信息。",
+        "tags": [],
+        "parameters": [
+          {
+            "name": "Content-Type",
+            "in": "header",
+            "description": "",
+            "required": true,
+            "type": "string",
+            "x-example": "text/html;charset=UTF-8"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "pin": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "pin"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "headers": {},
+            "schema": {
+              "type": "object",
+              "properties": {}
+            }
+          }
+        },
+        "security": [],
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/json"
+        ]
+      }
+    },
+    "/external/server/GetPhoneCard": {
+      "post": {
+        "summary": "查询电话卡",
+        "deprecated": false,
+        "description": "查询(未激活的)电话卡信息。",
+        "tags": [],
+        "parameters": [
+          {
+            "name": "Content-Type",
+            "in": "header",
+            "description": "",
+            "required": true,
+            "type": "string",
+            "x-example": "text/html;charset=UTF-8"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "pin": {
+                  "type": "string"
+                },
+                "password": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "pin",
+                "password"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "headers": {},
+            "schema": {
+              "type": "object",
+              "properties": {}
+            }
+          }
+        },
+        "security": [],
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/json"
+        ]
+      }
+    },
+    "/external/server/GetReportCustomerFee": {
+      "post": {
+        "summary": "查询账户明细报表",
+        "deprecated": false,
+        "description": "查询账户的消费明细统计报表。period: -2 按月统计。",
+        "tags": [],
+        "parameters": [
+          {
+            "name": "Content-Type",
+            "in": "header",
+            "description": "",
+            "required": true,
+            "type": "string",
+            "x-example": "text/html;charset=UTF-8"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "accounts": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "period": {
+                  "type": "integer"
+                },
+                "beginTime": {
+                  "type": "string"
+                },
+                "endTime": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "accounts",
+                "period",
+                "beginTime",
+                "endTime"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "headers": {},
+            "schema": {
+              "type": "object",
+              "properties": {}
+            }
+          }
+        },
+        "security": [],
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/json"
+        ]
+      }
+    },
+    "/external/server/GetReportPhoneFee": {
+      "post": {
+        "summary": "查询话机明细报表",
+        "deprecated": false,
+        "description": "查询话机的消费明细统计报表。",
+        "tags": [],
+        "parameters": [
+          {
+            "name": "Content-Type",
+            "in": "header",
+            "description": "",
+            "required": true,
+            "type": "string",
+            "x-example": "text/html;charset=UTF-8"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "account": {
+                  "type": "string"
+                },
+                "period": {
+                  "type": "integer"
+                },
+                "beginTime": {
+                  "type": "string"
+                },
+                "endTime": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "account",
+                "period",
+                "beginTime",
+                "endTime"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "headers": {},
+            "schema": {
+              "type": "object",
+              "properties": {}
+            }
+          }
+        },
+        "security": [],
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/json"
+        ]
+      }
+    },
+    "/external/server/GetReportCustomerLocationFee": {
+      "post": {
+        "summary": "查询账户地区明细报表",
+        "deprecated": false,
+        "description": "查询账户按地区分类的消费明细报表。",
+        "tags": [],
+        "parameters": [
+          {
+            "name": "Content-Type",
+            "in": "header",
+            "description": "",
+            "required": true,
+            "type": "string",
+            "x-example": "text/html;charset=UTF-8"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "account": {
+                  "type": "string"
+                },
+                "period": {
+                  "type": "integer"
+                },
+                "beginTime": {
+                  "type": "string"
+                },
+                "endTime": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "account",
+                "period",
+                "beginTime",
+                "endTime"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "headers": {},
+            "schema": {
+              "type": "object",
+              "properties": {}
+            }
+          }
+        },
+        "security": [],
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/json"
+        ]
+      }
+    },
+    "/external/server/GetE164Convert": {
+      "post": {
+        "summary": "查询号码变换表",
+        "deprecated": false,
+        "description": "查询号码变换表记录。",
+        "tags": [],
+        "parameters": [
+          {
+            "name": "Content-Type",
+            "in": "header",
+            "description": "",
+            "required": true,
+            "type": "string",
+            "x-example": "text/html;charset=UTF-8"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "account": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "account"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "headers": {},
+            "schema": {
+              "type": "object",
+              "properties": {}
+            }
+          }
+        },
+        "security": [],
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/json"
+        ]
+      }
+    },
+    "/external/server/GetSoftSwitch": {
+      "post": {
+        "summary": "查询软交换",
+        "deprecated": false,
+        "description": "获取系统中所有软交换的信息。",
+        "tags": [],
+        "parameters": [
+          {
+            "name": "Content-Type",
+            "in": "header",
+            "description": "",
+            "required": true,
+            "type": "string",
+            "x-example": "text/html;charset=UTF-8"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "schema": {
+              "type": "object",
+              "properties": {}
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "headers": {},
+            "schema": {
+              "type": "object",
+              "properties": {}
+            }
+          }
+        },
+        "security": [],
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/json"
+        ]
+      }
+    },
+    "/external/server/GetPerformance": {
+      "post": {
+        "summary": "查询性能",
+        "deprecated": false,
+        "description": "查询系统当前的并发数和话单队列长度。",
+        "tags": [],
+        "parameters": [
+          {
+            "name": "Content-Type",
+            "in": "header",
+            "description": "",
+            "required": true,
+            "type": "string",
+            "x-example": "text/html;charset=UTF-8"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "schema": {
+              "type": "object",
+              "properties": {}
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "headers": {},
+            "schema": {
+              "type": "object",
+              "properties": {}
+            }
+          }
+        },
+        "security": [],
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/json"
+        ]
+      }
+    },
+    "/external/server/GetAlarmCurrent": {
+      "post": {
+        "summary": "获取当前告警",
+        "deprecated": false,
+        "description": "获取VOS系统当前的告警列表。",
+        "tags": [],
+        "parameters": [
+          {
+            "name": "Content-Type",
+            "in": "header",
+            "description": "",
+            "required": true,
+            "type": "string",
+            "x-example": "text/html;charset=UTF-8"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "schema": {
+              "type": "object",
+              "properties": {}
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "headers": {},
+            "schema": {
+              "type": "object",
+              "properties": {}
+            }
+          }
+        },
+        "security": [],
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/json"
+        ]
+      }
+    },
+    "/external/server/GetIvrAudio": {
+      "post": {
+        "summary": "获取IVR语音",
+        "deprecated": false,
+        "description": "根据语音类型或ID列表获取IVR语音信息。",
+        "tags": [],
+        "parameters": [
+          {
+            "name": "Content-Type",
+            "in": "header",
+            "description": "",
+            "required": true,
+            "type": "string",
+            "x-example": "text/html;charset=UTF-8"
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "type"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "headers": {},
+            "schema": {
+              "type": "object",
+              "properties": {}
+            }
+          }
+        },
+        "security": [],
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/json"
+        ]
+      }
+    }
+  },
+  "security": [],
+  "swagger": "2.0",
+  "host": "222.240.51.36:9090",
+  "schemes": [
+    "http"
+  ],
+  "basePath": "/",
+  "definitions": {},
+  "securityDefinitions": {},
+  "x-components": {}
+}
