@@ -77,8 +77,8 @@ cd yk-vos
 # 数据库配置
 POSTGRES_USER=vos_user
 POSTGRES_PASSWORD=your_strong_password
-POSTGRES_DB=vos_db
-DATABASE_URL=postgresql://vos_user:your_strong_password@postgres:5432/vos_db
+POSTGRES_DB=vosadmin
+DATABASE_URL=postgresql://vos_user:your_strong_password@postgres:5432/vosadmin
 
 # JWT 配置
 SECRET_KEY=your-secret-key-change-in-production
@@ -293,7 +293,7 @@ docker-compose exec backend bash
 docker-compose exec backend bash -c "cd /srv/app && alembic upgrade head"
 
 # 查看数据库
-docker-compose exec postgres psql -U vos_user -d vos_db
+docker-compose exec postgres psql -U vos_user -d vosadmin
 ```
 
 ---
@@ -489,13 +489,13 @@ tar -czf postgres-backup-$(date +%Y%m%d).tar.gz data/postgres/
 docker-compose up -d
 
 # 方式二：pg_dump（推荐，无需停服）
-docker-compose exec postgres pg_dump -U vos_user vos_db > backup-$(date +%Y%m%d).sql
+docker-compose exec postgres pg_dump -U vos_user vosadmin > backup-$(date +%Y%m%d).sql
 ```
 
 **恢复数据**：
 ```bash
 # 从 SQL 备份恢复
-docker-compose exec -T postgres psql -U vos_user vos_db < backup.sql
+docker-compose exec -T postgres psql -U vos_user vosadmin < backup.sql
 
 # 从目录备份恢复
 docker-compose down
@@ -535,7 +535,7 @@ docker-compose up -d
 SECRET_KEY=$(openssl rand -hex 32)
 
 # 生产数据库
-DATABASE_URL=postgresql://vos_user:strong_password@db_host:5432/vos_db
+DATABASE_URL=postgresql://vos_user:strong_password@db_host:5432/vosadmin
 
 # CORS 配置（限制允许的来源）
 CORS_ORIGINS=["https://yourdomain.com"]
@@ -571,7 +571,7 @@ docker-compose logs backend
 
 #### 2. 数据库连接失败
 
-**症状**：后端日志显示"could not connect to server"
+**症状**：后端日志显示"could not connect to server"或"database does not exist"
 
 **解决方案**：
 ```bash
@@ -584,6 +584,62 @@ docker-compose exec postgres pg_isready -U vos_user
 # 重启数据库
 docker-compose restart postgres
 ```
+
+#### 2.1 数据库为空（无表）
+
+**症状**：登录数据库发现没有任何表，Alembic 迁移未执行
+
+**解决方案**：
+
+**方法一：一键修复（推荐）**
+```bash
+# 使用自动修复脚本
+chmod +x fix-empty-db.sh
+./fix-empty-db.sh
+```
+
+**方法二：诊断排查**
+```bash
+# 运行诊断脚本
+chmod +x check-migration.sh
+./check-migration.sh
+```
+
+**方法三：手动执行迁移**
+```bash
+# 使用手动迁移脚本
+chmod +x manual-migrate.sh
+./manual-migrate.sh
+```
+
+**方法四：进入容器手动修复**
+```bash
+# 1. 进入后端容器
+docker-compose exec backend bash
+
+# 2. 进入 Alembic 目录
+cd /srv/app
+
+# 3. 查看当前迁移状态
+alembic current
+
+# 4. 执行迁移
+alembic upgrade head
+
+# 5. 退出容器
+exit
+
+# 6. 验证表已创建
+docker-compose exec postgres psql -U vos_user -d vosadmin -c "\dt"
+```
+
+**诊断脚本说明**：
+
+项目提供了三个诊断脚本来帮助排查和修复数据库问题：
+
+- **`fix-empty-db.sh`** - 一键修复空数据库，自动执行迁移和创建管理员账户
+- **`check-migration.sh`** - 全面诊断数据库迁移状态，输出详细信息
+- **`manual-migrate.sh`** - 手动执行数据库迁移
 
 #### 3. Celery 任务不执行
 
@@ -627,7 +683,7 @@ services:
 **解决方案**：
 ```bash
 # 验证索引是否创建
-docker-compose exec postgres psql -U vos_user -d vos_db -c "\d cdrs"
+docker-compose exec postgres psql -U vos_user -d vosadmin -c "\d cdrs"
 
 # 应该看到 5 个 idx_cdr_* 索引
 

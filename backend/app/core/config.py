@@ -3,7 +3,7 @@ from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
     # Database
-    DATABASE_URL: str = os.getenv('DATABASE_URL', 'postgresql://vos:vos123@db:5432/vosdb')
+    DATABASE_URL: str = os.getenv('DATABASE_URL', 'postgresql://vos_user:vos_password@postgres:5432/vosadmin')
     
     # Redis
     REDIS_URL: str = os.getenv('REDIS_URL', 'redis://redis:6379/0')

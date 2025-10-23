@@ -227,7 +227,7 @@ docker-compose logs --tail=100 backend
 - `upgrade.sh` **自动备份**数据库到 `backups/` 目录
 - 重要操作前建议手动备份：
   ```bash
-  docker-compose exec postgres pg_dump -U vos_user vos_db > backup.sql
+  docker-compose exec postgres pg_dump -U vos_user vosadmin > backup.sql
   ```
 
 ### 2. 服务停机时间

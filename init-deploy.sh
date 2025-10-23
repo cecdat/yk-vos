@@ -142,8 +142,8 @@ create_env_files() {
 # 数据库配置
 POSTGRES_USER=vos_user
 POSTGRES_PASSWORD=$DB_PASSWORD
-POSTGRES_DB=vos_db
-DATABASE_URL=postgresql://vos_user:$DB_PASSWORD@postgres:5432/vos_db
+POSTGRES_DB=vosadmin
+DATABASE_URL=postgresql://vos_user:$DB_PASSWORD@postgres:5432/vosadmin
 
 # JWT 配置
 SECRET_KEY=$SECRET_KEY
@@ -181,7 +181,7 @@ EOF
 # 数据库配置
 POSTGRES_USER=vos_user
 POSTGRES_PASSWORD=$DB_PASSWORD
-POSTGRES_DB=vos_db
+POSTGRES_DB=vosadmin
 
 # JWT 配置
 SECRET_KEY=$SECRET_KEY
@@ -303,7 +303,7 @@ verify_deployment() {
     
     # 检查数据库
     print_info "检查数据库..."
-    if docker-compose exec -T postgres psql -U vos_user -d vos_db -c "SELECT 1" &> /dev/null; then
+    if docker-compose exec -T postgres psql -U vos_user -d vosadmin -c "SELECT 1" &> /dev/null; then
         print_success "数据库连接正常 ✓"
     else
         print_warning "数据库连接失败"

@@ -18,6 +18,10 @@ def sync_all_instances_online_phones():
     db = SessionLocal()
     try:
         instances = db.query(VOSInstance).filter(VOSInstance.enabled == True).all()
+        if not instances:
+            logger.info('没有启用的VOS实例，跳过同步在线话机任务')
+            return {'success': True, 'message': '没有VOS实例需要同步', 'instances_count': 0}
+        
         for inst in instances:
             client = VOSClient(inst.base_url)
             res = client.post('/external/server/GetPhoneOnline', payload={})
@@ -48,6 +52,10 @@ def sync_all_instances_cdrs(days=1):
     db = SessionLocal()
     try:
         instances = db.query(VOSInstance).filter(VOSInstance.enabled == True).all()
+        if not instances:
+            logger.info('没有启用的VOS实例，跳过同步话单任务')
+            return {'success': True, 'message': '没有VOS实例需要同步', 'instances_count': 0}
+        
         for inst in instances:
             client = VOSClient(inst.base_url)
             end = datetime.utcnow()
@@ -211,6 +219,10 @@ def sync_all_instances_customers():
     db = SessionLocal()
     try:
         instances = db.query(VOSInstance).filter(VOSInstance.enabled == True).all()
+        if not instances:
+            logger.info('没有启用的VOS实例，跳过同步客户数据任务')
+            return {'success': True, 'message': '没有VOS实例需要同步', 'instances_count': 0}
+        
         results = []
         
         for inst in instances:
@@ -281,6 +293,9 @@ def sync_all_vos_common_apis():
     db = SessionLocal()
     try:
         instances = db.query(VOSInstance).filter(VOSInstance.enabled == True).all()
+        if not instances:
+            logger.info('没有启用的VOS实例，跳过同步常用API任务')
+            return {'success': True, 'message': '没有VOS实例需要同步', 'instances_count': 0}
         
         # 定义需要定期同步的API
         apis_to_sync = [
@@ -437,6 +452,10 @@ def sync_all_instances_enhanced():
     db = SessionLocal()
     try:
         instances = db.query(VOSInstance).filter(VOSInstance.enabled == True).all()
+        if not instances:
+            logger.info('没有启用的VOS实例，跳过增强版同步任务')
+            return {'success': True, 'message': '没有VOS实例需要同步', 'instances_count': 0}
+        
         results = []
         
         for inst in instances:

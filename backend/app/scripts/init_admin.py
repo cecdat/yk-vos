@@ -8,8 +8,12 @@ from sqlalchemy.orm import sessionmaker
 from passlib.context import CryptContext
 from app.models.user import User
 from app.models.vos_instance import VOSInstance
+
 pwd = CryptContext(schemes=['bcrypt'], deprecated='auto')
-engine = create_engine(os.getenv('DATABASE_URL'))
+
+# 获取数据库连接 URL，提供默认值
+database_url = os.getenv('DATABASE_URL', 'postgresql://vos_user:vos_password@postgres:5432/vosadmin')
+engine = create_engine(database_url)
 Session = sessionmaker(bind=engine)
 def run():
     s = Session()

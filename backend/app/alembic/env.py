@@ -18,7 +18,7 @@ from app.models.cdr import CDR
 config = context.config
 
 # Set sqlalchemy.url from environment
-database_url = os.getenv('DATABASE_URL', 'postgresql://vos:vos123@db:5432/vosdb')
+database_url = os.getenv('DATABASE_URL', 'postgresql://vos_user:vos_password@postgres:5432/vosadmin')
 config.set_main_option('sqlalchemy.url', database_url)
 
 # Interpret the config file for Python logging.

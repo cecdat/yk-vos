@@ -60,7 +60,7 @@ git pull origin main
 docker-compose stop backend frontend celery-worker celery-beat
 
 # 3. 备份数据库（重要！）
-docker-compose exec postgres pg_dump -U vos_user vos_db > backup_$(date +%Y%m%d_%H%M%S).sql
+docker-compose exec postgres pg_dump -U vos_user vosadmin > backup_$(date +%Y%m%d_%H%M%S).sql
 
 # 4. 构建新镜像
 docker-compose build backend frontend
@@ -199,7 +199,7 @@ docker-compose exec backend alembic current
 #### 5.3 验证新增索引
 ```bash
 # 连接到数据库
-docker-compose exec postgres psql -U vos_user -d vos_db
+docker-compose exec postgres psql -U vos_user -d vosadmin
 
 # 查看 CDR 表的索引
 \d cdrs
@@ -300,7 +300,7 @@ docker-compose exec redis redis-cli ping
 **验证数据库索引**：
 ```bash
 # 连接数据库
-docker-compose exec postgres psql -U vos_user -d vos_db
+docker-compose exec postgres psql -U vos_user -d vosadmin
 
 # 查看查询计划（验证索引使用）
 EXPLAIN ANALYZE 
@@ -440,7 +440,7 @@ docker-compose restart celery-worker celery-beat
 **解决方案**：
 ```bash
 # 连接数据库
-docker-compose exec postgres psql -U vos_user -d vos_db
+docker-compose exec postgres psql -U vos_user -d vosadmin
 
 # 查看表索引
 \d cdrs
@@ -471,7 +471,7 @@ docker-compose down
 
 # 2. 恢复数据库备份
 docker-compose up -d postgres
-docker-compose exec -T postgres psql -U vos_user -d vos_db < backups/backup_YYYYMMDD_HHMMSS.sql
+docker-compose exec -T postgres psql -U vos_user -d vosadmin < backups/backup_YYYYMMDD_HHMMSS.sql
 
 # 3. 回滚代码
 git log --oneline -10  # 查看提交历史
@@ -512,7 +512,7 @@ time curl -X POST http://localhost:8000/cdr/query-from-vos/1 \
 #### 测试 2：数据库索引效果
 ```sql
 -- 连接数据库
-docker-compose exec postgres psql -U vos_user -d vos_db
+docker-compose exec postgres psql -U vos_user -d vosadmin
 
 -- 测试复合索引查询
 EXPLAIN ANALYZE 
@@ -613,7 +613,7 @@ docker-compose restart [service-name]
 docker-compose exec [service-name] bash
 
 # 查看数据库
-docker-compose exec postgres psql -U vos_user -d vos_db
+docker-compose exec postgres psql -U vos_user -d vosadmin
 
 # 执行数据库迁移
 docker-compose exec backend alembic upgrade head

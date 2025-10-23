@@ -69,7 +69,7 @@ backup_database() {
     # 检查 PostgreSQL 容器是否运行
     if docker-compose ps postgres | grep -q "Up"; then
         print_info "开始备份数据库..."
-        docker-compose exec -T postgres pg_dump -U vos_user vos_db > "$BACKUP_FILE"
+        docker-compose exec -T postgres pg_dump -U vos_user vosadmin > "$BACKUP_FILE"
         
         if [ -f "$BACKUP_FILE" ]; then
             BACKUP_SIZE=$(du -h "$BACKUP_FILE" | cut -f1)
@@ -197,7 +197,7 @@ verify_deployment() {
     
     # 检查索引
     print_info "验证数据库索引..."
-    INDEX_COUNT=$(docker-compose exec -T postgres psql -U vos_user -d vos_db -t -c "SELECT COUNT(*) FROM pg_indexes WHERE tablename = 'cdrs' AND indexname LIKE 'idx_cdr_%';" | xargs)
+    INDEX_COUNT=$(docker-compose exec -T postgres psql -U vos_user -d vosadmin -t -c "SELECT COUNT(*) FROM pg_indexes WHERE tablename = 'cdrs' AND indexname LIKE 'idx_cdr_%';" | xargs)
     if [ "$INDEX_COUNT" -ge 5 ]; then
         print_success "CDR 表索引已创建 ($INDEX_COUNT 个)"
     else
@@ -244,7 +244,7 @@ handle_error() {
     echo "  1. 查看日志: docker-compose logs -f"
     echo "  2. 停止服务: docker-compose down"
     if [ -n "$BACKUP_FILE" ]; then
-        echo "  3. 恢复备份: docker-compose exec -T postgres psql -U vos_user -d vos_db < $BACKUP_FILE"
+        echo "  3. 恢复备份: docker-compose exec -T postgres psql -U vos_user -d vosadmin < $BACKUP_FILE"
     fi
     echo "  4. 查看详细文档: cat UPGRADE_GUIDE.md"
     echo ""

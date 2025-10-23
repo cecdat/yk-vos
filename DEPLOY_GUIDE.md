@@ -50,8 +50,8 @@ docker info
 ```bash
 POSTGRES_USER=vos_user
 POSTGRES_PASSWORD=your_strong_password
-POSTGRES_DB=vos_db
-DATABASE_URL=postgresql://vos_user:your_strong_password@postgres:5432/vos_db
+POSTGRES_DB=vosadmin
+DATABASE_URL=postgresql://vos_user:your_strong_password@postgres:5432/vosadmin
 SECRET_KEY=$(openssl rand -hex 32)
 REDIS_URL=redis://redis:6379
 CELERY_BROKER_URL=redis://redis:6379/0
