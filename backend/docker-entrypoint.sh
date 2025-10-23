@@ -3,42 +3,62 @@
 
 set -e
 
-echo "🚀 正在启动 YK-VOS Backend..."
+echo "Starting YK-VOS Backend..."
 
 # 等待数据库就绪
-echo "⏳ 等待 PostgreSQL 数据库就绪..."
-while ! pg_isready -h postgres -U ${POSTGRES_USER:-vos_user} > /dev/null 2>&1; do
-  echo "   数据库未就绪，等待中..."
+echo "Waiting for PostgreSQL..."
+max_attempts=30
+attempt=0
+
+while [ $attempt -lt $max_attempts ]; do
+  if pg_isready -h postgres -U ${POSTGRES_USER:-vos_user} > /dev/null 2>&1; then
+    echo "PostgreSQL is ready"
+    break
+  fi
+  attempt=$((attempt + 1))
+  echo "Waiting for database... ($attempt/$max_attempts)"
   sleep 2
 done
-echo "✅ 数据库已就绪"
+
+if [ $attempt -eq $max_attempts ]; then
+  echo "ERROR: PostgreSQL not ready after $max_attempts attempts"
+  exit 1
+fi
 
 # 运行数据库迁移
-echo "📦 运行数据库迁移..."
+echo "Running database migrations..."
 cd /srv/app
-alembic upgrade head
-echo "✅ 数据库迁移完成"
+if alembic upgrade head; then
+  echo "Database migration completed"
+else
+  echo "Database migration failed"
+  exit 1
+fi
 
 # 检查是否需要创建管理员账户
-echo "👤 检查管理员账户..."
+echo "Checking admin account..."
+cd /srv
 python -c "
-from app.core.db import SessionLocal
-from app.models.user import User
-
-db = SessionLocal()
-admin = db.query(User).filter(User.username == 'admin').first()
-if not admin:
-    print('   创建默认管理员账户...')
-    from app.scripts.init_admin import create_admin_user
-    create_admin_user()
-    print('   ✅ 管理员账户已创建 (admin/admin123)')
-else:
-    print('   ✅ 管理员账户已存在')
-db.close()
+try:
+    from app.core.db import SessionLocal
+    from app.models.user import User
+    
+    db = SessionLocal()
+    admin = db.query(User).filter(User.username == 'admin').first()
+    if not admin:
+        print('Creating admin account...')
+        from app.scripts.init_admin import create_admin_user
+        create_admin_user()
+        print('Admin account created (admin/admin123)')
+    else:
+        print('Admin account exists')
+    db.close()
+except Exception as e:
+    print(f'Warning: Could not check admin account: {e}')
+    # 不因为这个失败而退出
 "
 
 # 启动应用
-echo "🎉 启动 FastAPI 应用..."
-cd /srv
+echo "Starting FastAPI application..."
 exec "$@"
 

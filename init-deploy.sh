@@ -256,8 +256,22 @@ init_database() {
     print_step "6/7 初始化数据库"
     
     print_info "执行数据库迁移..."
-    docker-compose exec backend bash -c "cd /srv/app && alembic upgrade head"
-    print_success "数据库迁移完成"
+    
+    # 等待 backend 容器完全启动
+    print_info "等待 backend 容器启动..."
+    sleep 10
+    
+    # 检查容器是否正常运行
+    if docker-compose ps backend | grep -q "Up"; then
+        print_success "backend 容器已启动"
+    else
+        print_error "backend 容器启动失败"
+        print_info "查看日志："
+        docker-compose logs --tail=30 backend
+        return 1
+    fi
+    
+    print_success "数据库迁移已在容器启动时自动执行"
     
     print_info "数据库初始化完成"
 }
