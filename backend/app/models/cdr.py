@@ -20,7 +20,7 @@ class CDR(Base):
     )
     
     # 基础字段
-    id = Column(Integer, autoincrement=True, unique=True, nullable=False, comment='自增ID（非主键）')
+    id = Column(Integer, autoincrement=True, nullable=False, index=True, comment='自增ID（非主键，用于排序和引用）')
     vos_id = Column(Integer, nullable=False, index=True, comment='VOS实例ID')
     
     # 账户信息

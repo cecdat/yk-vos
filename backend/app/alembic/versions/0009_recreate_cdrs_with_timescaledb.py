@@ -46,7 +46,7 @@ def upgrade():
     op.create_table(
         'cdrs',
         # 基础字段
-        sa.Column('id', sa.Integer(), autoincrement=True, unique=True, nullable=False, comment='自增ID（非主键）'),
+        sa.Column('id', sa.Integer(), autoincrement=True, nullable=False, comment='自增ID（非主键，用于排序和引用）'),
         sa.Column('vos_id', sa.Integer(), nullable=False, comment='VOS实例ID'),
         
         # 账户信息
@@ -84,8 +84,22 @@ def upgrade():
         comment='VOS话单记录表（TimescaleDB超表）'
     )
     
-    # 3. 创建索引（注意：start和flow_no已是主键，自动有索引）
-    op.create_index('ix_cdrs_id', 'cdrs', ['id'], unique=True)  # id需要唯一索引
+    # 3. 安装TimescaleDB扩展（如果未安装）
+    op.execute("CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE;")
+    
+    # 4. 转换为TimescaleDB超表（按start字段分区）
+    # ⚠️ 必须在创建任何唯一索引之前创建 hypertable
+    op.execute("""
+        SELECT create_hypertable(
+            'cdrs', 
+            'start',
+            chunk_time_interval => INTERVAL '7 days',  -- 每7天一个分区
+            if_not_exists => TRUE
+        );
+    """)
+    
+    # 5. 创建索引（必须在 hypertable 创建之后）
+    # 注意：start和flow_no已是主键，自动有索引
     op.create_index('ix_cdrs_vos_id', 'cdrs', ['vos_id'], unique=False)
     op.create_index('ix_cdrs_account', 'cdrs', ['account'], unique=False)
     op.create_index('ix_cdrs_caller_e164', 'cdrs', ['caller_e164'], unique=False)
@@ -95,20 +109,10 @@ def upgrade():
     # 创建复合索引（优化常见查询）
     op.create_index('idx_cdrs_vos_start', 'cdrs', ['vos_id', 'start'], unique=False)
     op.create_index('idx_cdrs_account_start', 'cdrs', ['account', 'start'], unique=False)
-    op.create_index('idx_cdrs_flow_no_start', 'cdrs', ['flow_no', 'start'], unique=False)
     
-    # 4. 安装TimescaleDB扩展（如果未安装）
-    op.execute("CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE;")
-    
-    # 5. 转换为TimescaleDB超表（按start字段分区）
-    op.execute("""
-        SELECT create_hypertable(
-            'cdrs', 
-            'start',
-            chunk_time_interval => INTERVAL '7 days',  -- 每7天一个分区
-            if_not_exists => TRUE
-        );
-    """)
+    # id字段的索引（非唯一，因为TimescaleDB不允许不包含分区列的唯一索引）
+    # 如果需要通过id查询，这个索引足够了
+    op.create_index('ix_cdrs_id', 'cdrs', ['id'], unique=False)
     
     # 6. 设置压缩策略（30天后自动压缩）
     op.execute("""
