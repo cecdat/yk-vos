@@ -241,50 +241,83 @@ def sync_cdrs_for_single_day(instance_id: int, date_str: str):
         new_count = 0
         
         for c in cdrs:
-            caller = c.get('callerE164') or c.get('caller') or c.get('src') or c.get('from') or ''
-            callee = c.get('calleeE164') or c.get('callee') or c.get('dst') or c.get('to') or ''
-            caller_gw = c.get('callerGateway') or c.get('caller_gateway') or ''
-            callee_gw = c.get('calleeGateway') or c.get('callee_gateway') or ''
-            start_time = c.get('startTime') or c.get('start_time') or c.get('StartTime') or None
-            end_time = c.get('endTime') or c.get('end_time') or c.get('EndTime') or None
+            # 提取话单唯一标识（flowNo）
+            flow_no = c.get('flowNo') or c.get('flow_no') or c.get('FlowNo')
+            if not flow_no:
+                # 如果没有flowNo，使用时间戳+主被叫生成
+                import time
+                flow_no = f"{int(time.time() * 1000)}_{c.get('callerE164', '')}_{c.get('calleeAccessE164', '')}"
             
-            try:
-                if isinstance(start_time, str):
-                    parsed = dateparser.parse(start_time)
-                    start_time_norm = parsed
-                else:
-                    start_time_norm = start_time
-            except Exception:
-                start_time_norm = start_time
-            
-            duration = c.get('duration') or c.get('billsec') or 0
-            cost = c.get('fee') or c.get('cost') or 0
-            disposition = c.get('releaseCause') or c.get('disposition') or c.get('status') or ''
-            
-            # 生成hash用于去重
-            h_src = f"{caller}|{callee}|{start_time_norm}|{int(duration)}"
-            h = hashlib.sha256(h_src.encode('utf-8')).hexdigest()[:16]
-            
-            # 检查是否已存在
-            exists = db.query(CDR).filter(CDR.vos_id == inst.id, CDR.hash == h).first()
+            # 检查是否已存在（使用flowNo去重）
+            exists = db.query(CDR).filter(CDR.flow_no == flow_no).first()
             if exists:
                 continue
             
-            # 创建新记录
-            raw = c  # 保存原始数据
+            # 提取账户信息
+            account_name = c.get('accountName') or c.get('account_name') or ''
+            account = c.get('account') or c.get('Account') or ''
+            
+            # 提取呼叫信息
+            caller_e164 = c.get('callerE164') or c.get('caller') or c.get('src') or ''
+            callee_access_e164 = c.get('calleeAccessE164') or c.get('callee') or c.get('dst') or ''
+            
+            # 提取时间信息
+            start_time = c.get('start') or c.get('startTime') or c.get('start_time') or None
+            stop_time = c.get('stop') or c.get('endTime') or c.get('end_time') or None
+            
+            # 时间格式转换
+            try:
+                if isinstance(start_time, str):
+                    start_time_parsed = dateparser.parse(start_time)
+                else:
+                    start_time_parsed = start_time
+            except Exception:
+                start_time_parsed = start_time
+            
+            try:
+                if isinstance(stop_time, str):
+                    stop_time_parsed = dateparser.parse(stop_time)
+                else:
+                    stop_time_parsed = stop_time
+            except Exception:
+                stop_time_parsed = stop_time
+            
+            # 提取时长和费用
+            hold_time = c.get('holdTime') or c.get('duration') or c.get('billsec') or 0
+            fee_time = c.get('feeTime') or c.get('fee_time') or hold_time
+            fee_value = c.get('fee') or c.get('cost') or 0
+            
+            # 提取终止信息
+            end_reason = c.get('endReason') or c.get('releaseCause') or c.get('disposition') or ''
+            end_direction = c.get('endDirection') or c.get('end_direction')
+            if end_direction is not None:
+                try:
+                    end_direction = int(end_direction)
+                except:
+                    end_direction = None
+            
+            # 提取网关和IP
+            callee_gateway = c.get('calleeGateway') or c.get('callerGateway') or c.get('gateway') or ''
+            callee_ip = c.get('calleeip') or c.get('callee_ip') or c.get('calleeIp') or ''
+            
+            # 创建新记录（使用新字段结构）
             newc = CDR(
                 vos_id=inst.id,
-                caller=caller,
-                callee=callee,
-                start_time=start_time_norm,
-                end_time=end_time,
-                duration=duration,
-                cost=cost,
-                disposition=disposition,
-                raw=raw,
-                caller_gateway=caller_gw,
-                callee_gateway=callee_gw,
-                hash=h
+                account_name=account_name,
+                account=account,
+                caller_e164=caller_e164,
+                callee_access_e164=callee_access_e164,
+                start=start_time_parsed,
+                stop=stop_time_parsed,
+                hold_time=hold_time,
+                fee_time=fee_time,
+                fee=fee_value,
+                end_reason=end_reason,
+                end_direction=end_direction,
+                callee_gateway=callee_gateway,
+                callee_ip=callee_ip,
+                raw=c,  # 保存原始JSON数据（JSONB格式）
+                flow_no=flow_no
             )
             db.add(newc)
             new_count += 1

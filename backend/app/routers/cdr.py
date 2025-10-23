@@ -153,20 +153,20 @@ async def query_cdrs_from_vos(
         query = db.query(CDR).filter(
             and_(
                 CDR.vos_id == instance_id,
-                CDR.start_time >= begin_dt,
-                CDR.start_time < end_dt
+                CDR.start >= begin_dt,
+                CDR.start < end_dt
             )
         )
         
-        # 添加过滤条件
+        # 添加过滤条件（使用新字段名）
         if query_params.caller_e164:
-            query = query.filter(CDR.caller.like(f'%{query_params.caller_e164}%'))
+            query = query.filter(CDR.caller_e164.like(f'%{query_params.caller_e164}%'))
         
         if query_params.callee_e164:
-            query = query.filter(CDR.callee.like(f'%{query_params.callee_e164}%'))
+            query = query.filter(CDR.callee_access_e164.like(f'%{query_params.callee_e164}%'))
         
         if query_params.caller_gateway:
-            query = query.filter(CDR.caller_gateway == query_params.caller_gateway)
+            query = query.filter(CDR.callee_gateway == query_params.caller_gateway)
         
         if query_params.callee_gateway:
             query = query.filter(CDR.callee_gateway == query_params.callee_gateway)
@@ -174,8 +174,8 @@ async def query_cdrs_from_vos(
         # 查询总数
         total_count = query.count()
         
-        # 分页查询
-        local_cdrs = query.order_by(desc(CDR.start_time)).offset(offset).limit(page_size).all()
+        # 分页查询（使用新字段名start）
+        local_cdrs = query.order_by(desc(CDR.start)).offset(offset).limit(page_size).all()
         
         # 如果本地有数据，直接返回
         if local_cdrs or total_count > 0:
@@ -185,14 +185,20 @@ async def query_cdrs_from_vos(
                 'success': True,
                 'cdrs': [
                     {
-                        'callerE164': cdr.caller,
-                        'calleeE164': cdr.callee,
-                        'callerGateway': cdr.caller_gateway,
+                        'flowNo': cdr.flow_no,
+                        'accountName': cdr.account_name,
+                        'account': cdr.account,
+                        'callerE164': cdr.caller_e164,
+                        'calleeAccessE164': cdr.callee_access_e164,
+                        'start': cdr.start.strftime('%Y-%m-%d %H:%M:%S') if cdr.start else None,
+                        'stop': cdr.stop.strftime('%Y-%m-%d %H:%M:%S') if cdr.stop else None,
+                        'holdTime': cdr.hold_time,
+                        'feeTime': cdr.fee_time,
+                        'fee': float(cdr.fee) if cdr.fee else 0,
+                        'endReason': cdr.end_reason,
+                        'endDirection': cdr.end_direction,
                         'calleeGateway': cdr.callee_gateway,
-                        'startTime': cdr.start_time.strftime('%Y-%m-%d %H:%M:%S') if cdr.start_time else None,
-                        'duration': cdr.duration,
-                        'fee': float(cdr.cost) if cdr.cost else 0,
-                        'releaseCause': cdr.disposition,
+                        'calleeip': cdr.callee_ip,
                     }
                     for cdr in local_cdrs
                 ],

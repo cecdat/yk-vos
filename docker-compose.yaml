@@ -3,15 +3,22 @@
 
 services:
   postgres:
-    image: docker.1ms.run/postgres:15
-    container_name: yk_vos_postgres
+    image: docker.1ms.run/timescale/timescaledb:latest-pg15
+    container_name: yk_vos_timescaledb
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-vos_user}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-vos_password}
       POSTGRES_DB: ${POSTGRES_DB:-vosadmin}
+      # TimescaleDB优化配置
+      TIMESCALEDB_TELEMETRY: "off"
+      # PostgreSQL性能优化（适合16GB服务器，可根据实际内存调整）
+      TS_TUNE_MEMORY: "8GB"
+      TS_TUNE_NUM_CPUS: "4"
     volumes:
       # 使用本地目录映射，方便备份和迁移
       - ./data/postgres:/var/lib/postgresql/data
+      # 挂载TimescaleDB配置文件（可选）
+      - ./postgresql.conf:/etc/postgresql/postgresql.conf:ro
     ports:
       - "5430:5432"
     networks:
@@ -22,6 +29,8 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    # 设置共享内存大小（TimescaleDB需要）
+    shm_size: 2gb
 
   redis:
     image: docker.1ms.run/redis:7
