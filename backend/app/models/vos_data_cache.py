@@ -3,7 +3,7 @@ from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Index, Tex
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.sql import func
 from app.models.base import Base
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 
 class VosDataCache(Base):
@@ -57,7 +57,9 @@ class VosDataCache(Base):
         """检查缓存是否已过期"""
         if not self.expires_at:
             return False
-        return datetime.utcnow() > self.expires_at
+        # 使用 timezone-aware datetime 进行比较
+        now = datetime.now(timezone.utc)
+        return now > self.expires_at
     
     @classmethod
     def get_cache_ttl(cls, api_path: str) -> int:
