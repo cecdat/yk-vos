@@ -243,7 +243,7 @@ docker-compose down -v
 docker-compose exec backend bash
 
 # 手动执行数据库迁移
-docker-compose exec backend alembic upgrade head
+docker-compose exec backend bash -c "cd /srv/app && alembic upgrade head"
 
 # 查看数据库
 docker-compose exec postgres psql -U vos_user -d vos_db

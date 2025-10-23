@@ -256,7 +256,7 @@ init_database() {
     print_step "6/7 初始化数据库"
     
     print_info "执行数据库迁移..."
-    docker-compose exec backend alembic upgrade head
+    docker-compose exec backend bash -c "cd /srv/app && alembic upgrade head"
     print_success "数据库迁移完成"
     
     print_info "数据库初始化完成"

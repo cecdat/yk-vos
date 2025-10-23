@@ -40,6 +40,12 @@ chmod +x init-deploy.sh
 
 ⚠️ **首次登录后请立即修改密码！**
 
+### 数据库连接
+- 主机：localhost
+- 端口：5430（避免与本地 PostgreSQL 冲突）
+- 用户：vos_user
+- 数据库：vos_db
+
 ---
 
 ## 🔧 日常使用

@@ -1,8 +1,6 @@
 # YK-VOS 生产环境配置
 # 特点：使用基础镜像 + 代码挂载，修改代码后重启容器即可生效
 
-version: '3.8'
-
 services:
   postgres:
     image: docker.1ms.run/postgres:15
@@ -15,7 +13,7 @@ services:
       # 使用本地目录映射，方便备份和迁移
       - ./data/postgres:/var/lib/postgresql/data
     ports:
-      - "5432:5432"
+      - "5430:5432"
     networks:
       - vos-network
     restart: unless-stopped

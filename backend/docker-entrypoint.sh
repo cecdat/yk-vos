@@ -7,7 +7,7 @@ echo "🚀 正在启动 YK-VOS Backend..."
 
 # 等待数据库就绪
 echo "⏳ 等待 PostgreSQL 数据库就绪..."
-while ! pg_isready -h db -U ${POSTGRES_USER:-vos_user} > /dev/null 2>&1; do
+while ! pg_isready -h postgres -U ${POSTGRES_USER:-vos_user} > /dev/null 2>&1; do
   echo "   数据库未就绪，等待中..."
   sleep 2
 done
@@ -15,7 +15,7 @@ echo "✅ 数据库已就绪"
 
 # 运行数据库迁移
 echo "📦 运行数据库迁移..."
-cd /srv
+cd /srv/app
 alembic upgrade head
 echo "✅ 数据库迁移完成"
 
@@ -39,5 +39,6 @@ db.close()
 
 # 启动应用
 echo "🎉 启动 FastAPI 应用..."
+cd /srv
 exec "$@"
 

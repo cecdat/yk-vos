@@ -2,8 +2,6 @@
 # 用途：构建只包含依赖的基础镜像
 # 使用：docker-compose -f docker-compose.base.yaml build
 
-version: '3.8'
-
 services:
   backend-base:
     build:
