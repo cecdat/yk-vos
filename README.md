@@ -208,6 +208,53 @@ docker-compose logs -f
 
 ---
 
+## 🔧 部署和更新
+
+### 快速更新（日常使用） ⚡
+
+适用于修改代码后的快速部署：
+
+```bash
+# 方式一：使用快速更新脚本（推荐）
+bash quick-update.sh
+
+# 方式二：手动执行
+git pull && docker-compose restart backend frontend
+```
+
+### 完整升级（重要更新） 🔄
+
+适用于有数据库变更或依赖更新：
+
+```bash
+# 使用完整升级脚本
+bash upgrade.sh
+```
+
+**自动完成**：
+- ✅ 备份数据库
+- ✅ 拉取最新代码
+- ✅ 执行数据库迁移
+- ✅ 重启所有服务
+- ✅ 验证部署结果
+
+### 一键部署工具（菜单式） 🎛️
+
+交互式部署工具，提供多种操作：
+
+```bash
+bash deploy.sh
+```
+
+**功能菜单**：
+1. 快速更新（拉代码 + 重启服务）
+2. 完整升级（备份 + 拉代码 + 迁移 + 重启）
+3. 仅重启服务
+4. 查看服务状态
+5. 查看日志
+
+---
+
 ## 🔧 常用命令
 
 ```bash
@@ -247,9 +294,6 @@ docker-compose exec backend bash -c "cd /srv/app && alembic upgrade head"
 
 # 查看数据库
 docker-compose exec postgres psql -U vos_user -d vos_db
-
-# 更新代码后快速部署
-git pull && docker-compose restart
 ```
 
 ---
@@ -416,7 +460,9 @@ yk-vos/
 ├── data/                    # 数据目录（本地映射）
 │   └── postgres/           # PostgreSQL 数据
 ├── init-deploy.sh            # 全新服务器初始化脚本
-├── upgrade.sh                # 升级脚本
+├── upgrade.sh                # 完整升级脚本（带备份）
+├── deploy.sh                 # 一键部署工具（菜单式）
+├── quick-update.sh           # 快速更新脚本（日常使用）
 ├── vos3000.json             # VOS API 规范
 ├── README.md                # 本文档（完整指南）
 ├── QUICKSTART.md            # 快速开始（新手推荐）
@@ -751,6 +797,7 @@ docker-compose exec backend alembic history
 ### 🔧 技术文档
 - **[vos3000.json](./vos3000.json)** - VOS API 规范（Swagger 2.0）
 - **[MIRROR_CONFIG.md](./MIRROR_CONFIG.md)** - 镜像加速配置说明
+- **[SCRIPTS_GUIDE.md](./SCRIPTS_GUIDE.md)** - 部署脚本使用指南
 
 ---
 
