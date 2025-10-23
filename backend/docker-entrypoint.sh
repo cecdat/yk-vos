@@ -43,21 +43,11 @@ python3 -c "
 import sys
 sys.path.insert(0, '/srv')
 try:
-    from app.core.db import SessionLocal
-    from app.models.user import User
-    
-    db = SessionLocal()
-    admin = db.query(User).filter(User.username == 'admin').first()
-    if not admin:
-        print('Creating admin account...')
-        from app.scripts.init_admin import create_admin_user
-        create_admin_user()
-        print('Admin account created (admin/admin123)')
-    else:
-        print('Admin account exists')
-    db.close()
+    from app.scripts.init_admin import run as create_admin
+    create_admin()
+    print('Admin account initialized')
 except Exception as e:
-    print(f'Warning: Could not check admin account: {e}')
+    print(f'Warning: Could not initialize admin account: {e}')
     # 不因为这个失败而退出
 " || true
 
