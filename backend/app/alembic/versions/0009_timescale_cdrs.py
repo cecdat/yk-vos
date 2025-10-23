@@ -1,6 +1,6 @@
 """recreate cdrs table with TimescaleDB
 
-Revision ID: 0009_recreate_cdrs_with_timescaledb
+Revision ID: 0009_timescale_cdrs
 Revises: 0008_add_sync_configs
 Create Date: 2025-10-23
 
@@ -17,7 +17,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 
 
 # revision identifiers, used by Alembic.
-revision = '0009_recreate_cdrs_with_timescaledb'
+revision = '0009_timescale_cdrs'
 down_revision = '0008_add_sync_configs'
 branch_labels = None
 depends_on = None
