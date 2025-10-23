@@ -1,10 +1,14 @@
 from typing import Annotated, Optional, List
 from fastapi import APIRouter, Depends, Query, HTTPException
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import desc, func, and_, or_
 from pydantic import BaseModel
 from datetime import date, datetime, timedelta
 import time
+import io
+from openpyxl import Workbook
+from openpyxl.styles import Font, Alignment, PatternFill
 
 from app.core.db import get_db
 from app.core.vos_client import VOSClient
@@ -23,6 +27,7 @@ class CDRQueryRequest(BaseModel):
     callee_e164: Optional[str] = None
     caller_gateway: Optional[str] = None
     callee_gateway: Optional[str] = None
+    min_duration: Optional[int] = None  # 最小通话时长（秒）
     begin_time: str  # yyyyMMdd 格式
     end_time: str    # yyyyMMdd 格式
     page: int = 1    # 页码（从1开始）
@@ -170,6 +175,10 @@ async def query_cdrs_from_vos(
         
         if query_params.callee_gateway:
             query = query.filter(CDR.callee_gateway == query_params.callee_gateway)
+        
+        # 最小通话时长过滤
+        if query_params.min_duration is not None and query_params.min_duration > 0:
+            query = query.filter(CDR.hold_time >= query_params.min_duration)
         
         # 查询总数
         total_count = query.count()
@@ -364,4 +373,127 @@ async def query_cdrs_from_all_instances(
             'callee': callee
         }
     }
+
+
+@router.post('/export/{instance_id}')
+async def export_cdrs_to_excel(
+    instance_id: int,
+    query_params: CDRQueryRequest,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Session = Depends(get_db)
+):
+    """
+    导出话单到Excel文件
+    
+    参数与query-from-vos相同，但返回Excel文件
+    """
+    # 获取 VOS 实例
+    instance = db.query(VOSInstance).filter(VOSInstance.id == instance_id).first()
+    if not instance:
+        raise HTTPException(status_code=404, detail='VOS instance not found')
+    
+    # 解析时间范围
+    try:
+        begin_dt = datetime.strptime(query_params.begin_time, '%Y%m%d')
+        end_dt = datetime.strptime(query_params.end_time, '%Y%m%d') + timedelta(days=1)
+    except:
+        raise HTTPException(status_code=400, detail='时间格式错误，应为 yyyyMMdd')
+    
+    # 查询数据（不分页，导出全部）
+    query = db.query(CDR).filter(
+        and_(
+            CDR.vos_id == instance_id,
+            CDR.start >= begin_dt,
+            CDR.start < end_dt
+        )
+    )
+    
+    # 添加过滤条件
+    if query_params.caller_e164:
+        query = query.filter(CDR.caller_e164.like(f'%{query_params.caller_e164}%'))
+    
+    if query_params.callee_e164:
+        query = query.filter(CDR.callee_access_e164.like(f'%{query_params.callee_e164}%'))
+    
+    if query_params.callee_gateway:
+        query = query.filter(CDR.callee_gateway == query_params.callee_gateway)
+    
+    if query_params.min_duration is not None and query_params.min_duration > 0:
+        query = query.filter(CDR.hold_time >= query_params.min_duration)
+    
+    # 限制最多导出10000条（防止内存溢出）
+    cdrs = query.order_by(desc(CDR.start)).limit(10000).all()
+    
+    # 创建Excel工作簿
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "话单记录"
+    
+    # 设置表头样式
+    header_fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
+    header_font = Font(color="FFFFFF", bold=True)
+    header_alignment = Alignment(horizontal="center", vertical="center")
+    
+    # 定义表头
+    headers = [
+        "话单ID", "VOS节点", "账户名称", "账户号码", "主叫号码", "被叫号码",
+        "网关", "开始时间", "结束时间", "通话时长(秒)", "计费时长(秒)",
+        "费用(元)", "挂断方", "终止原因"
+    ]
+    
+    # 写入表头
+    for col_num, header in enumerate(headers, 1):
+        cell = ws.cell(row=1, column=col_num, value=header)
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = header_alignment
+    
+    # 写入数据
+    for row_num, cdr in enumerate(cdrs, 2):
+        ws.cell(row=row_num, column=1, value=cdr.flow_no or '')
+        ws.cell(row=row_num, column=2, value=instance.name)
+        ws.cell(row=row_num, column=3, value=cdr.account_name or '')
+        ws.cell(row=row_num, column=4, value=cdr.account or '')
+        ws.cell(row=row_num, column=5, value=cdr.caller_e164 or '')
+        ws.cell(row=row_num, column=6, value=cdr.callee_access_e164 or '')
+        ws.cell(row=row_num, column=7, value=cdr.callee_gateway or '')
+        ws.cell(row=row_num, column=8, value=cdr.start.strftime('%Y-%m-%d %H:%M:%S') if cdr.start else '')
+        ws.cell(row=row_num, column=9, value=cdr.stop.strftime('%Y-%m-%d %H:%M:%S') if cdr.stop else '')
+        ws.cell(row=row_num, column=10, value=cdr.hold_time or 0)
+        ws.cell(row=row_num, column=11, value=cdr.fee_time or 0)
+        ws.cell(row=row_num, column=12, value=float(cdr.fee) if cdr.fee else 0)
+        
+        # 挂断方
+        end_direction_map = {0: '主叫', 1: '被叫', 2: '服务器'}
+        ws.cell(row=row_num, column=13, value=end_direction_map.get(cdr.end_direction, '-'))
+        
+        ws.cell(row=row_num, column=14, value=cdr.end_reason or '')
+    
+    # 自动调整列宽
+    for column in ws.columns:
+        max_length = 0
+        column_letter = column[0].column_letter
+        for cell in column:
+            try:
+                if len(str(cell.value)) > max_length:
+                    max_length = len(str(cell.value))
+            except:
+                pass
+        adjusted_width = min(max_length + 2, 50)
+        ws.column_dimensions[column_letter].width = adjusted_width
+    
+    # 保存到内存
+    output = io.BytesIO()
+    wb.save(output)
+    output.seek(0)
+    
+    # 生成文件名
+    filename = f"话单_{instance.name}_{query_params.begin_time}-{query_params.end_time}.xlsx"
+    
+    # 返回文件
+    return StreamingResponse(
+        output,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
 

@@ -34,6 +34,8 @@ export default function CdrPage() {
   const [accounts, setAccounts] = useState('')
   const [caller, setCaller] = useState('')
   const [callee, setCallee] = useState('')
+  const [gateway, setGateway] = useState('')
+  const [minDuration, setMinDuration] = useState('0')
   
   // 分页
   const [currentPage, setCurrentPage] = useState(1)
@@ -68,7 +70,9 @@ export default function CdrPage() {
           end_time: endTime,
           accounts: accounts ? accounts.split(',') : undefined,
           caller_e164: caller || undefined,
-          callee_e164: callee || undefined
+          callee_e164: callee || undefined,
+          callee_gateway: gateway || undefined,
+          min_duration: minDuration ? parseInt(minDuration) : undefined
         }
 
         const res = await api.post(
@@ -161,6 +165,47 @@ export default function CdrPage() {
     }
   }
 
+  // 导出Excel
+  async function handleExport() {
+    try {
+      if (!currentVOS) {
+        alert('请先选择 VOS 节点')
+        return
+      }
+
+      // 使用当前查询条件
+      const payload = {
+        begin_time: beginTime,
+        end_time: endTime,
+        accounts: accounts ? accounts.split(',') : undefined,
+        caller_e164: caller || undefined,
+        callee_e164: callee || undefined,
+        callee_gateway: gateway || undefined,
+        min_duration: minDuration ? parseInt(minDuration) : undefined
+      }
+
+      const res = await api.post(
+        `/cdr/export/${currentVOS.id}`,
+        payload,
+        { responseType: 'blob' }
+      )
+
+      // 创建下载链接
+      const url = window.URL.createObjectURL(new Blob([res.data]))
+      const link = document.createElement('a')
+      link.href = url
+      const filename = `话单_${currentVOS.name}_${beginTime}-${endTime}.xlsx`
+      link.setAttribute('download', filename)
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      window.URL.revokeObjectURL(url)
+    } catch (e: any) {
+      console.error('导出失败:', e)
+      alert(e.response?.data?.detail || '导出失败')
+    }
+  }
+
   return (
     <div className='max-w-7xl'>
       <div className='flex items-center justify-between mb-6'>
@@ -239,11 +284,34 @@ export default function CdrPage() {
               disabled={loading}
             />
           </div>
-          <div className='flex items-end'>
+          <div>
+            <label className='block text-xs font-medium mb-1 text-gray-700'>网关</label>
+            <input
+              type='text'
+              value={gateway}
+              onChange={e => setGateway(e.target.value)}
+              className='w-full p-2 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none'
+              placeholder='网关名称'
+              disabled={loading}
+            />
+          </div>
+          <div>
+            <label className='block text-xs font-medium mb-1 text-gray-700'>最小通话时长(秒)</label>
+            <input
+              type='number'
+              value={minDuration}
+              onChange={e => setMinDuration(e.target.value)}
+              className='w-full p-2 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none'
+              placeholder='0表示全部'
+              min='0'
+              disabled={loading}
+            />
+          </div>
+          <div className='flex items-end gap-2'>
             <button
               onClick={handleQuery}
               disabled={loading}
-              className='w-full py-2 text-sm bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg font-medium hover:from-blue-700 hover:to-purple-700 transition disabled:opacity-50 flex items-center justify-center gap-2'
+              className='flex-1 py-2 text-sm bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg font-medium hover:from-blue-700 hover:to-purple-700 transition disabled:opacity-50 flex items-center justify-center gap-2'
             >
               {loading && (
                 <svg className='animate-spin h-4 w-4' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
@@ -254,6 +322,23 @@ export default function CdrPage() {
             </button>
           </div>
         </div>
+
+        {/* 导出按钮 */}
+        {cdrs.length > 0 && (
+          <div className='mt-3 flex items-center gap-2'>
+            <button
+              onClick={handleExport}
+              disabled={loading}
+              className='px-4 py-2 text-sm bg-gradient-to-r from-green-600 to-teal-600 text-white rounded-lg font-medium hover:from-green-700 hover:to-teal-700 transition disabled:opacity-50 flex items-center gap-2'
+            >
+              <svg className='w-4 h-4' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
+                <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z' />
+              </svg>
+              导出Excel ({cdrs.length}条)
+            </button>
+            <span className='text-xs text-gray-500'>当前查询结果</span>
+          </div>
+        )}
       </div>
 
       {/* 话单列表 */}
