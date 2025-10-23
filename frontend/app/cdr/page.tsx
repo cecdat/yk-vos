@@ -180,8 +180,7 @@ export default function CdrPage() {
         caller_e164: caller || undefined,
         callee_e164: callee || undefined,
         callee_gateway: gateway || undefined,
-        min_duration: minDuration ? parseInt(minDuration) : undefined
-      }
+              }
 
       const res = await api.post(
         `/cdr/export/${currentVOS.id}`,
@@ -536,3 +535,4 @@ export default function CdrPage() {
     </div>
   )
 }
+
