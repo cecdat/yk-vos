@@ -69,9 +69,15 @@ export function VOSProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  // 初始化时获取 VOS 列表
+  // 初始化时获取 VOS 列表（仅在已登录时）
   useEffect(() => {
-    refreshVOSList()
+    // 检查是否已登录
+    const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null
+    if (token) {
+      refreshVOSList()
+    } else {
+      setLoading(false)
+    }
   }, [])
 
   return (

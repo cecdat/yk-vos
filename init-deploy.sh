@@ -131,6 +131,20 @@ check_requirements() {
 create_env_files() {
     print_step "2/7 创建环境配置文件"
     
+    # 获取服务器 IP
+    print_info "检测服务器 IP..."
+    SERVER_IP=$(hostname -I | awk '{print $1}')
+    if [ -z "$SERVER_IP" ]; then
+        SERVER_IP="localhost"
+    fi
+    print_success "服务器 IP: $SERVER_IP"
+    
+    echo ""
+    read -p "是否使用检测到的 IP ($SERVER_IP)? [Y/n]: " USE_DETECTED_IP
+    if [[ ! $USE_DETECTED_IP =~ ^[Yy]?$ ]]; then
+        read -p "请输入服务器 IP 或域名: " SERVER_IP
+    fi
+    
     # 生成随机密钥
     SECRET_KEY=$(openssl rand -hex 32)
     DB_PASSWORD=$(openssl rand -base64 16 | tr -d '=+/')
@@ -162,17 +176,27 @@ EOF
         print_warning "backend/.env 已存在，跳过"
     fi
     
-    # 创建前端配置
-    if [ ! -f "frontend/.env.local" ]; then
-        print_info "创建 frontend/.env.local..."
-        cat > frontend/.env.local <<EOF
-# API 地址
-NEXT_PUBLIC_API_URL=http://localhost:8000
-EOF
-        print_success "frontend/.env.local 已创建"
-    else
-        print_warning "frontend/.env.local 已存在，跳过"
+    # 配置前端 API 地址
+    print_info "配置前端 API 地址..."
+    
+    # 更新 docker-compose.yaml 中的 NEXT_PUBLIC_API_BASE
+    if [ -f "docker-compose.yaml" ]; then
+        # 使用 sed 替换 NEXT_PUBLIC_API_BASE 的值
+        sed -i "s|NEXT_PUBLIC_API_BASE:.*|NEXT_PUBLIC_API_BASE: http://${SERVER_IP}:8000/api/v1|" docker-compose.yaml
+        print_success "前端 API 地址已配置为: http://${SERVER_IP}:8000/api/v1"
     fi
+    
+    # 创建前端配置（已废弃，现在使用 docker-compose.yaml 中的环境变量）
+    # if [ ! -f "frontend/.env.local" ]; then
+    #     print_info "创建 frontend/.env.local..."
+    #     cat > frontend/.env.local <<EOF
+    # # API 地址
+    # NEXT_PUBLIC_API_BASE=http://${SERVER_IP}:8000/api/v1
+    # EOF
+    #     print_success "frontend/.env.local 已创建"
+    # else
+    #     print_warning "frontend/.env.local 已存在，跳过"
+    # fi
     
     # 创建根目录 .env
     if [ ! -f ".env" ]; then
