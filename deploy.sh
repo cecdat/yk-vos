@@ -77,6 +77,7 @@ full_upgrade() {
     echo "⚠️  这将执行："
     echo "  • 备份数据库"
     echo "  • 拉取最新代码"
+    echo "  • 重新构建基础镜像"
     echo "  • 执行数据库迁移"
     echo "  • 重启所有服务"
     echo ""
@@ -88,7 +89,72 @@ full_upgrade() {
         return
     fi
     
-    bash upgrade.sh
+    # 1. 备份数据库
+    echo ""
+    echo -e "${BLUE}[1/6]${NC} 备份数据库..."
+    BACKUP_FILE="backup_$(date +%Y%m%d_%H%M%S).sql"
+    docker exec yk_vos_timescaledb pg_dump -U vos_user -d vosadmin > "$BACKUP_FILE" 2>/dev/null || true
+    if [ -f "$BACKUP_FILE" ]; then
+        echo -e "${GREEN}✓${NC} 数据库已备份到: $BACKUP_FILE"
+    else
+        echo -e "${YELLOW}⚠${NC} 数据库备份跳过（可能是首次部署）"
+    fi
+    
+    # 2. 拉取最新代码
+    echo ""
+    echo -e "${BLUE}[2/6]${NC} 拉取最新代码..."
+    if [ -d ".git" ]; then
+        git pull
+        echo -e "${GREEN}✓${NC} 代码已更新"
+    else
+        echo -e "${YELLOW}⚠${NC} 不是 Git 仓库，跳过代码拉取"
+    fi
+    
+    # 3. 停止服务
+    echo ""
+    echo -e "${BLUE}[3/6]${NC} 停止服务..."
+    docker-compose stop backend celery-worker celery-beat frontend
+    echo -e "${GREEN}✓${NC} 服务已停止"
+    
+    # 4. 重新构建基础镜像
+    echo ""
+    echo -e "${BLUE}[4/6]${NC} 重新构建基础镜像（包含新依赖）..."
+    docker-compose -f docker-compose.base.yaml build
+    echo -e "${GREEN}✓${NC} 基础镜像构建完成"
+    
+    # 5. 启动服务并执行数据库迁移
+    echo ""
+    echo -e "${BLUE}[5/6]${NC} 启动服务（数据库迁移会自动执行）..."
+    docker-compose up -d
+    echo -e "${GREEN}✓${NC} 服务已启动"
+    
+    # 6. 等待服务就绪
+    echo ""
+    echo -e "${BLUE}[6/6]${NC} 等待服务就绪..."
+    sleep 10
+    
+    # 健康检查
+    if curl -s http://localhost:8000/health > /dev/null 2>&1; then
+        echo -e "${GREEN}✓${NC} 后端服务正常"
+    else
+        echo -e "${YELLOW}⚠${NC} 后端服务可能需要更多时间启动"
+    fi
+    
+    if curl -s -I http://localhost:3000 > /dev/null 2>&1; then
+        echo -e "${GREEN}✓${NC} 前端服务正常"
+    else
+        echo -e "${YELLOW}⚠${NC} 前端服务可能需要更多时间启动"
+    fi
+    
+    echo ""
+    echo -e "${GREEN}✅ 完整升级完成！${NC}"
+    echo ""
+    echo "查看服务状态："
+    echo "  docker-compose ps"
+    echo ""
+    echo "查看后端日志："
+    echo "  docker-compose logs -f backend"
+    echo ""
 }
 
 # 仅重启服务
