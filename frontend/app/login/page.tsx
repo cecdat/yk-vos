@@ -1,11 +1,19 @@
 'use client'
-import React, {useState} from 'react'
+import React, {useState, useEffect} from 'react'
 import api from '../../lib/api'
 export default function Login(){
   const [u,setU]=useState('admin')
   const [p,setP]=useState('admin123')
   const [msg,setMsg]=useState('')
   const [loading,setLoading]=useState(false)
+  
+  // 检查是否是会话超时跳转
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('timeout') === '1') {
+      setMsg('会话已超时，请重新登录')
+    }
+  }, [])
   
   async function doLogin(){
     if(loading) return
@@ -33,7 +41,7 @@ export default function Login(){
               <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01' />
             </svg>
           </div>
-          <h1 className='text-3xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent'>VOS 管理系统</h1>
+          <h1 className='text-3xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent'>云客信息-VOS管理平台</h1>
           <p className='text-gray-500 mt-2'>欢迎回来，请登录您的账户</p>
         </div>
         <div className='space-y-4'>
@@ -67,7 +75,11 @@ export default function Login(){
             {loading ? '登录中...' : '登录'}
           </button>
           {msg && (
-            <div className={`mt-3 p-3 rounded text-sm ${msg.includes('成功') ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800'}`}>
+            <div className={`mt-3 p-3 rounded text-sm ${
+              msg.includes('成功') ? 'bg-green-50 text-green-800' : 
+              msg.includes('超时') ? 'bg-yellow-50 text-yellow-800' : 
+              'bg-red-50 text-red-800'
+            }`}>
               {msg}
             </div>
           )}

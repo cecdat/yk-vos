@@ -8,7 +8,7 @@ import logging
 from typing import Optional, Dict, Any, Tuple
 from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
-from sqlalchemy import and_
+from sqlalchemy import and_, func
 
 from app.models.vos_data_cache import VosDataCache
 from app.models.vos_instance import VOSInstance
@@ -300,7 +300,7 @@ class VosCacheService:
         # 按API分组统计
         api_stats = self.db.query(
             VosDataCache.api_name,
-            self.db.func.count(VosDataCache.id).label('count')
+            func.count(VosDataCache.id).label('count')
         ).filter(
             VosDataCache.vos_instance_id == vos_instance_id
         ).group_by(

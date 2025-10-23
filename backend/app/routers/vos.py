@@ -191,14 +191,47 @@ async def delete_instance(
     if not instance:
         raise HTTPException(status_code=404, detail='Instance not found')
     
-    # 删除相关的 phones
-    db.query(Phone).filter(Phone.vos_id == instance_id).delete()
+    logger.info(f'正在删除 VOS 实例: {instance.name} (ID={instance_id})')
     
-    # 删除实例
-    db.delete(instance)
-    db.commit()
-    
-    return {'message': 'Instance deleted successfully'}
+    try:
+        # 删除相关的 customers
+        customer_count = db.query(Customer).filter(Customer.vos_instance_id == instance_id).delete()
+        logger.info(f'删除了 {customer_count} 个客户记录')
+        
+        # 删除相关的 phones
+        phone_count = db.query(Phone).filter(Phone.vos_id == instance_id).delete()
+        logger.info(f'删除了 {phone_count} 个话机记录')
+        
+        # 删除相关的缓存数据（如果有）
+        from app.models.vos_data_cache import VosDataCache
+        cache_count = db.query(VosDataCache).filter(VosDataCache.vos_instance_id == instance_id).delete()
+        logger.info(f'删除了 {cache_count} 个缓存记录')
+        
+        # 删除相关的 CDR 数据（可选，如果数据量大可能很慢）
+        from app.models.cdr import CDR
+        cdr_count = db.query(CDR).filter(CDR.vos_id == instance_id).delete()
+        logger.info(f'删除了 {cdr_count} 个话单记录')
+        
+        # 最后删除实例本身
+        db.delete(instance)
+        db.commit()
+        
+        logger.info(f'成功删除 VOS 实例: {instance.name}')
+        
+        return {
+            'message': 'VOS 实例删除成功',
+            'deleted': {
+                'instance_name': instance.name,
+                'customers': customer_count,
+                'phones': phone_count,
+                'cache_entries': cache_count,
+                'cdrs': cdr_count
+            }
+        }
+    except Exception as e:
+        db.rollback()
+        logger.error(f'删除 VOS 实例失败: {e}')
+        raise HTTPException(status_code=500, detail=f'删除失败: {str(e)}')
 
 @router.get('/instances/{instance_id}/customers')
 async def get_instance_customers(
