@@ -7,6 +7,7 @@ from pydantic import BaseModel
 from datetime import date, datetime, timedelta
 import time
 import io
+from urllib.parse import quote
 from openpyxl import Workbook
 from openpyxl.styles import Font, Alignment, PatternFill
 
@@ -27,7 +28,6 @@ class CDRQueryRequest(BaseModel):
     callee_e164: Optional[str] = None
     caller_gateway: Optional[str] = None
     callee_gateway: Optional[str] = None
-    min_duration: Optional[int] = None  # 最小通话时长（秒）
     begin_time: str  # yyyyMMdd 格式
     end_time: str    # yyyyMMdd 格式
     page: int = 1    # 页码（从1开始）
@@ -175,10 +175,6 @@ async def query_cdrs_from_vos(
         
         if query_params.callee_gateway:
             query = query.filter(CDR.callee_gateway == query_params.callee_gateway)
-        
-        # 最小通话时长过滤
-        if query_params.min_duration is not None and query_params.min_duration > 0:
-            query = query.filter(CDR.hold_time >= query_params.min_duration)
         
         # 查询总数
         total_count = query.count()
@@ -418,9 +414,6 @@ async def export_cdrs_to_excel(
     if query_params.callee_gateway:
         query = query.filter(CDR.callee_gateway == query_params.callee_gateway)
     
-    if query_params.min_duration is not None and query_params.min_duration > 0:
-        query = query.filter(CDR.hold_time >= query_params.min_duration)
-    
     # 限制最多导出10000条（防止内存溢出）
     cdrs = query.order_by(desc(CDR.start)).limit(10000).all()
     
@@ -487,13 +480,16 @@ async def export_cdrs_to_excel(
     wb.save(output)
     output.seek(0)
     
-    # 生成文件名
-    filename = f"话单_{instance.name}_{query_params.begin_time}-{query_params.end_time}.xlsx"
+    # 生成文件名（使用URL编码避免中文问题）
+    filename_raw = f"话单_{instance.name}_{query_params.begin_time}-{query_params.end_time}.xlsx"
+    filename_encoded = quote(filename_raw)
     
     # 返回文件
     return StreamingResponse(
         output,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f"attachment; filename={filename}"}
+        headers={
+            "Content-Disposition": f"attachment; filename*=UTF-8''{filename_encoded}"
+        }
     )
 

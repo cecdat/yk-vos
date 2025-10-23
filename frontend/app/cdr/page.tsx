@@ -71,8 +71,7 @@ export default function CdrPage() {
           accounts: accounts ? accounts.split(',') : undefined,
           caller_e164: caller || undefined,
           callee_e164: callee || undefined,
-          callee_gateway: gateway || undefined,
-          min_duration: minDuration ? parseInt(minDuration) : undefined
+          callee_gateway: gateway || undefined
         }
 
         const res = await api.post(
@@ -295,23 +294,11 @@ export default function CdrPage() {
               disabled={loading}
             />
           </div>
-          <div>
-            <label className='block text-xs font-medium mb-1 text-gray-700'>最小通话时长(秒)</label>
-            <input
-              type='number'
-              value={minDuration}
-              onChange={e => setMinDuration(e.target.value)}
-              className='w-full p-2 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none'
-              placeholder='0表示全部'
-              min='0'
-              disabled={loading}
-            />
-          </div>
-          <div className='flex items-end gap-2'>
+          <div className='flex items-end'>
             <button
               onClick={handleQuery}
               disabled={loading}
-              className='flex-1 py-2 text-sm bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg font-medium hover:from-blue-700 hover:to-purple-700 transition disabled:opacity-50 flex items-center justify-center gap-2'
+              className='w-full py-2 text-sm bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg font-medium hover:from-blue-700 hover:to-purple-700 transition disabled:opacity-50 flex items-center justify-center gap-2'
             >
               {loading && (
                 <svg className='animate-spin h-4 w-4' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
