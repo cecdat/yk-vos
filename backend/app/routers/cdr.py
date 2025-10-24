@@ -381,13 +381,19 @@ async def export_cdrs_to_excel(
     instance_id: int,
     query_params: CDRQueryRequest,
     current_user: Annotated[User, Depends(get_current_user)],
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    force_vos: bool = Query(False, description="强制从VOS查询")
 ):
     """
     导出话单到Excel文件
     
-    参数与query-from-vos相同，但返回Excel文件
+    策略：
+    1. 优先从本地数据库查询（快速）
+    2. 如果本地没数据，自动从VOS API查询并存储
+    3. 最多导出10000条记录
     """
+    start_time = time.time()
+    
     # 获取 VOS 实例
     instance = db.query(VOSInstance).filter(VOSInstance.id == instance_id).first()
     if not instance:
@@ -400,68 +406,91 @@ async def export_cdrs_to_excel(
     except:
         raise HTTPException(status_code=400, detail='时间格式错误，应为 yyyyMMdd')
     
-    # 查询数据（不分页，导出全部）
-    query = db.query(CDR).filter(
-        and_(
-            CDR.vos_id == instance_id,
-            CDR.start >= begin_dt,
-            CDR.start < end_dt
-        )
-    )
+    logger.info(f'导出话单 - 实例:{instance.name}, 时间:{query_params.begin_time}~{query_params.end_time}, 账号:{query_params.accounts}')
     
-    # 添加过滤条件并记录
-    logger.info(f'导出话单查询条件 - instance_id={instance_id}, begin={query_params.begin_time}, end={query_params.end_time}')
-    logger.info(f'导出话单过滤条件 - accounts={query_params.accounts}, caller={query_params.caller_e164}, callee={query_params.callee_e164}')
+    cdrs = []
+    data_source = 'local_database'
     
-    if query_params.accounts and len(query_params.accounts) > 0:
-        logger.info(f'导出话单: 使用账号过滤，账号列表: {query_params.accounts}')
-        query = query.filter(CDR.account.in_(query_params.accounts))
-    
-    if query_params.caller_e164:
-        query = query.filter(CDR.caller_e164.like(f'%{query_params.caller_e164}%'))
-    
-    if query_params.callee_e164:
-        query = query.filter(CDR.callee_access_e164.like(f'%{query_params.callee_e164}%'))
-    
-    if query_params.callee_gateway:
-        query = query.filter(CDR.callee_gateway == query_params.callee_gateway)
-    
-    # 限制最多导出10000条（防止内存溢出）
-    cdrs = query.order_by(desc(CDR.start)).limit(10000).all()
-    
-    # 添加日志，便于调试
-    logger.info(f'导出话单查询结果: {len(cdrs)} 条记录 (实例: {instance.name}, 时间范围: {begin_dt} 到 {end_dt})')
-    
-    # 如果没有数据，记录详细调试信息
-    if len(cdrs) == 0:
-        logger.warning(f'导出话单无数据！查询条件详情:')
-        logger.warning(f'  - VOS实例: {instance_id} ({instance.name})')
-        logger.warning(f'  - 时间范围: {begin_dt} ~ {end_dt}')
-        logger.warning(f'  - 账号列表: {query_params.accounts}')
-        logger.warning(f'  - 主叫号码: {query_params.caller_e164}')
-        logger.warning(f'  - 被叫号码: {query_params.callee_e164}')
-        logger.warning(f'  - 网关: {query_params.callee_gateway}')
-        
-        # 查询一下该时间段内有多少条记录（不加账号过滤）
-        total_in_timerange = db.query(CDR).filter(
+    # 1. 如果不强制VOS，先查本地数据库
+    if not force_vos:
+        query = db.query(CDR).filter(
             and_(
                 CDR.vos_id == instance_id,
                 CDR.start >= begin_dt,
                 CDR.start < end_dt
             )
-        ).count()
-        logger.warning(f'  - 该时间段内总话单数（无账号过滤）: {total_in_timerange}')
+        )
         
-        # 如果有账号过滤，查询数据库中该VOS实例的所有账号
+        # 添加过滤条件
         if query_params.accounts and len(query_params.accounts) > 0:
-            distinct_accounts = db.query(CDR.account).filter(
-                and_(
-                    CDR.vos_id == instance_id,
-                    CDR.start >= begin_dt,
-                    CDR.start < end_dt
-                )
-            ).distinct().limit(20).all()
-            logger.warning(f'  - 该时间段内的账号列表（前20个）: {[acc[0] for acc in distinct_accounts]}')
+            query = query.filter(CDR.account.in_(query_params.accounts))
+        
+        if query_params.caller_e164:
+            query = query.filter(CDR.caller_e164.like(f'%{query_params.caller_e164}%'))
+        
+        if query_params.callee_e164:
+            query = query.filter(CDR.callee_access_e164.like(f'%{query_params.callee_e164}%'))
+        
+        if query_params.callee_gateway:
+            query = query.filter(CDR.callee_gateway == query_params.callee_gateway)
+        
+        # 限制最多导出10000条
+        cdrs = query.order_by(desc(CDR.start)).limit(10000).all()
+        
+        logger.info(f'本地数据库查询到 {len(cdrs)} 条记录')
+    
+    # 2. 如果本地没有数据或强制VOS，从VOS API查询
+    if len(cdrs) == 0 or force_vos:
+        logger.info(f'本地无数据，从VOS API查询...')
+        
+        # 构建VOS请求
+        payload = {
+            'beginTime': query_params.begin_time,
+            'endTime': query_params.end_time
+        }
+        
+        if query_params.accounts:
+            payload['accounts'] = query_params.accounts
+        
+        if query_params.caller_e164:
+            payload['callerE164'] = query_params.caller_e164
+        
+        if query_params.callee_e164:
+            payload['calleeE164'] = query_params.callee_e164
+        
+        if query_params.caller_gateway:
+            payload['callerGateway'] = query_params.caller_gateway
+        
+        if query_params.callee_gateway:
+            payload['calleeGateway'] = query_params.callee_gateway
+        
+        # 调用VOS API
+        client = VOSClient(instance.base_url)
+        result = client.post('/external/server/GetCdr', payload=payload)
+        
+        if not client.is_success(result):
+            error_msg = client.get_error_message(result)
+            logger.error(f'VOS API查询失败: {error_msg}')
+            raise HTTPException(status_code=500, detail=f'VOS查询失败: {error_msg}')
+        
+        # 获取话单列表
+        vos_cdrs = result.get('infoCdrs', [])
+        logger.info(f'VOS API返回 {len(vos_cdrs)} 条记录')
+        
+        # 存储到数据库（异步，不阻塞）
+        if vos_cdrs:
+            from app.tasks.sync_tasks import store_cdrs_batch
+            # 触发后台任务存储（不等待）
+            try:
+                store_cdrs_batch.delay(instance_id, vos_cdrs)
+            except:
+                # 如果Celery不可用，同步存储（阻塞）
+                logger.warning('Celery不可用，同步存储话单')
+                pass
+        
+        # 将VOS返回的数据转换为CDR对象格式用于导出
+        cdrs = vos_cdrs  # 直接使用VOS返回的数据
+        data_source = 'vos_api'
     
     # 创建Excel工作簿
     wb = Workbook()
@@ -487,28 +516,61 @@ async def export_cdrs_to_excel(
         cell.font = header_font
         cell.alignment = header_alignment
     
-    # 写入数据
+    # 写入数据（兼容数据库对象和VOS API字典）
     for row_num, cdr in enumerate(cdrs, 2):
-        ws.cell(row=row_num, column=1, value=cdr.flow_no or '')
-        ws.cell(row=row_num, column=2, value=instance.name)
-        ws.cell(row=row_num, column=3, value=cdr.account_name or '')
-        ws.cell(row=row_num, column=4, value=cdr.account or '')
-        # 主叫号码：优先callerAccessE164，如果没有则使用caller_e164
-        caller = getattr(cdr, 'caller_access_e164', None) or cdr.caller_e164 or ''
-        ws.cell(row=row_num, column=5, value=caller)
-        ws.cell(row=row_num, column=6, value=cdr.callee_access_e164 or '')
-        ws.cell(row=row_num, column=7, value=cdr.callee_gateway or '')
-        ws.cell(row=row_num, column=8, value=cdr.start.strftime('%Y-%m-%d %H:%M:%S') if cdr.start else '')
-        ws.cell(row=row_num, column=9, value=cdr.stop.strftime('%Y-%m-%d %H:%M:%S') if cdr.stop else '')
-        ws.cell(row=row_num, column=10, value=cdr.hold_time or 0)
-        ws.cell(row=row_num, column=11, value=cdr.fee_time or 0)
-        ws.cell(row=row_num, column=12, value=float(cdr.fee) if cdr.fee else 0)
-        
-        # 挂断方
-        end_direction_map = {0: '主叫', 1: '被叫', 2: '服务器'}
-        ws.cell(row=row_num, column=13, value=end_direction_map.get(cdr.end_direction, '-'))
-        
-        ws.cell(row=row_num, column=14, value=cdr.end_reason or '')
+        # 判断数据来源（数据库ORM对象 vs VOS API字典）
+        if isinstance(cdr, dict):
+            # VOS API返回的字典格式
+            ws.cell(row=row_num, column=1, value=cdr.get('flowNo', ''))
+            ws.cell(row=row_num, column=2, value=instance.name)
+            ws.cell(row=row_num, column=3, value=cdr.get('accountName', ''))
+            ws.cell(row=row_num, column=4, value=cdr.get('account', ''))
+            # 主叫号码：优先callerAccessE164
+            caller = cdr.get('callerAccessE164') or cdr.get('callerE164', '')
+            ws.cell(row=row_num, column=5, value=caller)
+            ws.cell(row=row_num, column=6, value=cdr.get('calleeAccessE164', ''))
+            ws.cell(row=row_num, column=7, value=cdr.get('calleeGateway', ''))
+            # 时间处理（VOS返回的是毫秒时间戳）
+            start_time = cdr.get('start')
+            stop_time = cdr.get('stop')
+            if start_time and isinstance(start_time, (int, float)):
+                start_dt = datetime.fromtimestamp(start_time / 1000)
+                ws.cell(row=row_num, column=8, value=start_dt.strftime('%Y-%m-%d %H:%M:%S'))
+            else:
+                ws.cell(row=row_num, column=8, value=start_time or '')
+            if stop_time and isinstance(stop_time, (int, float)):
+                stop_dt = datetime.fromtimestamp(stop_time / 1000)
+                ws.cell(row=row_num, column=9, value=stop_dt.strftime('%Y-%m-%d %H:%M:%S'))
+            else:
+                ws.cell(row=row_num, column=9, value=stop_time or '')
+            ws.cell(row=row_num, column=10, value=cdr.get('holdTime', 0))
+            ws.cell(row=row_num, column=11, value=cdr.get('feeTime', 0))
+            ws.cell(row=row_num, column=12, value=float(cdr.get('fee', 0)))
+            # 挂断方
+            end_direction = cdr.get('endDirection', -1)
+            end_direction_map = {0: '主叫', 1: '被叫', 2: '服务器'}
+            ws.cell(row=row_num, column=13, value=end_direction_map.get(end_direction, '-'))
+            ws.cell(row=row_num, column=14, value=cdr.get('endReason', ''))
+        else:
+            # 数据库CDR对象
+            ws.cell(row=row_num, column=1, value=cdr.flow_no or '')
+            ws.cell(row=row_num, column=2, value=instance.name)
+            ws.cell(row=row_num, column=3, value=cdr.account_name or '')
+            ws.cell(row=row_num, column=4, value=cdr.account or '')
+            # 主叫号码：优先callerAccessE164
+            caller = getattr(cdr, 'caller_access_e164', None) or cdr.caller_e164 or ''
+            ws.cell(row=row_num, column=5, value=caller)
+            ws.cell(row=row_num, column=6, value=cdr.callee_access_e164 or '')
+            ws.cell(row=row_num, column=7, value=cdr.callee_gateway or '')
+            ws.cell(row=row_num, column=8, value=cdr.start.strftime('%Y-%m-%d %H:%M:%S') if cdr.start else '')
+            ws.cell(row=row_num, column=9, value=cdr.stop.strftime('%Y-%m-%d %H:%M:%S') if cdr.stop else '')
+            ws.cell(row=row_num, column=10, value=cdr.hold_time or 0)
+            ws.cell(row=row_num, column=11, value=cdr.fee_time or 0)
+            ws.cell(row=row_num, column=12, value=float(cdr.fee) if cdr.fee else 0)
+            # 挂断方
+            end_direction_map = {0: '主叫', 1: '被叫', 2: '服务器'}
+            ws.cell(row=row_num, column=13, value=end_direction_map.get(cdr.end_direction, '-'))
+            ws.cell(row=row_num, column=14, value=cdr.end_reason or '')
     
     # 自动调整列宽
     for column in ws.columns:
@@ -527,13 +589,12 @@ async def export_cdrs_to_excel(
     summary_row = len(cdrs) + 3
     ws.cell(row=summary_row, column=1, value=f'共导出 {len(cdrs)} 条话单记录')
     ws.cell(row=summary_row, column=1).font = Font(bold=True, color="0066CC")
+    ws.cell(row=summary_row + 1, column=1, value=f'数据来源: {data_source}')
+    ws.cell(row=summary_row + 2, column=1, value=f'导出时间: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}')
     
-    # 添加查询条件说明
-    if len(cdrs) == 0:
-        ws.cell(row=2, column=1, value='未查询到符合条件的话单数据')
-        ws.cell(row=2, column=1).font = Font(color="FF0000")
-        ws.cell(row=3, column=1, value=f'查询时间: {query_params.begin_time} - {query_params.end_time}')
-        ws.cell(row=4, column=1, value=f'VOS节点: {instance.name}')
+    # 记录导出结果
+    query_time = time.time() - start_time
+    logger.info(f'导出完成: {len(cdrs)} 条记录, 数据来源: {data_source}, 耗时: {round(query_time * 1000, 2)}ms')
     
     # 保存到内存
     output = io.BytesIO()
