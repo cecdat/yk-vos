@@ -420,6 +420,13 @@ async def export_cdrs_to_excel(
     # 限制最多导出10000条（防止内存溢出）
     cdrs = query.order_by(desc(CDR.start)).limit(10000).all()
     
+    # 添加日志，便于调试
+    logger.info(f'导出话单查询到 {len(cdrs)} 条记录 (实例: {instance.name}, 时间: {query_params.begin_time}-{query_params.end_time})')
+    
+    # 如果没有数据，返回提示
+    if len(cdrs) == 0:
+        logger.warning(f'导出话单查询条件: accounts={query_params.accounts}, caller={query_params.caller_e164}, callee={query_params.callee_e164}, gateway={query_params.callee_gateway}')
+    
     # 创建Excel工作簿
     wb = Workbook()
     ws = wb.active
@@ -479,6 +486,18 @@ async def export_cdrs_to_excel(
                 pass
         adjusted_width = min(max_length + 2, 50)
         ws.column_dimensions[column_letter].width = adjusted_width
+    
+    # 在最后添加统计信息
+    summary_row = len(cdrs) + 3
+    ws.cell(row=summary_row, column=1, value=f'共导出 {len(cdrs)} 条话单记录')
+    ws.cell(row=summary_row, column=1).font = Font(bold=True, color="0066CC")
+    
+    # 添加查询条件说明
+    if len(cdrs) == 0:
+        ws.cell(row=2, column=1, value='未查询到符合条件的话单数据')
+        ws.cell(row=2, column=1).font = Font(color="FF0000")
+        ws.cell(row=3, column=1, value=f'查询时间: {query_params.begin_time} - {query_params.end_time}')
+        ws.cell(row=4, column=1, value=f'VOS节点: {instance.name}')
     
     # 保存到内存
     output = io.BytesIO()

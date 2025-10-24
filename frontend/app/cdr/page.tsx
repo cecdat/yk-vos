@@ -161,12 +161,7 @@ export default function CdrPage() {
         if (!isNaN(timestamp) && timestamp > 0) {
           date = new Date(timestamp)
         } else if (dateTimeStr.includes(' ')) {
-          // 已经格式化的字符串，直接返回（去掉秒）
-          const parts = dateTimeStr.split(' ')
-          if (parts.length === 2) {
-            const timeParts = parts[1].split(':')
-            return `${parts[0]} ${timeParts[0]}:${timeParts[1]}`
-          }
+          // 已经格式化的字符串，直接返回完整格式
           return dateTimeStr
         } else {
           return dateTimeStr
@@ -175,14 +170,15 @@ export default function CdrPage() {
         return '-'
       }
       
-      // 格式化为完整日期时间: YYYY-MM-DD HH:mm
+      // 格式化为完整日期时间: YYYY-MM-DD HH:mm:ss
       const year = date.getFullYear()
       const month = String(date.getMonth() + 1).padStart(2, '0')
       const day = String(date.getDate()).padStart(2, '0')
       const hours = String(date.getHours()).padStart(2, '0')
       const minutes = String(date.getMinutes()).padStart(2, '0')
+      const seconds = String(date.getSeconds()).padStart(2, '0')
       
-      return `${year}-${month}-${day} ${hours}:${minutes}`
+      return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`
     } catch {
       return String(dateTimeStr) || '-'
     }
