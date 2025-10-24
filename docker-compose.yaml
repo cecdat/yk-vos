@@ -88,7 +88,10 @@ services:
     ports:
       - "3000:3000"
     environment:
-      NEXT_PUBLIC_API_BASE: ${NEXT_PUBLIC_API_BASE:-http://localhost:8000/api/v1}
+      # 浏览器端API地址（通过Next.js代理，使用相对路径）
+      NEXT_PUBLIC_API_BASE: /api/v1
+      # Next.js服务端代理到后端（容器内部网络）
+      BACKEND_API_URL: http://backend:8000
     volumes:
       # 挂载代码目录（核心）
       - ./frontend:/usr/src/app
