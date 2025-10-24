@@ -1,0 +1,155 @@
+From 563a866abcd267118ec54b80951797bc41148b21 Mon Sep 17 00:00:00 2001
+From: cecdat <117430530+cecdat@users.noreply.github.com>
+Date: Fri, 24 Oct 2025 10:19:24 +0800
+Subject: [PATCH 1/2] =?UTF-8?q?fix:=20=E4=BF=AE=E5=A4=8D=E8=AF=9D=E5=8D=95?=
+ =?UTF-8?q?=E5=AF=BC=E5=87=BA=E5=8A=9F=E8=83=BD=EF=BC=8C=E7=BB=9F=E4=B8=80?=
+ =?UTF-8?q?=E6=9F=A5=E8=AF=A2=E5=92=8C=E5=AF=BC=E5=87=BA=E7=9A=84=E8=BF=87?=
+ =?UTF-8?q?=E6=BB=A4=E9=80=BB=E8=BE=91?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+问题根因：
+- 查询接口缺少 accounts 过滤条件
+- 导出接口有 accounts 过滤，导致查询有数据但导出无数据
+- 两个接口行为不一致
+
+修复方案：
+1. 给查询接口添加 accounts 过滤
+2. 两个接口都检查 accounts 非空：
+   - if query_params.accounts and len(query_params.accounts) > 0
+   - 避免空列表导致查不到数据
+
+现在查询和导出使用相同的过滤条件，保证一致性：
+- accounts（客户账号列表，可选）
+- caller_e164（主叫号码，可选）
+- callee_e164（被叫号码，可选）
+- caller_gateway（主叫网关，可选）
+- callee_gateway（被叫网关，可选）
+- begin_time 和 end_time（必填）
+---
+ backend/app/routers/cdr.py | 5 ++++-
+ 1 file changed, 4 insertions(+), 1 deletion(-)
+
+diff --git a/backend/app/routers/cdr.py b/backend/app/routers/cdr.py
+index 0231d6c..719e651 100644
+--- a/backend/app/routers/cdr.py
++++ b/backend/app/routers/cdr.py
+@@ -164,6 +164,9 @@ async def query_cdrs_from_vos(
+         )
+         
+         # 添加过滤条件（使用新字段名）
++        if query_params.accounts and len(query_params.accounts) > 0:
++            query = query.filter(CDR.account.in_(query_params.accounts))
++        
+         if query_params.caller_e164:
+             query = query.filter(CDR.caller_e164.like(f'%{query_params.caller_e164}%'))
+         
+@@ -405,7 +408,7 @@ async def export_cdrs_to_excel(
+     )
+     
+     # 添加过滤条件
+-    if query_params.accounts:
++    if query_params.accounts and len(query_params.accounts) > 0:
+         query = query.filter(CDR.account.in_(query_params.accounts))
+     
+     if query_params.caller_e164:
+-- 
+2.50.1.windows.1
+
+
+From a2ccaef7c62582c7cc3ed25d2ae30203dbfcbb3b Mon Sep 17 00:00:00 2001
+From: cecdat <117430530+cecdat@users.noreply.github.com>
+Date: Fri, 24 Oct 2025 10:23:01 +0800
+Subject: [PATCH 2/2] =?UTF-8?q?debug:=20=E6=B7=BB=E5=8A=A0=E8=AF=A6?=
+ =?UTF-8?q?=E7=BB=86=E7=9A=84=E5=AF=BC=E5=87=BA=E8=B0=83=E8=AF=95=E6=97=A5?=
+ =?UTF-8?q?=E5=BF=97?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+问题：查询能返回数据，导出却没有数据
+调试策略：添加详细日志定位问题
+
+新增日志内容：
+1. 导出时的查询条件（时间、账号、主被叫等）
+2. 查询结果数量
+3. 如果无数据，显示：
+   - 详细的查询条件
+   - 该时间段内不过滤账号的话单总数
+   - 该时间段内数据库的实际账号列表（前20个）
+
+用途：
+- 对比传入的账号和数据库实际账号
+- 判断是否账号名称不匹配
+- 判断是否时间范围问题
+
+查看方法：
+docker-compose logs backend | grep -A 20 '导出话单'
+---
+ backend/app/routers/cdr.py | 39 ++++++++++++++++++++++++++++++++++----
+ 1 file changed, 35 insertions(+), 4 deletions(-)
+
+diff --git a/backend/app/routers/cdr.py b/backend/app/routers/cdr.py
+index 719e651..7bb375a 100644
+--- a/backend/app/routers/cdr.py
++++ b/backend/app/routers/cdr.py
+@@ -407,8 +407,12 @@ async def export_cdrs_to_excel(
+         )
+     )
+     
+-    # 添加过滤条件
++    # 添加过滤条件并记录
++    logger.info(f'导出话单查询条件 - instance_id={instance_id}, begin={query_params.begin_time}, end={query_params.end_time}')
++    logger.info(f'导出话单过滤条件 - accounts={query_params.accounts}, caller={query_params.caller_e164}, callee={query_params.callee_e164}')
++    
+     if query_params.accounts and len(query_params.accounts) > 0:
++        logger.info(f'导出话单: 使用账号过滤，账号列表: {query_params.accounts}')
+         query = query.filter(CDR.account.in_(query_params.accounts))
+     
+     if query_params.caller_e164:
+@@ -424,11 +428,38 @@ async def export_cdrs_to_excel(
+     cdrs = query.order_by(desc(CDR.start)).limit(10000).all()
+     
+     # 添加日志，便于调试
+-    logger.info(f'导出话单查询到 {len(cdrs)} 条记录 (实例: {instance.name}, 时间: {query_params.begin_time}-{query_params.end_time})')
++    logger.info(f'导出话单查询结果: {len(cdrs)} 条记录 (实例: {instance.name}, 时间范围: {begin_dt} 到 {end_dt})')
+     
+-    # 如果没有数据，返回提示
++    # 如果没有数据，记录详细调试信息
+     if len(cdrs) == 0:
+-        logger.warning(f'导出话单查询条件: accounts={query_params.accounts}, caller={query_params.caller_e164}, callee={query_params.callee_e164}, gateway={query_params.callee_gateway}')
++        logger.warning(f'导出话单无数据！查询条件详情:')
++        logger.warning(f'  - VOS实例: {instance_id} ({instance.name})')
++        logger.warning(f'  - 时间范围: {begin_dt} ~ {end_dt}')
++        logger.warning(f'  - 账号列表: {query_params.accounts}')
++        logger.warning(f'  - 主叫号码: {query_params.caller_e164}')
++        logger.warning(f'  - 被叫号码: {query_params.callee_e164}')
++        logger.warning(f'  - 网关: {query_params.callee_gateway}')
++        
++        # 查询一下该时间段内有多少条记录（不加账号过滤）
++        total_in_timerange = db.query(CDR).filter(
++            and_(
++                CDR.vos_id == instance_id,
++                CDR.start >= begin_dt,
++                CDR.start < end_dt
++            )
++        ).count()
++        logger.warning(f'  - 该时间段内总话单数（无账号过滤）: {total_in_timerange}')
++        
++        # 如果有账号过滤，查询数据库中该VOS实例的所有账号
++        if query_params.accounts and len(query_params.accounts) > 0:
++            distinct_accounts = db.query(CDR.account).filter(
++                and_(
++                    CDR.vos_id == instance_id,
++                    CDR.start >= begin_dt,
++                    CDR.start < end_dt
++                )
++            ).distinct().limit(20).all()
++            logger.warning(f'  - 该时间段内的账号列表（前20个）: {[acc[0] for acc in distinct_accounts]}')
+     
+     # 创建Excel工作簿
+     wb = Workbook()
+-- 
+2.50.1.windows.1
+
