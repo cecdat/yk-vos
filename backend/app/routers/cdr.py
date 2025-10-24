@@ -7,6 +7,7 @@ from pydantic import BaseModel
 from datetime import date, datetime, timedelta
 import time
 import io
+import logging
 from urllib.parse import quote
 from openpyxl import Workbook
 from openpyxl.styles import Font, Alignment, PatternFill
@@ -20,6 +21,7 @@ from app.models.vos_instance import VOSInstance
 from app.routers.auth import get_current_user
 
 router = APIRouter(prefix='/cdr', tags=['cdr'])
+logger = logging.getLogger(__name__)
 
 # CDR 查询请求模型
 class CDRQueryRequest(BaseModel):
