@@ -38,3 +38,5 @@ celery.conf.beat_schedule = {
 
 # 导入任务模块以注册任务
 from app.tasks import sync_tasks  # noqa: E402, F401
+from app.tasks import initial_sync_tasks  # noqa: E402, F401
+from app.tasks import manual_sync_tasks  # noqa: E402, F401
