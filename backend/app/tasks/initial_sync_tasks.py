@@ -189,14 +189,23 @@ def sync_customers_for_new_instance(instance_id: int):
 @celery.task
 def sync_cdrs_for_single_day(instance_id: int, date_str: str):
     """
-    同步单个VOS实例单天的历史话单到ClickHouse
-    
+    同步单个VOS实例单天的历史话单到ClickHouse（按客户循环）
+
     Args:
         instance_id: VOS实例ID
         date_str: 日期字符串，格式：YYYYMMDD
     """
     db = SessionLocal()
     from app.models.clickhouse_cdr import ClickHouseCDR
+    import redis
+    from app.core.config import settings
+    
+    # 连接 Redis 用于存储同步进度
+    try:
+        r = redis.from_url(settings.REDIS_URL)
+    except Exception as e:
+        logger.error(f'连接 Redis 失败: {e}')
+        r = None
     
     try:
         inst = db.query(VOSInstance).filter(VOSInstance.id == instance_id).first()
@@ -206,61 +215,96 @@ def sync_cdrs_for_single_day(instance_id: int, date_str: str):
         
         logger.info(f'📞 开始同步 VOS {inst.name} 在 {date_str} 的话单数据到 ClickHouse...')
         
+        # 获取客户列表
+        customers = db.query(Customer).filter(
+            Customer.vos_instance_id == inst.id
+        ).all()
+        
+        if not customers:
+            logger.warning(f'VOS {inst.name} 没有客户数据，跳过话单同步')
+            return {'success': True, 'total': 0, 'new': 0, 'date': date_str, 'message': '没有客户数据'}
+        
+        logger.info(f'  按客户同步 (共 {len(customers)} 个客户)...')
+        
+        # 按客户循环同步
+        total_synced = 0
         client = VOSClient(inst.base_url)
         
-        # 调用VOS API获取话单
-        try:
-            result = client.call_api('/external/server/GetCdr', {
-                'beginTime': date_str,
-                'endTime': date_str
-            })
-        except Exception as e:
-            logger.exception(f'从VOS {inst.name} 获取 {date_str} 话单数据失败: {e}')
-            return {'success': False, 'message': str(e), 'date': date_str}
-        
-        # VOS API可能返回数组或对象
-        if isinstance(result, list) and len(result) > 0:
-            result = result[0]  # 取第一个元素
-        
-        if not isinstance(result, dict):
-            logger.warning(f'VOS {inst.name} 返回的话单数据格式异常')
-            return {'success': False, 'message': '返回数据格式异常', 'date': date_str}
-        
-        if result.get('retCode') != 0:
-            error_msg = result.get('exception', '未知错误')
-            logger.warning(f'VOS {inst.name} API错误 (retCode={result.get("retCode")}): {error_msg}')
-            return {'success': False, 'message': error_msg, 'date': date_str}
-        
-        # 提取话单列表（优先使用infoCdrs）
-        cdrs = result.get('infoCdrs') or result.get('cdrs') or result.get('CDRList') or []
-        if not isinstance(cdrs, list):
-            logger.warning(f'VOS {inst.name} 话单数据格式错误，不是列表类型')
-            return {'success': False, 'message': '话单数据格式错误', 'date': date_str}
-        
-        if not cdrs:
-            logger.info(f'VOS {inst.name} 在 {date_str} 没有话单数据')
-            return {'success': True, 'total': 0, 'new': 0, 'date': date_str}
-        
-        total = len(cdrs)
-        
-        # 存储到 ClickHouse
-        try:
-            inserted = ClickHouseCDR.insert_cdrs(cdrs, vos_id=inst.id)
-            logger.info(f'✅ VOS {inst.name} 在 {date_str} 话单同步完成: 总数={total}, 新增={inserted}')
+        for idx, customer in enumerate(customers, 1):
+            account = customer.account
+            logger.info(f'    [{idx}/{len(customers)}] 同步客户: {account}')
             
-            return {
-                'success': True,
-                'total': total,
-                'new': inserted,
-                'date': date_str,
-                'instance_name': inst.name
-            }
-        except Exception as e:
-            logger.exception(f'存储话单到 ClickHouse 失败 ({inst.name}, {date_str}): {e}')
-            return {'success': False, 'message': f'ClickHouse 存储失败: {str(e)}', 'date': date_str}
+            # 更新同步进度
+            if r:
+                r.setex(
+                    'cdr_sync_progress',
+                    3600,
+                    json.dumps({
+                        'status': 'syncing',
+                        'current_instance': inst.name,
+                        'current_instance_id': inst.id,
+                        'current_customer': account,
+                        'current_customer_index': idx,
+                        'total_customers': len(customers),
+                        'synced_count': total_synced,
+                        'start_time': datetime.now().isoformat(),
+                        'sync_date': date_str
+                    }, ensure_ascii=False)
+                )
+            
+            # 查询该客户的话单
+            try:
+                result = client.call_api('/external/server/GetCdr', {
+                    'accounts': [account],
+                    'beginTime': date_str,
+                    'endTime': date_str
+                })
+                
+                # VOS API可能返回数组或对象
+                if isinstance(result, list) and len(result) > 0:
+                    result = result[0]
+                
+                if not isinstance(result, dict) or result.get('retCode') != 0:
+                    logger.warning(f'      客户 {account} 话单查询失败')
+                    continue
+                
+                # 提取话单列表
+                cdrs = result.get('infoCdrs') or result.get('cdrs') or result.get('CDRList') or []
+                if not isinstance(cdrs, list):
+                    for v in result.values():
+                        if isinstance(v, list):
+                            cdrs = v
+                            break
+                
+                if cdrs:
+                    inserted = ClickHouseCDR.insert_cdrs(cdrs, vos_id=inst.id)
+                    total_synced += inserted
+                    logger.info(f'      ✅ 客户 {account}: 同步 {inserted} 条话单')
+                
+            except Exception as e:
+                logger.exception(f'      ❌ 客户 {account} 同步失败: {e}')
+                continue
         
+        # 清除同步进度
+        if r:
+            r.delete('cdr_sync_progress')
+        
+        logger.info(f'✅ VOS {inst.name} 在 {date_str} 话单同步完成: 共 {total_synced} 条')
+        
+        return {
+            'success': True,
+            'total': total_synced,
+            'new': total_synced,
+            'date': date_str,
+            'instance_name': inst.name,
+            'customers_count': len(customers)
+        }
+    
     except Exception as e:
         logger.exception(f'同步VOS实例 {instance_id} 在 {date_str} 的话单数据时发生错误: {e}')
+        # 清除同步进度（错误）
+        if r:
+            r.delete('cdr_sync_progress')
         return {'success': False, 'message': str(e), 'date': date_str}
     finally:
         db.close()

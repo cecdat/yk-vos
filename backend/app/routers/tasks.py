@@ -263,3 +263,56 @@ async def get_cdr_sync_status(
             'last_sync_time': None,
             'instances': []
         }
+
+
+@router.get('/cdr-sync-progress')
+async def get_cdr_sync_progress(
+    current_user: Annotated[User, Depends(get_current_user)]
+):
+    """
+    获取当前话单同步进度（实时）
+    
+    从 Redis 获取正在进行的同步任务的详细进度
+    """
+    try:
+        from app.core.config import settings
+        import redis
+        import json
+        
+        # 连接 Redis
+        r = redis.from_url(settings.REDIS_URL)
+        
+        # 获取同步进度
+        progress_data = r.get('cdr_sync_progress')
+        
+        if not progress_data:
+            return {
+                'success': True,
+                'is_syncing': False,
+                'message': '当前没有正在进行的同步任务'
+            }
+        
+        # 解析进度数据
+        progress = json.loads(progress_data)
+        
+        return {
+            'success': True,
+            'is_syncing': True,
+            'status': progress.get('status', 'unknown'),
+            'current_instance': progress.get('current_instance'),
+            'current_instance_id': progress.get('current_instance_id'),
+            'current_customer': progress.get('current_customer'),
+            'current_customer_index': progress.get('current_customer_index'),
+            'total_customers': progress.get('total_customers'),
+            'synced_count': progress.get('synced_count', 0),
+            'start_time': progress.get('start_time'),
+            'progress_percent': round((progress.get('current_customer_index', 0) / progress.get('total_customers', 1)) * 100, 1) if progress.get('total_customers') else 0
+        }
+        
+    except Exception as e:
+        logger.exception(f'获取同步进度失败: {e}')
+        return {
+            'success': False,
+            'error': str(e),
+            'is_syncing': False
+        }

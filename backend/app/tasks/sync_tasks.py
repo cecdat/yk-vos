@@ -51,13 +51,28 @@ def sync_all_instances_online_phones():
 @celery.task
 def sync_all_instances_cdrs(days=1):
     """
-    定时同步所有VOS实例的历史话单到ClickHouse
-    默认同步最近1天的数据
+    定时同步所有VOS实例的历史话单到ClickHouse（优化版）
+    
+    同步策略：
+    1. 检查是否有VOS节点，没有则跳过
+    2. 先同步客户信息
+    3. 按客户维度同步历史话单
+    4. 实时更新同步进度到Redis
     """
     db = SessionLocal()
     from app.models.clickhouse_cdr import ClickHouseCDR
+    from app.core.config import settings
+    import redis
+    
+    # 连接 Redis 用于存储同步进度
+    try:
+        r = redis.from_url(settings.REDIS_URL)
+    except Exception as e:
+        logger.error(f'连接 Redis 失败: {e}')
+        r = None
     
     try:
+        # 1. 检查是否有启用的VOS实例
         instances = db.query(VOSInstance).filter(VOSInstance.enabled == True).all()
         if not instances:
             logger.info('没有启用的VOS实例，跳过同步话单任务')
@@ -67,88 +82,129 @@ def sync_all_instances_cdrs(days=1):
         total_synced = 0
         
         for inst in instances:
-            logger.info(f'开始同步 VOS 实例话单: {inst.name}')
-            client = VOSClient(inst.base_url)
-            end = datetime.utcnow()
-            start = end - timedelta(days=days)
-            payload = {
-                'accounts': [],
-                'callerE164': None,
-                'calleeE164': None,
-                'callerGateway': None,
-                'calleeGateway': None,
-                'beginTime': start.strftime('%Y%m%d'),
-                'endTime': end.strftime('%Y%m%d')
-            }
+            logger.info(f'🚀 开始同步 VOS 实例: {inst.name}')
             
-            try:
-                res = client.post('/external/server/GetCdr', payload=payload)
-            except Exception as e:
-                logger.exception(f'VOS CDR fetch failed for {inst.name}: {e}')
+            # 更新同步进度：当前实例
+            if r:
+                r.setex(
+                    'cdr_sync_progress',
+                    3600,  # 1小时过期
+                    json.dumps({
+                        'status': 'syncing',
+                        'current_instance': inst.name,
+                        'current_instance_id': inst.id,
+                        'current_customer': None,
+                        'synced_count': total_synced,
+                        'start_time': datetime.now().isoformat()
+                    }, ensure_ascii=False)
+                )
+            
+            # 2. 先同步客户信息
+            logger.info(f'📋 步骤1: 同步客户信息...')
+            customer_result = sync_customers_for_instance(inst.id)
+            if not customer_result.get('success'):
+                logger.error(f'客户信息同步失败: {customer_result.get("message")}')
                 results.append({
                     'instance_id': inst.id,
                     'instance_name': inst.name,
                     'success': False,
-                    'error': str(e)
+                    'error': f'客户同步失败: {customer_result.get("message")}'
                 })
                 continue
             
-            if not isinstance(res, dict):
-                logger.warning(f'Unexpected CDR response type from {inst.name}')
-                results.append({
-                    'instance_id': inst.id,
-                    'instance_name': inst.name,
-                    'success': False,
-                    'error': 'Invalid response type'
-                })
-                continue
+            # 3. 获取客户列表
+            customers = db.query(Customer).filter(
+                Customer.vos_instance_id == inst.id
+            ).all()
             
-            if res.get('retCode') != 0:
-                error_msg = res.get('exception', 'Unknown error')
-                logger.warning(f'VOS returned retCode!=0 for {inst.name}: {error_msg}')
-                results.append({
-                    'instance_id': inst.id,
-                    'instance_name': inst.name,
-                    'success': False,
-                    'error': error_msg
-                })
-                continue
-            
-            cdrs = res.get('infoCdrs') or res.get('cdrs') or res.get('CDRList') or []
-            if not isinstance(cdrs, list):
-                for v in res.values():
-                    if isinstance(v, list):
-                        cdrs = v
-                        break
-            
-            # 存储到 ClickHouse
-            if cdrs:
-                try:
-                    inserted = ClickHouseCDR.insert_cdrs(cdrs, vos_id=inst.id)
-                    total_synced += inserted
-                    logger.info(f'✅ VOS {inst.name} 话单同步完成: {inserted} 条')
-                    results.append({
-                        'instance_id': inst.id,
-                        'instance_name': inst.name,
-                        'success': True,
-                        'synced_count': inserted
-                    })
-                except Exception as e:
-                    logger.exception(f'存储话单到 ClickHouse 失败 ({inst.name}): {e}')
-                    results.append({
-                        'instance_id': inst.id,
-                        'instance_name': inst.name,
-                        'success': False,
-                        'error': f'ClickHouse 存储失败: {str(e)}'
-                    })
-            else:
-                logger.info(f'VOS {inst.name} 没有新话单数据')
+            if not customers:
+                logger.warning(f'VOS {inst.name} 没有客户数据，跳过话单同步')
                 results.append({
                     'instance_id': inst.id,
                     'instance_name': inst.name,
                     'success': True,
-                    'synced_count': 0
+                    'synced_count': 0,
+                    'message': '没有客户数据'
                 })
+                continue
+            
+            logger.info(f'📞 步骤2: 按客户同步历史话单 (共 {len(customers)} 个客户)...')
+            
+            # 4. 按客户循环同步话单
+            instance_synced = 0
+            client = VOSClient(inst.base_url)
+            end = datetime.utcnow()
+            start = end - timedelta(days=days)
+            
+            for idx, customer in enumerate(customers, 1):
+                account = customer.account
+                logger.info(f'  [{idx}/{len(customers)}] 同步客户: {account}')
+                
+                # 更新同步进度：当前客户
+                if r:
+                    r.setex(
+                        'cdr_sync_progress',
+                        3600,
+                        json.dumps({
+                            'status': 'syncing',
+                            'current_instance': inst.name,
+                            'current_instance_id': inst.id,
+                            'current_customer': account,
+                            'current_customer_index': idx,
+                            'total_customers': len(customers),
+                            'synced_count': total_synced + instance_synced,
+                            'start_time': datetime.now().isoformat()
+                        }, ensure_ascii=False)
+                    )
+                
+                # 查询该客户的话单
+                payload = {
+                    'accounts': [account],
+                    'callerE164': None,
+                    'calleeE164': None,
+                    'callerGateway': None,
+                    'calleeGateway': None,
+                    'beginTime': start.strftime('%Y%m%d'),
+                    'endTime': end.strftime('%Y%m%d')
+                }
+                
+                try:
+                    res = client.post('/external/server/GetCdr', payload=payload)
+                    
+                    if not isinstance(res, dict) or res.get('retCode') != 0:
+                        logger.warning(f'    客户 {account} 话单查询失败')
+                        continue
+                    
+                    cdrs = res.get('infoCdrs') or res.get('cdrs') or res.get('CDRList') or []
+                    if not isinstance(cdrs, list):
+                        for v in res.values():
+                            if isinstance(v, list):
+                                cdrs = v
+                                break
+                    
+                    if cdrs:
+                        inserted = ClickHouseCDR.insert_cdrs(cdrs, vos_id=inst.id)
+                        instance_synced += inserted
+                        logger.info(f'    ✅ 客户 {account}: 同步 {inserted} 条话单')
+                    
+                except Exception as e:
+                    logger.exception(f'    ❌ 客户 {account} 同步失败: {e}')
+                    continue
+            
+            total_synced += instance_synced
+            logger.info(f'✅ VOS {inst.name} 话单同步完成: 共 {instance_synced} 条')
+            
+            results.append({
+                'instance_id': inst.id,
+                'instance_name': inst.name,
+                'success': True,
+                'synced_count': instance_synced,
+                'customers_count': len(customers)
+            })
+        
+        # 清除同步进度（完成）
+        if r:
+            r.delete('cdr_sync_progress')
         
         return {
             'success': True,
@@ -159,6 +215,9 @@ def sync_all_instances_cdrs(days=1):
         
     except Exception as e:
         logger.exception(f'Error syncing CDRs: {e}')
+        # 清除同步进度（错误）
+        if r:
+            r.delete('cdr_sync_progress')
         return {'success': False, 'message': str(e)}
     finally:
         db.close()

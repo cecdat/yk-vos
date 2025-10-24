@@ -33,17 +33,42 @@ interface CDRSyncStatus {
   next_sync: string
 }
 
+interface CDRSyncProgress {
+  success: boolean
+  is_syncing: boolean
+  status?: string
+  current_instance?: string
+  current_instance_id?: number
+  current_customer?: string
+  current_customer_index?: number
+  total_customers?: number
+  synced_count?: number
+  start_time?: string
+  progress_percent?: number
+  message?: string
+}
+
 export default function Page(){
   const { currentVOS } = useVOS()
   const [instances, setInstances] = useState<any[]>([])
   const [customerSummary, setCustomerSummary] = useState<CustomerSummary | null>(null)
   const [debtCustomers, setDebtCustomers] = useState(0)
   const [cdrSyncStatus, setCdrSyncStatus] = useState<CDRSyncStatus | null>(null)
+  const [cdrSyncProgress, setCdrSyncProgress] = useState<CDRSyncProgress | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     fetchData()
-  }, [])
+    
+    // 如果正在同步，定时刷新进度
+    const interval = setInterval(() => {
+      if (cdrSyncStatus?.is_syncing) {
+        fetchCDRSyncProgress()
+      }
+    }, 3000) // 每3秒刷新一次
+    
+    return () => clearInterval(interval)
+  }, [cdrSyncStatus?.is_syncing])
 
   async function fetchData() {
     setLoading(true)
@@ -89,6 +114,11 @@ export default function Page(){
     try {
       const res = await api.get('/tasks/cdr-sync-status')
       setCdrSyncStatus(res.data)
+      
+      // 如果正在同步，立即获取进度
+      if (res.data.is_syncing) {
+        fetchCDRSyncProgress()
+      }
     } catch (e) {
       console.error('获取话单同步状态失败:', e)
       setCdrSyncStatus({
@@ -101,6 +131,16 @@ export default function Page(){
         instances: [],
         next_sync: ''
       })
+    }
+  }
+  
+  async function fetchCDRSyncProgress() {
+    try {
+      const res = await api.get('/tasks/cdr-sync-progress')
+      setCdrSyncProgress(res.data)
+    } catch (e) {
+      console.error('获取话单同步进度失败:', e)
+      setCdrSyncProgress(null)
     }
   }
   
@@ -221,6 +261,57 @@ export default function Page(){
         </div>
       </div>
 
+
+      {/* 同步进度卡片 */}
+      {cdrSyncProgress?.is_syncing && (
+        <section className='mb-8'>
+          <div className='bg-gradient-to-r from-blue-500 to-purple-600 rounded-xl p-6 text-white shadow-lg'>
+            <div className='flex items-center justify-between mb-4'>
+              <h2 className='text-xl font-bold flex items-center gap-2'>
+                <svg className='w-6 h-6 animate-spin' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
+                  <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15' />
+                </svg>
+                正在同步话单数据
+              </h2>
+              <span className='text-sm opacity-90'>
+                进度: {cdrSyncProgress.progress_percent?.toFixed(1)}%
+              </span>
+            </div>
+            
+            <div className='grid grid-cols-1 md:grid-cols-3 gap-4 mb-4'>
+              <div className='bg-white bg-opacity-20 rounded-lg p-4'>
+                <p className='text-sm opacity-75 mb-1'>当前节点</p>
+                <p className='text-lg font-semibold'>{cdrSyncProgress.current_instance || '准备中...'}</p>
+              </div>
+              
+              <div className='bg-white bg-opacity-20 rounded-lg p-4'>
+                <p className='text-sm opacity-75 mb-1'>当前客户</p>
+                <p className='text-lg font-semibold'>
+                  {cdrSyncProgress.current_customer || '准备中...'}
+                  {cdrSyncProgress.current_customer_index && cdrSyncProgress.total_customers && (
+                    <span className='text-sm ml-2'>
+                      ({cdrSyncProgress.current_customer_index}/{cdrSyncProgress.total_customers})
+                    </span>
+                  )}
+                </p>
+              </div>
+              
+              <div className='bg-white bg-opacity-20 rounded-lg p-4'>
+                <p className='text-sm opacity-75 mb-1'>已同步数据</p>
+                <p className='text-lg font-semibold'>{formatNumber(cdrSyncProgress.synced_count || 0)} 条</p>
+              </div>
+            </div>
+            
+            {/* 进度条 */}
+            <div className='bg-white bg-opacity-20 rounded-full h-3 overflow-hidden'>
+              <div 
+                className='bg-white h-full transition-all duration-300 ease-out'
+                style={{ width: `${cdrSyncProgress.progress_percent || 0}%` }}
+              />
+            </div>
+          </div>
+        </section>
+      )}
 
       {/* 各实例客户分布 */}
       {customerSummary && customerSummary.instances.length > 0 && (
