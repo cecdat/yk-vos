@@ -17,6 +17,7 @@ export default function CdrPage() {
   const [forceVOS, setForceVOS] = useState(false)  // 是否强制从VOS查询
   const [dataSource, setDataSource] = useState('')  // 数据来源
   const [queryTime, setQueryTime] = useState(0)  // 查询耗时
+  const [totalCount, setTotalCount] = useState(0)  // 总记录数
   
   // 查询参数
   const [beginTime, setBeginTime] = useState(() => {
@@ -70,7 +71,9 @@ export default function CdrPage() {
           accounts: accounts ? accounts.split(',').map(a => a.trim()) : undefined,
           caller_e164: caller ? caller.trim() : undefined,
           callee_e164: callee ? callee.trim() : undefined,
-          callee_gateway: gateway ? gateway.trim() : undefined
+          callee_gateway: gateway ? gateway.trim() : undefined,
+          page: 1,
+          page_size: 1000  // 手动查询时返回更多数据（最大1000条）
         }
 
         const res = await api.post(
@@ -86,6 +89,7 @@ export default function CdrPage() {
           setCdrs(cdrsWithInstance || [])
           setDataSource(res.data.data_source)
           setQueryTime(res.data.query_time_ms)
+          setTotalCount(res.data.total || res.data.count || 0)  // 保存总记录数
           setInstanceResults([{
             instance_id: currentVOS.id,
             instance_name: currentVOS.name,
@@ -428,7 +432,19 @@ export default function CdrPage() {
           <div className='px-6 py-4 bg-gradient-to-r from-blue-50 to-purple-50 border-b flex items-center justify-between'>
             <div className='flex items-center gap-4'>
               <p className='text-sm text-gray-700'>
-                共查询到 <span className='font-bold text-blue-600'>{cdrs.length}</span> 条话单记录
+                {totalCount > cdrs.length ? (
+                  <>
+                    共 <span className='font-bold text-blue-600'>{totalCount}</span> 条记录，
+                    当前显示 <span className='font-bold text-blue-600'>{cdrs.length}</span> 条
+                    <span className='ml-2 text-xs text-orange-600'>
+                      (单次最多显示1000条，请使用筛选条件缩小范围)
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    共查询到 <span className='font-bold text-blue-600'>{cdrs.length}</span> 条话单记录
+                  </>
+                )}
               </p>
               {dataSource && queryMode === 'current' && (
                 <div className='flex items-center gap-2 text-xs'>

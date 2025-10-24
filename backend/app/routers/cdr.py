@@ -35,7 +35,7 @@ class CDRQueryRequest(BaseModel):
     begin_time: str  # yyyyMMdd 格式
     end_time: str    # yyyyMMdd 格式
     page: int = 1    # 页码（从1开始）
-    page_size: int = 20  # 每页数量（默认20，最大100）
+    page_size: int = 20  # 每页数量（默认20，最大1000）
 
 @router.get('/history')
 async def get_cdr_history(
@@ -121,7 +121,7 @@ async def query_cdrs_from_vos(
     
     性能优化：
     - ✅ 时间范围限制（最多31天）
-    - ✅ 结果集分页（默认20条/页，最大100条）
+    - ✅ 结果集分页（默认20条/页，最大1000条）
     - ✅ 智能索引使用
     """
     start_time = time.time()
@@ -154,7 +154,7 @@ async def query_cdrs_from_vos(
     
     # 分页参数验证
     page = max(1, query_params.page)
-    page_size = min(100, max(1, query_params.page_size))  # 限制最大100条
+    page_size = min(1000, max(1, query_params.page_size))  # 限制最大1000条（手动查询允许更多数据）
     offset = (page - 1) * page_size
     
     # 1. 如果不强制VOS，先查 ClickHouse
