@@ -5,11 +5,12 @@ from app.models.phone import Phone
 from app.models.cdr import CDR
 from app.models.customer import Customer
 from app.models.vos_data_cache import VosDataCache
+from app.models.vos_health import VOSHealthCheck
 from app.core.vos_client import VOSClient
 from app.core.vos_cache_service import VosCacheService
 from app.core.vos_sync_enhanced import VosSyncEnhanced
 from datetime import datetime, timedelta
-import logging, json, hashlib
+import logging, json, hashlib, time
 from dateutil import parser as dateparser
 logger = logging.getLogger(__name__)
 
@@ -544,6 +545,97 @@ def sync_instance_gateways_enhanced(instance_id: int):
         
     except Exception as e:
         logger.exception(f'同步网关失败: {e}')
+        return {'success': False, 'message': str(e)}
+    finally:
+        db.close()
+
+
+@celery.task
+def check_vos_instances_health():
+    """
+    定时检查所有VOS实例的健康状态
+    通过调用GetAllCustomers API来验证VOS接口是否畅通
+    """
+    db = SessionLocal()
+    try:
+        instances = db.query(VOSInstance).filter(VOSInstance.enabled == True).all()
+        if not instances:
+            logger.info('没有启用的VOS实例，跳过健康检查')
+            return {'success': True, 'message': '没有VOS实例需要检查', 'instances_count': 0}
+        
+        results = []
+        for inst in instances:
+            logger.info(f'检查VOS实例健康状态: {inst.name} ({inst.base_url})')
+            
+            # 获取或创建健康检查记录
+            health_check = db.query(VOSHealthCheck).filter(
+                VOSHealthCheck.vos_instance_id == inst.id
+            ).first()
+            
+            if not health_check:
+                health_check = VOSHealthCheck(vos_instance_id=inst.id)
+                db.add(health_check)
+            
+            # 执行健康检查 - 调用简单的API测试连通性
+            client = VOSClient(inst.base_url)
+            start_time = time.time()
+            
+            try:
+                # 使用GetAllCustomers API作为健康检查
+                result = client.post('/external/server/GetAllCustomers', payload={'type': 1})
+                response_time = (time.time() - start_time) * 1000  # 转换为毫秒
+                
+                if client.is_success(result):
+                    # API调用成功
+                    health_check.status = 'healthy'
+                    health_check.api_success = True
+                    health_check.response_time_ms = response_time
+                    health_check.error_message = None
+                    health_check.consecutive_failures = 0
+                    logger.info(f'✓ VOS实例 {inst.name} 健康 (响应时间: {response_time:.0f}ms)')
+                else:
+                    # API调用失败
+                    error_msg = client.get_error_message(result)
+                    health_check.status = 'unhealthy'
+                    health_check.api_success = False
+                    health_check.response_time_ms = response_time
+                    health_check.error_message = error_msg[:500] if error_msg else 'API返回错误'
+                    health_check.consecutive_failures += 1
+                    logger.warning(f'✗ VOS实例 {inst.name} 不健康: {error_msg}')
+                
+            except Exception as e:
+                # 网络或其他错误
+                response_time = (time.time() - start_time) * 1000
+                error_msg = str(e)
+                health_check.status = 'unhealthy'
+                health_check.api_success = False
+                health_check.response_time_ms = response_time
+                health_check.error_message = error_msg[:500]
+                health_check.consecutive_failures += 1
+                logger.error(f'✗ VOS实例 {inst.name} 健康检查异常: {error_msg}')
+            
+            health_check.last_check_at = datetime.utcnow()
+            
+            results.append({
+                'instance_id': inst.id,
+                'instance_name': inst.name,
+                'status': health_check.status,
+                'response_time_ms': health_check.response_time_ms,
+                'consecutive_failures': health_check.consecutive_failures
+            })
+        
+        db.commit()
+        logger.info(f'VOS健康检查完成，共检查 {len(instances)} 个实例')
+        
+        return {
+            'success': True,
+            'message': f'健康检查完成',
+            'instances_count': len(instances),
+            'results': results
+        }
+        
+    except Exception as e:
+        logger.exception(f'VOS健康检查任务失败: {e}')
         return {'success': False, 'message': str(e)}
     finally:
         db.close()

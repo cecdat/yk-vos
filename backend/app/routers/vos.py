@@ -11,8 +11,9 @@ from app.models.user import User
 from app.models.vos_instance import VOSInstance
 from app.models.phone import Phone
 from app.models.customer import Customer
+from app.models.vos_health import VOSHealthCheck
 from app.routers.auth import get_current_user
-from app.tasks.sync_tasks import sync_customers_for_instance
+from app.tasks.sync_tasks import sync_customers_for_instance, check_vos_instances_health
 from app.tasks.initial_sync_tasks import initial_sync_for_new_instance
 
 router = APIRouter(prefix='/vos', tags=['vos'])
@@ -37,16 +38,28 @@ async def get_instances(
     db: Session = Depends(get_db)
 ):
     instances = db.query(VOSInstance).filter(VOSInstance.enabled == True).all()
-    return [
-        {
+    result = []
+    
+    for inst in instances:
+        # 获取健康检查状态
+        health_check = db.query(VOSHealthCheck).filter(
+            VOSHealthCheck.vos_instance_id == inst.id
+        ).first()
+        
+        instance_data = {
             'id': inst.id,
             'name': inst.name,
             'base_url': inst.base_url,
             'description': inst.description,
-            'enabled': inst.enabled
+            'enabled': inst.enabled,
+            'health_status': health_check.status if health_check else 'unknown',
+            'health_last_check': health_check.last_check_at.isoformat() if health_check and health_check.last_check_at else None,
+            'health_response_time': health_check.response_time_ms if health_check else None,
+            'health_error': health_check.error_message if health_check else None
         }
-        for inst in instances
-    ]
+        result.append(instance_data)
+    
+    return result
 
 @router.get('/instances/{instance_id}')
 async def get_instance(
@@ -431,5 +444,47 @@ async def manual_sync_customers(
         'message': f'Customer data sync has been triggered for {instance.name}',
         'instance_id': instance_id,
         'instance_name': instance.name
+    }
+
+
+@router.get('/instances/health/status')
+async def get_all_instances_health(
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Session = Depends(get_db)
+):
+    """获取所有VOS实例的健康状态"""
+    instances = db.query(VOSInstance).filter(VOSInstance.enabled == True).all()
+    
+    results = []
+    for inst in instances:
+        health_check = db.query(VOSHealthCheck).filter(
+            VOSHealthCheck.vos_instance_id == inst.id
+        ).first()
+        
+        results.append({
+            'instance_id': inst.id,
+            'instance_name': inst.name,
+            'status': health_check.status if health_check else 'unknown',
+            'last_check_at': health_check.last_check_at.isoformat() if health_check and health_check.last_check_at else None,
+            'response_time_ms': health_check.response_time_ms if health_check else None,
+            'consecutive_failures': health_check.consecutive_failures if health_check else 0,
+            'error_message': health_check.error_message if health_check else None
+        })
+    
+    return {'instances': results}
+
+
+@router.post('/instances/health/check')
+async def trigger_health_check(
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Session = Depends(get_db)
+):
+    """手动触发VOS实例健康检查"""
+    # 触发异步健康检查任务
+    check_vos_instances_health.delay()
+    
+    return {
+        'message': 'VOS实例健康检查已触发',
+        'status': 'triggered'
     }
 

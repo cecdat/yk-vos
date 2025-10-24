@@ -41,9 +41,8 @@ interface TaskStatus {
 export default function Page(){
   const { currentVOS } = useVOS()
   const [instances, setInstances] = useState<any[]>([])
-  const [onlineCount, setOnlineCount] = useState(0)
-  const [cdrCount, setCdrCount] = useState(0)
   const [customerSummary, setCustomerSummary] = useState<CustomerSummary | null>(null)
+  const [debtCustomers, setDebtCustomers] = useState(0)
   const [taskStatus, setTaskStatus] = useState<TaskStatus | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -55,8 +54,8 @@ export default function Page(){
     setLoading(true)
     await Promise.all([
       fetchInstances(),
-      fetchCdrCount(),
       fetchCustomerSummary(),
+      fetchDebtCustomers(),
       fetchTaskStatus()
     ])
     setLoading(false)
@@ -71,15 +70,6 @@ export default function Page(){
     }
   }
 
-  async function fetchCdrCount() {
-    try {
-      const res = await api.get('/cdr/history?limit=1')
-      setCdrCount(res.data ? res.data.length : 0)
-    } catch (e) {
-      console.error('获取话单数失败:', e)
-    }
-  }
-
   async function fetchCustomerSummary() {
     try {
       const res = await api.get('/vos/customers/summary')
@@ -87,6 +77,16 @@ export default function Page(){
     } catch (e) {
       console.error('获取客户统计失败:', e)
       setCustomerSummary({ total_customers: 0, instances: [], instance_count: 0 })
+    }
+  }
+
+  async function fetchDebtCustomers() {
+    try {
+      const res = await api.get('/vos/customers/debt-count')
+      setDebtCustomers(res.data.debt_count || 0)
+    } catch (e) {
+      console.error('获取欠费客户失败:', e)
+      setDebtCustomers(0)
     }
   }
 
@@ -153,148 +153,45 @@ export default function Page(){
           </div>
         </div>
 
-        <div className='bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl p-6 text-white shadow-lg'>
+        <div className='bg-gradient-to-br from-red-500 to-red-600 rounded-xl p-6 text-white shadow-lg'>
           <div className='flex items-center justify-between'>
             <div>
-              <p className='text-purple-100 text-sm mb-1'>在线话机</p>
-              <p className='text-3xl font-bold'>{onlineCount}</p>
+              <p className='text-red-100 text-sm mb-1'>欠费客户</p>
+              <p className='text-3xl font-bold'>{debtCustomers}</p>
             </div>
             <div className='w-12 h-12 bg-white bg-opacity-20 rounded-lg flex items-center justify-center'>
               <svg className='w-6 h-6' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
-                <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z' />
+                <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z' />
               </svg>
             </div>
           </div>
         </div>
 
-        <div className='bg-gradient-to-br from-orange-500 to-orange-600 rounded-xl p-6 text-white shadow-lg'>
+        <div className={`bg-gradient-to-br ${
+          taskStatus?.status === 'healthy' ? 'from-teal-500 to-teal-600' :
+          taskStatus?.status === 'warning' ? 'from-yellow-500 to-yellow-600' :
+          'from-gray-500 to-gray-600'
+        } rounded-xl p-6 text-white shadow-lg`}>
           <div className='flex items-center justify-between'>
             <div>
-              <p className='text-orange-100 text-sm mb-1'>话单记录</p>
-              <p className='text-3xl font-bold'>{cdrCount}</p>
+              <p className='text-white text-opacity-90 text-sm mb-1'>任务服务</p>
+              <p className='text-3xl font-bold'>
+                {taskStatus?.status === 'healthy' ? '正常' :
+                 taskStatus?.status === 'warning' ? '警告' : '异常'}
+              </p>
+              <p className='text-xs text-white text-opacity-75 mt-1'>
+                Worker: {taskStatus?.workers.count || 0} | 活跃: {taskStatus?.tasks.active || 0}
+              </p>
             </div>
             <div className='w-12 h-12 bg-white bg-opacity-20 rounded-lg flex items-center justify-center'>
               <svg className='w-6 h-6' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
-                <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z' />
+                <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z' />
               </svg>
             </div>
           </div>
         </div>
       </div>
 
-      {/* 任务同步状态卡片 */}
-      {taskStatus && (
-        <div className='mb-8'>
-          <h2 className='text-xl font-bold mb-4 text-gray-800 flex items-center gap-2'>
-            <svg className='w-6 h-6 text-blue-600' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
-              <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01' />
-            </svg>
-            任务同步状态
-            <span className={`px-3 py-1 rounded-full text-sm ${
-              taskStatus.status === 'healthy' ? 'bg-green-100 text-green-700' :
-              taskStatus.status === 'warning' ? 'bg-yellow-100 text-yellow-700' :
-              'bg-red-100 text-red-700'
-            }`}>
-              {taskStatus.status === 'healthy' ? '✓ 正常' :
-               taskStatus.status === 'warning' ? '⚠ 警告' :
-               '✗ 异常'}
-            </span>
-          </h2>
-          
-          <div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4'>
-            {/* Worker状态 */}
-            <div className='bg-white bg-opacity-90 backdrop-filter backdrop-blur-lg rounded-xl p-5 shadow-lg border border-white border-opacity-30'>
-              <div className='flex items-center gap-3 mb-3'>
-                <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
-                  taskStatus.workers.status === 'running' ? 'bg-green-100' :
-                  taskStatus.workers.status === 'stopped' ? 'bg-red-100' : 'bg-gray-100'
-                }`}>
-                  <svg className={`w-5 h-5 ${
-                    taskStatus.workers.status === 'running' ? 'text-green-600' :
-                    taskStatus.workers.status === 'stopped' ? 'text-red-600' : 'text-gray-600'
-                  }`} fill='none' viewBox='0 0 24 24' stroke='currentColor'>
-                    <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z' />
-                  </svg>
-                </div>
-                <div>
-                  <p className='text-sm text-gray-600'>Worker数量</p>
-                  <p className='text-2xl font-bold text-gray-900'>{taskStatus.workers.count}</p>
-                </div>
-              </div>
-              <div className='text-xs text-gray-500'>
-                状态: <span className={`font-semibold ${
-                  taskStatus.workers.status === 'running' ? 'text-green-600' :
-                  taskStatus.workers.status === 'stopped' ? 'text-red-600' : 'text-gray-600'
-                }`}>{taskStatus.workers.status}</span>
-              </div>
-            </div>
-
-            {/* 活跃任务 */}
-            <div className='bg-white bg-opacity-90 backdrop-filter backdrop-blur-lg rounded-xl p-5 shadow-lg border border-white border-opacity-30'>
-              <div className='flex items-center gap-3 mb-3'>
-                <div className='w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center'>
-                  <svg className='w-5 h-5 text-blue-600' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
-                    <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M13 10V3L4 14h7v7l9-11h-7z' />
-                  </svg>
-                </div>
-                <div>
-                  <p className='text-sm text-gray-600'>活跃任务</p>
-                  <p className='text-2xl font-bold text-gray-900'>{taskStatus.tasks.active}</p>
-                </div>
-              </div>
-              {taskStatus.tasks.active_list && taskStatus.tasks.active_list.length > 0 && (
-                <div className='text-xs text-gray-500 mt-2'>
-                  <p className='font-semibold mb-1'>当前执行:</p>
-                  {taskStatus.tasks.active_list.slice(0, 2).map((task, idx) => (
-                    <p key={idx} className='truncate'>• {task.name}</p>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* 计划任务 */}
-            <div className='bg-white bg-opacity-90 backdrop-filter backdrop-blur-lg rounded-xl p-5 shadow-lg border border-white border-opacity-30'>
-              <div className='flex items-center gap-3 mb-3'>
-                <div className='w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center'>
-                  <svg className='w-5 h-5 text-purple-600' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
-                    <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z' />
-                  </svg>
-                </div>
-                <div>
-                  <p className='text-sm text-gray-600'>计划任务</p>
-                  <p className='text-2xl font-bold text-gray-900'>{taskStatus.tasks.scheduled}</p>
-                </div>
-              </div>
-              <div className='text-xs text-gray-500'>
-                队列中: {taskStatus.tasks.reserved} 个
-              </div>
-            </div>
-
-            {/* 注册的同步任务类型 */}
-            <div className='bg-white bg-opacity-90 backdrop-filter backdrop-blur-lg rounded-xl p-5 shadow-lg border border-white border-opacity-30'>
-              <div className='flex items-center gap-3 mb-3'>
-                <div className='w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center'>
-                  <svg className='w-5 h-5 text-orange-600' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
-                    <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15' />
-                  </svg>
-                </div>
-                <div>
-                  <p className='text-sm text-gray-600'>同步任务</p>
-                  <p className='text-2xl font-bold text-gray-900'>{taskStatus.sync_tasks.registered_count}</p>
-                </div>
-              </div>
-              {taskStatus.sync_tasks.task_types && taskStatus.sync_tasks.task_types.length > 0 && (
-                <div className='text-xs text-gray-500 mt-2'>
-                  <p className='font-semibold mb-1'>任务类型:</p>
-                  {taskStatus.sync_tasks.task_types.slice(0, 2).map((type, idx) => (
-                    <p key={idx} className='truncate'>• {type}</p>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* 各实例客户分布 */}
       {customerSummary && customerSummary.instances.length > 0 && (
@@ -361,6 +258,29 @@ export default function Page(){
           <div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4'>
             {instances.map((inst: any) => {
               const isCurrentVOS = currentVOS?.id === inst.id
+              const healthStatus = inst.health_status || 'unknown'
+              const healthStatusConfig = {
+                healthy: { 
+                  bg: 'bg-green-100', 
+                  text: 'text-green-800', 
+                  icon: '✓', 
+                  label: '健康' 
+                },
+                unhealthy: { 
+                  bg: 'bg-red-100', 
+                  text: 'text-red-800', 
+                  icon: '✗', 
+                  label: '异常' 
+                },
+                unknown: { 
+                  bg: 'bg-gray-100', 
+                  text: 'text-gray-800', 
+                  icon: '?', 
+                  label: '未知' 
+                }
+              }
+              const statusConfig = healthStatusConfig[healthStatus as keyof typeof healthStatusConfig] || healthStatusConfig.unknown
+              
               return (
                 <div 
                   key={inst.id}
@@ -386,9 +306,14 @@ export default function Page(){
                     <p className='text-sm text-gray-500 mt-2'>{inst.description}</p>
                   )}
                   <div className='mt-3 pt-3 border-t flex items-center justify-between'>
-                    <span className={`text-xs px-2 py-1 rounded-full ${inst.enabled ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>
-                      {inst.enabled ? '✓ 启用中' : '○ 已禁用'}
-                    </span>
+                    <div className='flex items-center gap-2'>
+                      <span className={`text-xs px-2 py-1 rounded-full ${inst.enabled ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>
+                        {inst.enabled ? '✓ 启用中' : '○ 已禁用'}
+                      </span>
+                      <span className={`text-xs px-2 py-1 rounded-full ${statusConfig.bg} ${statusConfig.text}`} title={inst.health_error || `响应时间: ${inst.health_response_time?.toFixed(0)}ms`}>
+                        {statusConfig.icon} {statusConfig.label}
+                      </span>
+                    </div>
                     <span className='text-xs text-blue-600 hover:underline'>查看详情 →</span>
                   </div>
                 </a>

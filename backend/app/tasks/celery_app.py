@@ -28,6 +28,12 @@ celery.conf.beat_schedule = {
         'task': 'app.tasks.sync_tasks.cleanup_expired_cache',
         'schedule': crontab(minute=0, hour=2),
     },
+    
+    # VOS实例健康检查（每5分钟）
+    'check-vos-health-every-5min': {
+        'task': 'app.tasks.sync_tasks.check_vos_instances_health',
+        'schedule': 300.0,  # 每5分钟检查一次
+    },
 }
 
 # 导入任务模块以注册任务

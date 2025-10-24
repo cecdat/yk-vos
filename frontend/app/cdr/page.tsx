@@ -35,7 +35,6 @@ export default function CdrPage() {
   const [caller, setCaller] = useState('')
   const [callee, setCallee] = useState('')
   const [gateway, setGateway] = useState('')
-  const [minDuration, setMinDuration] = useState('0')
   
   // 分页
   const [currentPage, setCurrentPage] = useState(1)
@@ -68,10 +67,10 @@ export default function CdrPage() {
         const payload = {
           begin_time: beginTime,
           end_time: endTime,
-          accounts: accounts ? accounts.split(',') : undefined,
-          caller_e164: caller || undefined,
-          callee_e164: callee || undefined,
-          callee_gateway: gateway || undefined
+          accounts: accounts ? accounts.split(',').map(a => a.trim()) : undefined,
+          caller_e164: caller ? caller.trim() : undefined,
+          callee_e164: callee ? callee.trim() : undefined,
+          callee_gateway: gateway ? gateway.trim() : undefined
         }
 
         const res = await api.post(
@@ -176,11 +175,11 @@ export default function CdrPage() {
       const payload = {
         begin_time: beginTime,
         end_time: endTime,
-        accounts: accounts ? accounts.split(',') : undefined,
-        caller_e164: caller || undefined,
-        callee_e164: callee || undefined,
-        callee_gateway: gateway || undefined,
-              }
+        accounts: accounts ? accounts.split(',').map(a => a.trim()) : undefined,
+        caller_e164: caller ? caller.trim() : undefined,
+        callee_e164: callee ? callee.trim() : undefined,
+        callee_gateway: gateway ? gateway.trim() : undefined
+      }
 
       const res = await api.post(
         `/cdr/export/${currentVOS.id}`,
@@ -227,10 +226,12 @@ export default function CdrPage() {
             <label className='block text-xs font-medium mb-1 text-gray-700'>开始日期</label>
             <input
               type='date'
-              value={parseDate(beginTime)}
+              value={beginTime ? parseDate(beginTime) : ''}
               onChange={e => {
-                const date = e.target.value.replace(/-/g, '')
-                setBeginTime(date)
+                if (e.target.value) {
+                  const date = e.target.value.replace(/-/g, '')
+                  setBeginTime(date)
+                }
               }}
               className='w-full p-2 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none'
               disabled={loading}
@@ -240,10 +241,12 @@ export default function CdrPage() {
             <label className='block text-xs font-medium mb-1 text-gray-700'>结束日期</label>
             <input
               type='date'
-              value={parseDate(endTime)}
+              value={endTime ? parseDate(endTime) : ''}
               onChange={e => {
-                const date = e.target.value.replace(/-/g, '')
-                setEndTime(date)
+                if (e.target.value) {
+                  const date = e.target.value.replace(/-/g, '')
+                  setEndTime(date)
+                }
               }}
               className='w-full p-2 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none'
               disabled={loading}

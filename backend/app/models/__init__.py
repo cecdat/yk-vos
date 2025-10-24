@@ -9,6 +9,7 @@ from app.models.vos_data_cache import VosDataCache
 from app.models.phone_enhanced import PhoneEnhanced
 from app.models.gateway import Gateway, FeeRateGroup, Suite
 from app.models.sync_config import SyncConfig
+from app.models.vos_health import VOSHealthCheck
 
 __all__ = [
     'Base',
@@ -23,5 +24,6 @@ __all__ = [
     'FeeRateGroup',
     'Suite',
     'SyncConfig',
+    'VOSHealthCheck',
 ]
 
