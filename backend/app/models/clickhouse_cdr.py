@@ -64,25 +64,50 @@ class ClickHouseCDR:
             # 确保 flow_no 是字符串类型
             flow_no_str = str(flow_no) if flow_no else ''
             
+            # 确保所有字符串字段都是字符串类型
+            def safe_str(val, default=''):
+                """安全地转换为字符串"""
+                if val is None:
+                    return default
+                return str(val)
+            
+            def safe_int(val, default=0):
+                """安全地转换为整数"""
+                if val is None or val == '':
+                    return default
+                try:
+                    return int(val)
+                except (ValueError, TypeError):
+                    return default
+            
+            def safe_float(val, default=0.0):
+                """安全地转换为浮点数"""
+                if val is None or val == '':
+                    return default
+                try:
+                    return float(val)
+                except (ValueError, TypeError):
+                    return default
+            
             ch_cdr = {
                 'id': ClickHouseCDR._generate_id(flow_no_str),
-                'vos_id': cdr_vos_id,
-                'flow_no': flow_no_str,
-                'account_name': cdr.get('accountName', ''),
-                'account': cdr.get('account', ''),
-                'caller_e164': cdr.get('callerE164', ''),
-                'caller_access_e164': cdr.get('callerAccessE164', ''),
-                'callee_e164': cdr.get('calleeE164', ''),
-                'callee_access_e164': cdr.get('calleeAccessE164', ''),
+                'vos_id': int(cdr_vos_id),
+                'flow_no': safe_str(flow_no_str),
+                'account_name': safe_str(cdr.get('accountName')),
+                'account': safe_str(cdr.get('account')),
+                'caller_e164': safe_str(cdr.get('callerE164')),
+                'caller_access_e164': safe_str(cdr.get('callerAccessE164')),
+                'callee_e164': safe_str(cdr.get('calleeE164')),
+                'callee_access_e164': safe_str(cdr.get('calleeAccessE164')),
                 'start': start_dt,
                 'stop': stop_dt,
-                'hold_time': int(cdr.get('holdTime', 0)),
-                'fee_time': int(cdr.get('feeTime', 0)),
-                'fee': float(cdr.get('fee', 0)),
-                'end_reason': cdr.get('endReason', ''),
-                'end_direction': int(cdr.get('endDirection', 0)),
-                'callee_gateway': cdr.get('calleeGateway', ''),
-                'callee_ip': cdr.get('calleeip', ''),
+                'hold_time': safe_int(cdr.get('holdTime')),
+                'fee_time': safe_int(cdr.get('feeTime')),
+                'fee': safe_float(cdr.get('fee')),
+                'end_reason': safe_str(cdr.get('endReason')),
+                'end_direction': safe_int(cdr.get('endDirection')),
+                'callee_gateway': safe_str(cdr.get('calleeGateway')),
+                'callee_ip': safe_str(cdr.get('calleeip')),
                 'raw': str(cdr),
                 'created_at': datetime.now(),
                 'updated_at': datetime.now()

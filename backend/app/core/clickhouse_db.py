@@ -65,8 +65,24 @@ class ClickHouseDB:
             if columns is None:
                 columns = list(data[0].keys())
             
-            # 准备数据
-            values = [[row.get(col) for col in columns] for row in data]
+            # 准备数据 - 确保所有值类型正确
+            values = []
+            for row in data:
+                row_values = []
+                for col in columns:
+                    val = row.get(col)
+                    # 确保字符串类型的字段不会是None
+                    if val is None:
+                        if col in ['flow_no', 'account_name', 'account', 'caller_e164', 
+                                   'caller_access_e164', 'callee_e164', 'callee_access_e164',
+                                   'end_reason', 'callee_gateway', 'callee_ip', 'raw']:
+                            val = ''
+                        elif col in ['hold_time', 'fee_time', 'end_direction', 'vos_id', 'id']:
+                            val = 0
+                        elif col == 'fee':
+                            val = 0.0
+                    row_values.append(val)
+                values.append(row_values)
             
             # 执行插入
             query = f"INSERT INTO {table} ({', '.join(columns)}) VALUES"
@@ -77,6 +93,11 @@ class ClickHouseDB:
         except Exception as e:
             logger.error(f'❌ ClickHouse 插入失败: {e}')
             logger.error(f'   表名: {table}, 数据量: {len(data)}')
+            # 打印第一条数据的详细信息用于调试
+            if data:
+                logger.error(f'   第一条数据示例:')
+                for k, v in list(data[0].items())[:5]:
+                    logger.error(f'     {k}: {v} (type: {type(v).__name__})')
             raise
     
     def close(self):
