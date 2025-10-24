@@ -172,24 +172,25 @@ async def query_cdrs_from_vos(
                 offset=offset
             )
             
-            # 如果 ClickHouse 有数据，直接返回
-            if local_cdrs or total_count > 0:
-                query_time = time.time() - start_time
-                
-                return {
-                    'success': True,
-                    'cdrs': local_cdrs,
-                    'count': len(local_cdrs),
-                    'total': total_count,
-                    'page': page,
-                    'page_size': page_size,
-                    'total_pages': (total_count + page_size - 1) // page_size,
-                    'instance_id': instance_id,
-                    'instance_name': instance.name,
-                    'data_source': 'clickhouse',
-                    'query_time_ms': round(query_time * 1000, 2),
-                    'message': f'从 ClickHouse 查询到 {total_count} 条记录（第{page}/{(total_count + page_size - 1) // page_size}页，速度：{round(query_time * 1000, 2)}ms）'
-                }
+            # ClickHouse 查询成功，直接返回结果（即使为空）
+            # 这样可以正确反映数据来源
+            # 如果用户需要从VOS API刷新数据，可以使用 force_vos=True
+            query_time = time.time() - start_time
+            
+            return {
+                'success': True,
+                'cdrs': local_cdrs,
+                'count': len(local_cdrs),
+                'total': total_count,
+                'page': page,
+                'page_size': page_size,
+                'total_pages': (total_count + page_size - 1) // page_size if total_count > 0 else 0,
+                'instance_id': instance_id,
+                'instance_name': instance.name,
+                'data_source': 'clickhouse',
+                'query_time_ms': round(query_time * 1000, 2),
+                'message': f'从 ClickHouse 查询到 {total_count} 条记录（第{page}/{max(1, (total_count + page_size - 1) // page_size)}页，速度：{round(query_time * 1000, 2)}ms）'
+            }
         except Exception as e:
             logger.error(f'ClickHouse 查询失败，尝试从 VOS API 查询: {e}')
             # ClickHouse 查询失败，继续从 VOS API 查询

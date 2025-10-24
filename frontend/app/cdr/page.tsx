@@ -382,14 +382,14 @@ export default function CdrPage() {
               {dataSource && queryMode === 'current' && (
                 <div className='flex items-center gap-2 text-xs'>
                   <span className={`px-2 py-1 rounded-full font-medium ${
-                    dataSource === 'local_database' 
+                    dataSource === 'local_database' || dataSource === 'clickhouse'
                       ? 'bg-green-100 text-green-700'
                       : 'bg-orange-100 text-orange-700'
                   }`}>
-                    {dataSource === 'local_database' ? '📦 本地数据库' : '🌐 VOS API'}
+                    {dataSource === 'local_database' || dataSource === 'clickhouse' ? '📦 本地数据库 (ClickHouse)' : '🌐 VOS API'}
                   </span>
                   <span className='text-gray-600'>⚡ {queryTime}ms</span>
-                  {dataSource === 'local_database' && (
+                  {(dataSource === 'local_database' || dataSource === 'clickhouse') && (
                     <span className='text-green-600 font-medium'>✓ 极速查询</span>
                   )}
                 </div>
