@@ -250,6 +250,75 @@ async def delete_instance(
         logger.error(f'删除 VOS 实例失败: {e}')
         raise HTTPException(status_code=500, detail=f'删除失败: {str(e)}')
 
+
+@router.get('/customers/summary')
+async def get_all_customers_summary(
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Session = Depends(get_db)
+):
+    """获取所有启用的 VOS 实例的客户总数（从本地数据库读取）"""
+    try:
+        instances = db.query(VOSInstance).filter(VOSInstance.enabled == True).all()
+        
+        total_customers = 0
+        instance_summaries = []
+        
+        for instance in instances:
+            # 从本地数据库统计客户数量
+            count = db.query(Customer).filter(
+                Customer.vos_instance_id == instance.id
+            ).count()
+            
+            total_customers += count
+            
+            instance_summaries.append({
+                'instance_id': instance.id,
+                'instance_name': instance.name,
+                'customer_count': count
+            })
+        
+        return {
+            'total_customers': total_customers,
+            'instances': instance_summaries,
+            'instance_count': len(instances),
+            'from_cache': True
+        }
+    except Exception as e:
+        logger.error(f'获取客户统计失败: {e}')
+        return {
+            'total_customers': 0,
+            'instances': [],
+            'instance_count': 0,
+            'from_cache': True,
+            'error': str(e)
+        }
+
+
+@router.get('/customers/debt-count')
+async def get_debt_customers_count(
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Session = Depends(get_db)
+):
+    """获取欠费客户数量"""
+    try:
+        # 从本地数据库统计欠费客户数量
+        debt_count = db.query(Customer).filter(
+            Customer.is_in_debt == True
+        ).count()
+        
+        return {
+            'debt_count': debt_count,
+            'success': True
+        }
+    except Exception as e:
+        logger.error(f'获取欠费客户数量失败: {e}')
+        return {
+            'debt_count': 0,
+            'success': False,
+            'error': str(e)
+        }
+
+
 @router.get('/customers/{instance_id}')
 async def get_customers_by_instance(
     instance_id: int,
@@ -420,73 +489,6 @@ async def get_instance_customers(
             status_code=500,
             detail=f'从VOS获取客户数据失败: {str(e)}'
         )
-
-@router.get('/customers/summary')
-async def get_all_customers_summary(
-    current_user: Annotated[User, Depends(get_current_user)],
-    db: Session = Depends(get_db)
-):
-    """获取所有启用的 VOS 实例的客户总数（从本地数据库读取）"""
-    try:
-        instances = db.query(VOSInstance).filter(VOSInstance.enabled == True).all()
-        
-        total_customers = 0
-        instance_summaries = []
-        
-        for instance in instances:
-            # 从本地数据库统计客户数量
-            count = db.query(Customer).filter(
-                Customer.vos_instance_id == instance.id
-            ).count()
-            
-            total_customers += count
-            
-            instance_summaries.append({
-                'instance_id': instance.id,
-                'instance_name': instance.name,
-                'customer_count': count
-            })
-        
-        return {
-            'total_customers': total_customers,
-            'instances': instance_summaries,
-            'instance_count': len(instances),
-            'from_cache': True
-        }
-    except Exception as e:
-        logger.error(f'获取客户统计失败: {e}')
-        return {
-            'total_customers': 0,
-            'instances': [],
-            'instance_count': 0,
-            'from_cache': True,
-            'error': str(e)
-        }
-
-
-@router.get('/customers/debt-count')
-async def get_debt_customers_count(
-    current_user: Annotated[User, Depends(get_current_user)],
-    db: Session = Depends(get_db)
-):
-    """获取欠费客户数量"""
-    try:
-        # 从本地数据库统计欠费客户数量
-        debt_count = db.query(Customer).filter(
-            Customer.is_in_debt == True
-        ).count()
-        
-        return {
-            'debt_count': debt_count,
-            'success': True
-        }
-    except Exception as e:
-        logger.error(f'获取欠费客户数量失败: {e}')
-        return {
-            'debt_count': 0,
-            'success': False,
-            'error': str(e)
-        }
 
 
 @router.post('/instances/{instance_id}/sync-customers')
