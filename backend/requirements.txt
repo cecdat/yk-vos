@@ -4,6 +4,7 @@ httpx
 SQLAlchemy>=1.4
 alembic
 psycopg2-binary
+clickhouse-driver>=0.2.6
 pydantic
 pydantic-settings
 python-dotenv

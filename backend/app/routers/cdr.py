@@ -19,6 +19,8 @@ from app.models.user import User
 from app.models.cdr import CDR
 from app.models.vos_instance import VOSInstance
 from app.routers.auth import get_current_user
+# ClickHouse 支持
+from app.models.clickhouse_cdr import ClickHouseCDR
 
 router = APIRouter(prefix='/cdr', tags=['cdr'])
 logger = logging.getLogger(__name__)
@@ -155,74 +157,42 @@ async def query_cdrs_from_vos(
     page_size = min(100, max(1, query_params.page_size))  # 限制最大100条
     offset = (page - 1) * page_size
     
-    # 1. 如果不强制VOS，先查本地数据库
+    # 1. 如果不强制VOS，先查 ClickHouse
     if not force_vos:
-        query = db.query(CDR).filter(
-            and_(
-                CDR.vos_id == instance_id,
-                CDR.start >= begin_dt,
-                CDR.start < end_dt
+        try:
+            local_cdrs, total_count = ClickHouseCDR.query_cdrs(
+                vos_id=instance_id,
+                start_date=begin_dt,
+                end_date=end_dt,
+                accounts=query_params.accounts,
+                caller_e164=query_params.caller_e164,
+                callee_e164=query_params.callee_e164,
+                callee_gateway=query_params.callee_gateway,
+                limit=page_size,
+                offset=offset
             )
-        )
-        
-        # 添加过滤条件（使用新字段名）
-        if query_params.accounts and len(query_params.accounts) > 0:
-            query = query.filter(CDR.account.in_(query_params.accounts))
-        
-        if query_params.caller_e164:
-            query = query.filter(CDR.caller_e164.like(f'%{query_params.caller_e164}%'))
-        
-        if query_params.callee_e164:
-            query = query.filter(CDR.callee_access_e164.like(f'%{query_params.callee_e164}%'))
-        
-        if query_params.caller_gateway:
-            query = query.filter(CDR.callee_gateway == query_params.caller_gateway)
-        
-        if query_params.callee_gateway:
-            query = query.filter(CDR.callee_gateway == query_params.callee_gateway)
-        
-        # 查询总数
-        total_count = query.count()
-        
-        # 分页查询（使用新字段名start）
-        local_cdrs = query.order_by(desc(CDR.start)).offset(offset).limit(page_size).all()
-        
-        # 如果本地有数据，直接返回
-        if local_cdrs or total_count > 0:
-            query_time = time.time() - start_time
             
-            return {
-                'success': True,
-                'cdrs': [
-                    {
-                        'flowNo': cdr.flow_no,
-                        'accountName': cdr.account_name,
-                        'account': cdr.account,
-                        'callerE164': cdr.caller_e164,
-                        'calleeAccessE164': cdr.callee_access_e164,
-                        'start': cdr.start.strftime('%Y-%m-%d %H:%M:%S') if cdr.start else None,
-                        'stop': cdr.stop.strftime('%Y-%m-%d %H:%M:%S') if cdr.stop else None,
-                        'holdTime': cdr.hold_time,
-                        'feeTime': cdr.fee_time,
-                        'fee': float(cdr.fee) if cdr.fee else 0,
-                        'endReason': cdr.end_reason,
-                        'endDirection': cdr.end_direction,
-                        'calleeGateway': cdr.callee_gateway,
-                        'calleeip': cdr.callee_ip,
-                    }
-                    for cdr in local_cdrs
-                ],
-                'count': len(local_cdrs),
-                'total': total_count,
-                'page': page,
-                'page_size': page_size,
-                'total_pages': (total_count + page_size - 1) // page_size,
-                'instance_id': instance_id,
-                'instance_name': instance.name,
-                'data_source': 'local_database',
-                'query_time_ms': round(query_time * 1000, 2),
-                'message': f'从本地数据库查询到 {total_count} 条记录（第{page}/{(total_count + page_size - 1) // page_size}页，速度：{round(query_time * 1000, 2)}ms）'
-            }
+            # 如果 ClickHouse 有数据，直接返回
+            if local_cdrs or total_count > 0:
+                query_time = time.time() - start_time
+                
+                return {
+                    'success': True,
+                    'cdrs': local_cdrs,
+                    'count': len(local_cdrs),
+                    'total': total_count,
+                    'page': page,
+                    'page_size': page_size,
+                    'total_pages': (total_count + page_size - 1) // page_size,
+                    'instance_id': instance_id,
+                    'instance_name': instance.name,
+                    'data_source': 'clickhouse',
+                    'query_time_ms': round(query_time * 1000, 2),
+                    'message': f'从 ClickHouse 查询到 {total_count} 条记录（第{page}/{(total_count + page_size - 1) // page_size}页，速度：{round(query_time * 1000, 2)}ms）'
+                }
+        except Exception as e:
+            logger.error(f'ClickHouse 查询失败，尝试从 VOS API 查询: {e}')
+            # ClickHouse 查询失败，继续从 VOS API 查询
     
     # 2. 本地没有数据或强制VOS，查询VOS API
     payload = {
@@ -267,8 +237,25 @@ async def query_cdrs_from_vos(
     # 获取话单列表
     cdrs = result.get('infoCdrs', [])
     
-    # 3. 异步存入数据库（后台任务，不阻塞响应）
-    # TODO: 这里可以改为Celery任务异步存储
+    # 3. 存入 ClickHouse（后台异步，不阻塞响应）
+    if cdrs:
+        try:
+            # 添加 vos_id 到每条记录
+            for cdr in cdrs:
+                cdr['vos_id'] = instance_id
+            
+            # 异步存储到 ClickHouse
+            import threading
+            def store_to_clickhouse():
+                try:
+                    ClickHouseCDR.insert_cdrs(cdrs, vos_id=instance_id)
+                except Exception as e:
+                    logger.error(f'存储话单到 ClickHouse 失败: {e}')
+            
+            threading.Thread(target=store_to_clickhouse, daemon=True).start()
+            logger.info(f'已触发后台任务存储 {len(cdrs)} 条话单到 ClickHouse')
+        except Exception as e:
+            logger.error(f'触发 ClickHouse 存储任务失败: {e}')
     
     return {
         'success': True,
@@ -409,35 +396,27 @@ async def export_cdrs_to_excel(
     logger.info(f'导出话单 - 实例:{instance.name}, 时间:{query_params.begin_time}~{query_params.end_time}, 账号:{query_params.accounts}')
     
     cdrs = []
-    data_source = 'local_database'
+    data_source = 'clickhouse'
     
-    # 1. 如果不强制VOS，先查本地数据库
+    # 1. 如果不强制VOS，先查 ClickHouse
     if not force_vos:
-        query = db.query(CDR).filter(
-            and_(
-                CDR.vos_id == instance_id,
-                CDR.start >= begin_dt,
-                CDR.start < end_dt
+        try:
+            cdrs, _ = ClickHouseCDR.query_cdrs(
+                vos_id=instance_id,
+                start_date=begin_dt,
+                end_date=end_dt,
+                accounts=query_params.accounts,
+                caller_e164=query_params.caller_e164,
+                callee_e164=query_params.callee_e164,
+                callee_gateway=query_params.callee_gateway,
+                limit=10000,  # 限制最多导出10000条
+                offset=0
             )
-        )
-        
-        # 添加过滤条件
-        if query_params.accounts and len(query_params.accounts) > 0:
-            query = query.filter(CDR.account.in_(query_params.accounts))
-        
-        if query_params.caller_e164:
-            query = query.filter(CDR.caller_e164.like(f'%{query_params.caller_e164}%'))
-        
-        if query_params.callee_e164:
-            query = query.filter(CDR.callee_access_e164.like(f'%{query_params.callee_e164}%'))
-        
-        if query_params.callee_gateway:
-            query = query.filter(CDR.callee_gateway == query_params.callee_gateway)
-        
-        # 限制最多导出10000条
-        cdrs = query.order_by(desc(CDR.start)).limit(10000).all()
-        
-        logger.info(f'本地数据库查询到 {len(cdrs)} 条记录')
+            logger.info(f'ClickHouse 查询到 {len(cdrs)} 条记录')
+            data_source = 'clickhouse'
+        except Exception as e:
+            logger.error(f'ClickHouse 查询失败: {e}')
+            cdrs = []
     
     # 2. 如果本地没有数据或强制VOS，从VOS API查询
     if len(cdrs) == 0 or force_vos:

@@ -69,7 +69,7 @@ services:
     image: yk-vos-backend-base:latest
     container_name: yk_vos_backend
     working_dir: /srv
-    command: sh -c "chmod +x docker-entrypoint.sh && ./docker-entrypoint.sh uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+    command: sh -c "chmod +x docker-entrypoint-clickhouse.sh && ./docker-entrypoint-clickhouse.sh uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
     ports:
       - "8000:8000"
     environment:

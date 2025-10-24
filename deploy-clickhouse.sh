@@ -204,6 +204,24 @@ echo "   API Docs:       http://localhost:8000/docs"
 echo "   ClickHouse:     http://localhost:8123"
 echo "   PostgreSQL:     localhost:5430"
 echo ""
+echo -e "${BLUE}🔐 数据库账号密码：${NC}"
+if [ -f ".env" ]; then
+    echo "   PostgreSQL:"
+    POSTGRES_USER=$(grep "^POSTGRES_USER=" .env | cut -d'=' -f2)
+    POSTGRES_PASSWORD=$(grep "^POSTGRES_PASSWORD=" .env | cut -d'=' -f2)
+    echo "      用户名: ${POSTGRES_USER:-vos_user}"
+    echo "      密码:   ${POSTGRES_PASSWORD:-vos_password}"
+    echo ""
+    echo "   ClickHouse:"
+    CLICKHOUSE_USER=$(grep "^CLICKHOUSE_USER=" .env | cut -d'=' -f2)
+    CLICKHOUSE_PASSWORD=$(grep "^CLICKHOUSE_PASSWORD=" .env | cut -d'=' -f2)
+    echo "      用户名: ${CLICKHOUSE_USER:-vos_user}"
+    echo "      密码:   ${CLICKHOUSE_PASSWORD:-vos_password}"
+else
+    echo "   PostgreSQL: vos_user / vos_password"
+    echo "   ClickHouse: vos_user / vos_password"
+fi
+echo ""
 echo -e "${BLUE}🗂️  数据存储位置：${NC}"
 echo "   ClickHouse:     $(pwd)/data/clickhouse"
 echo "   PostgreSQL:     $(pwd)/data/postgres"
