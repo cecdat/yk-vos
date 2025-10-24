@@ -145,7 +145,7 @@ export default function CdrPage() {
     return `${s}s`
   }
 
-  // 格式化时间戳为简洁格式（避免换行）
+  // 格式化时间戳为完整日期时间格式
   function formatDateTime(dateTimeStr: string | number | null | undefined): string {
     if (!dateTimeStr) return '-'
     try {
@@ -161,11 +161,13 @@ export default function CdrPage() {
         if (!isNaN(timestamp) && timestamp > 0) {
           date = new Date(timestamp)
         } else if (dateTimeStr.includes(' ')) {
-          // 已经格式化的字符串 "2025-10-23 08:30:15"
+          // 已经格式化的字符串，直接返回（去掉秒）
           const parts = dateTimeStr.split(' ')
-          const datePart = parts[0].split('-').slice(1).join('-') // 取月-日
-          const timePart = parts[1].split(':').slice(0, 2).join(':') // 取时:分
-          return `${datePart} ${timePart}`
+          if (parts.length === 2) {
+            const timeParts = parts[1].split(':')
+            return `${parts[0]} ${timeParts[0]}:${timeParts[1]}`
+          }
+          return dateTimeStr
         } else {
           return dateTimeStr
         }
@@ -173,13 +175,14 @@ export default function CdrPage() {
         return '-'
       }
       
-      // 格式化日期时间
+      // 格式化为完整日期时间: YYYY-MM-DD HH:mm
+      const year = date.getFullYear()
       const month = String(date.getMonth() + 1).padStart(2, '0')
       const day = String(date.getDate()).padStart(2, '0')
       const hours = String(date.getHours()).padStart(2, '0')
       const minutes = String(date.getMinutes()).padStart(2, '0')
       
-      return `${month}-${day} ${hours}:${minutes}`
+      return `${year}-${month}-${day} ${hours}:${minutes}`
     } catch {
       return String(dateTimeStr) || '-'
     }
@@ -245,7 +248,10 @@ export default function CdrPage() {
 
         <div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 mb-3'>
           <div>
-            <label className='block text-xs font-medium mb-1 text-gray-700'>开始日期</label>
+            <label className='block text-xs font-medium mb-1 text-gray-700'>
+              开始日期
+              <span className='text-xs text-gray-500 ml-2'>（含当天00:00）</span>
+            </label>
             <input
               type='date'
               value={beginTime ? parseDate(beginTime) : ''}
@@ -260,7 +266,10 @@ export default function CdrPage() {
             />
           </div>
           <div>
-            <label className='block text-xs font-medium mb-1 text-gray-700'>结束日期</label>
+            <label className='block text-xs font-medium mb-1 text-gray-700'>
+              结束日期
+              <span className='text-xs text-gray-500 ml-2'>（含当天23:59）</span>
+            </label>
             <input
               type='date'
               value={endTime ? parseDate(endTime) : ''}
