@@ -191,42 +191,42 @@ export default function Page(){
 
       {/* 统计卡片 */}
       <div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8'>
-        <div className='bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl p-6 text-white shadow-lg'>
+        <div className='bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl p-5 text-white shadow-lg'>
           <div className='flex items-center justify-between'>
             <div>
-              <p className='text-blue-100 text-sm mb-1'>VOS 实例</p>
-              <p className='text-3xl font-bold'>{instances.length}</p>
+              <p className='text-blue-100 text-xs mb-1'>VOS 实例</p>
+              <p className='text-2xl font-bold'>{instances.length}</p>
             </div>
-            <div className='w-12 h-12 bg-white bg-opacity-20 rounded-lg flex items-center justify-center'>
-              <svg className='w-6 h-6' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
+            <div className='w-10 h-10 bg-white bg-opacity-20 rounded-lg flex items-center justify-center'>
+              <svg className='w-5 h-5' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
                 <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01' />
               </svg>
             </div>
           </div>
         </div>
 
-        <div className='bg-gradient-to-br from-green-500 to-green-600 rounded-xl p-6 text-white shadow-lg'>
+        <div className='bg-gradient-to-br from-green-500 to-green-600 rounded-xl p-5 text-white shadow-lg'>
           <div className='flex items-center justify-between'>
             <div>
-              <p className='text-green-100 text-sm mb-1'>客户总数</p>
-              <p className='text-3xl font-bold'>{customerSummary?.total_customers || 0}</p>
+              <p className='text-green-100 text-xs mb-1'>客户总数</p>
+              <p className='text-2xl font-bold'>{formatNumber(customerSummary?.total_customers || 0)}</p>
             </div>
-            <div className='w-12 h-12 bg-white bg-opacity-20 rounded-lg flex items-center justify-center'>
-              <svg className='w-6 h-6' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
+            <div className='w-10 h-10 bg-white bg-opacity-20 rounded-lg flex items-center justify-center'>
+              <svg className='w-5 h-5' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
                 <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z' />
               </svg>
             </div>
           </div>
         </div>
 
-        <div className='bg-gradient-to-br from-red-500 to-red-600 rounded-xl p-6 text-white shadow-lg'>
+        <div className='bg-gradient-to-br from-red-500 to-red-600 rounded-xl p-5 text-white shadow-lg'>
           <div className='flex items-center justify-between'>
             <div>
-              <p className='text-red-100 text-sm mb-1'>欠费客户</p>
-              <p className='text-3xl font-bold'>{debtCustomers}</p>
+              <p className='text-red-100 text-xs mb-1'>欠费客户</p>
+              <p className='text-2xl font-bold'>{debtCustomers}</p>
             </div>
-            <div className='w-12 h-12 bg-white bg-opacity-20 rounded-lg flex items-center justify-center'>
-              <svg className='w-6 h-6' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
+            <div className='w-10 h-10 bg-white bg-opacity-20 rounded-lg flex items-center justify-center'>
+              <svg className='w-5 h-5' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
                 <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z' />
               </svg>
             </div>
@@ -237,25 +237,25 @@ export default function Page(){
           cdrSyncStatus?.is_syncing ? 'from-blue-500 to-blue-600' :
           cdrSyncStatus?.total_cdrs > 0 ? 'from-teal-500 to-teal-600' :
           'from-gray-500 to-gray-600'
-        } rounded-xl p-6 text-white shadow-lg`}>
+        } rounded-xl p-5 text-white shadow-lg`}>
           <div className='flex items-center justify-between'>
             <div className='flex-1'>
-              <p className='text-white text-opacity-90 text-sm mb-1'>话单同步</p>
-              <p className='text-3xl font-bold'>
+              <p className='text-white text-opacity-90 text-xs mb-1'>话单同步</p>
+              <p className='text-2xl font-bold'>
                 {cdrSyncStatus?.is_syncing ? '同步中' : 
                  cdrSyncStatus?.total_cdrs ? formatNumber(cdrSyncStatus.total_cdrs) : '0'}
               </p>
-              <p className='text-xs text-white text-opacity-75 mt-1' title={cdrSyncStatus?.last_sync_time || ''}>
-                {cdrSyncStatus?.last_sync_time ? `最后同步: ${formatDateTime(cdrSyncStatus.last_sync_time)}` : '暂无同步记录'}
+              <p className='text-xs text-white text-opacity-75 mt-0.5 truncate' title={cdrSyncStatus?.last_sync_time || ''}>
+                {cdrSyncStatus?.last_sync_time ? formatDateTime(cdrSyncStatus.last_sync_time) : '暂无记录'}
               </p>
             </div>
-            <div className='w-12 h-12 bg-white bg-opacity-20 rounded-lg flex items-center justify-center'>
+            <div className='w-10 h-10 bg-white bg-opacity-20 rounded-lg flex items-center justify-center'>
               {cdrSyncStatus?.is_syncing ? (
-                <svg className='w-6 h-6 animate-spin' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
+                <svg className='w-5 h-5 animate-spin' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
                   <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15' />
                 </svg>
               ) : (
-              <svg className='w-6 h-6' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
+              <svg className='w-5 h-5' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
                   <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z' />
               </svg>
               )}
@@ -268,10 +268,10 @@ export default function Page(){
       {/* 同步进度卡片 */}
       {cdrSyncProgress?.is_syncing && (
         <section className='mb-8'>
-          <div className='bg-gradient-to-r from-blue-500 to-purple-600 rounded-xl p-6 text-white shadow-lg'>
-            <div className='flex items-center justify-between mb-4'>
-              <h2 className='text-xl font-bold flex items-center gap-2'>
-                <svg className='w-6 h-6 animate-spin' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
+          <div className='bg-gradient-to-r from-blue-500 to-purple-600 rounded-xl p-5 text-white shadow-lg'>
+            <div className='flex items-center justify-between mb-3'>
+              <h2 className='text-lg font-bold flex items-center gap-2'>
+                <svg className='w-5 h-5 animate-spin' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
                   <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15' />
             </svg>
                 正在同步话单数据
@@ -281,32 +281,32 @@ export default function Page(){
             </span>
             </div>
 
-            <div className='grid grid-cols-1 md:grid-cols-3 gap-4 mb-4'>
-              <div className='bg-white bg-opacity-20 rounded-lg p-4'>
-                <p className='text-sm opacity-75 mb-1'>当前节点</p>
-                <p className='text-lg font-semibold'>{cdrSyncProgress.current_instance || '准备中...'}</p>
+            <div className='grid grid-cols-1 md:grid-cols-3 gap-3 mb-3'>
+              <div className='bg-white bg-opacity-20 rounded-lg p-3'>
+                <p className='text-xs opacity-75 mb-1'>当前节点</p>
+                <p className='text-base font-semibold'>{cdrSyncProgress.current_instance || '准备中...'}</p>
               </div>
               
-              <div className='bg-white bg-opacity-20 rounded-lg p-4'>
-                <p className='text-sm opacity-75 mb-1'>当前客户</p>
-                <p className='text-lg font-semibold'>
+              <div className='bg-white bg-opacity-20 rounded-lg p-3'>
+                <p className='text-xs opacity-75 mb-1'>当前客户</p>
+                <p className='text-base font-semibold'>
                   {cdrSyncProgress.current_customer || '准备中...'}
                   {cdrSyncProgress.current_customer_index && cdrSyncProgress.total_customers && (
-                    <span className='text-sm ml-2'>
+                    <span className='text-xs ml-2'>
                       ({cdrSyncProgress.current_customer_index}/{cdrSyncProgress.total_customers})
                     </span>
                   )}
                 </p>
               </div>
               
-              <div className='bg-white bg-opacity-20 rounded-lg p-4'>
-                <p className='text-sm opacity-75 mb-1'>已同步数据</p>
-                <p className='text-lg font-semibold'>{formatNumber(cdrSyncProgress.synced_count || 0)} 条</p>
+              <div className='bg-white bg-opacity-20 rounded-lg p-3'>
+                <p className='text-xs opacity-75 mb-1'>已同步数据</p>
+                <p className='text-base font-semibold'>{formatNumber(cdrSyncProgress.synced_count || 0)} 条</p>
               </div>
             </div>
 
             {/* 进度条 */}
-            <div className='bg-white bg-opacity-20 rounded-full h-3 overflow-hidden'>
+            <div className='bg-white bg-opacity-20 rounded-full h-2 overflow-hidden'>
               <div 
                 className='bg-white h-full transition-all duration-300 ease-out'
                 style={{ width: `${cdrSyncProgress.progress_percent || 0}%` }}
