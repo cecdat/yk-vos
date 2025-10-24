@@ -146,20 +146,42 @@ export default function CdrPage() {
   }
 
   // 格式化时间戳为简洁格式（避免换行）
-  function formatDateTime(dateTimeStr: string | null | undefined): string {
+  function formatDateTime(dateTimeStr: string | number | null | undefined): string {
     if (!dateTimeStr) return '-'
     try {
-      // 如果已经是格式化的字符串，直接显示简短格式
-      if (dateTimeStr.includes(' ')) {
-        // 格式: "2025-10-23 08:30:15" -> "10-23 08:30"
-        const parts = dateTimeStr.split(' ')
-        const datePart = parts[0].split('-').slice(1).join('-') // 取月-日
-        const timePart = parts[1].split(':').slice(0, 2).join(':') // 取时:分
-        return `${datePart} ${timePart}`
+      let date: Date
+      
+      // 处理不同的时间格式
+      if (typeof dateTimeStr === 'number') {
+        // 毫秒级时间戳
+        date = new Date(dateTimeStr)
+      } else if (typeof dateTimeStr === 'string') {
+        // 如果是数字字符串，当作毫秒时间戳处理
+        const timestamp = Number(dateTimeStr)
+        if (!isNaN(timestamp) && timestamp > 0) {
+          date = new Date(timestamp)
+        } else if (dateTimeStr.includes(' ')) {
+          // 已经格式化的字符串 "2025-10-23 08:30:15"
+          const parts = dateTimeStr.split(' ')
+          const datePart = parts[0].split('-').slice(1).join('-') // 取月-日
+          const timePart = parts[1].split(':').slice(0, 2).join(':') // 取时:分
+          return `${datePart} ${timePart}`
+        } else {
+          return dateTimeStr
+        }
+      } else {
+        return '-'
       }
-      return dateTimeStr
+      
+      // 格式化日期时间
+      const month = String(date.getMonth() + 1).padStart(2, '0')
+      const day = String(date.getDate()).padStart(2, '0')
+      const hours = String(date.getHours()).padStart(2, '0')
+      const minutes = String(date.getMinutes()).padStart(2, '0')
+      
+      return `${month}-${day} ${hours}:${minutes}`
     } catch {
-      return dateTimeStr || '-'
+      return String(dateTimeStr) || '-'
     }
   }
 
@@ -421,7 +443,7 @@ export default function CdrPage() {
                         <div className='text-xs text-gray-500'>{cdr.account || '-'}</div>
                       </div>
                     </td>
-                    <td className='px-2 py-2 text-xs text-gray-600 font-mono'>{cdr.callerE164 || '-'}</td>
+                    <td className='px-2 py-2 text-xs text-gray-600 font-mono'>{cdr.callerAccessE164 || cdr.callerE164 || '-'}</td>
                     <td className='px-2 py-2 text-xs text-gray-600 font-mono'>{cdr.calleeAccessE164 || '-'}</td>
                     <td className='px-2 py-2 text-xs text-gray-600 truncate max-w-xs' title={cdr.calleeGateway}>
                       {cdr.calleeGateway || '-'}
