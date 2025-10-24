@@ -32,28 +32,50 @@ export default function Navbar(){
     <div className='flex items-center justify-between mb-6 bg-white bg-opacity-90 backdrop-filter backdrop-blur-lg p-4 rounded-xl shadow-lg border border-white border-opacity-30'>
       <div className='text-2xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent'>VOS 控制台</div>
       <div className='flex items-center gap-4'>
-        {/* VOS 切换选择器 */}
+        {/* VOS 切换选择器 - 美化版 */}
         {allVOS.length > 0 && (
-          <div className='flex items-center gap-2 px-3 py-2 bg-gradient-to-r from-green-50 to-teal-50 rounded-lg border border-green-200'>
-            <svg className='w-5 h-5 text-green-600' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
-              <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01' />
-            </svg>
-            <select
-              value={currentVOS?.id || ''}
-              onChange={handleVOSChange}
-              disabled={loading}
-              className='bg-transparent text-sm font-medium text-gray-700 outline-none cursor-pointer disabled:cursor-not-allowed'
-            >
-              {allVOS.length === 0 && (
-                <option value=''>暂无 VOS 节点</option>
-              )}
-              {allVOS.map(vos => (
-                <option key={vos.id} value={vos.id}>
-                  {vos.name}
-                  {!vos.enabled && ' (禁用)'}
-                </option>
-              ))}
-            </select>
+          <div className='relative group'>
+            <div className='flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg shadow-md hover:shadow-lg transition-all cursor-pointer'>
+              <div className='flex items-center gap-2 flex-1'>
+                <div className='w-8 h-8 bg-white bg-opacity-20 rounded-md flex items-center justify-center'>
+                  <svg className='w-5 h-5 text-white' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
+                    <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01' />
+                  </svg>
+                </div>
+                <div className='flex flex-col'>
+                  <span className='text-xs text-white text-opacity-75'>当前节点</span>
+                  <select
+                    value={currentVOS?.id || ''}
+                    onChange={handleVOSChange}
+                    disabled={loading}
+                    className='bg-transparent text-sm font-semibold text-white outline-none cursor-pointer disabled:cursor-not-allowed appearance-none pr-6'
+                    style={{
+                      background: 'transparent',
+                      WebkitAppearance: 'none',
+                      MozAppearance: 'none'
+                    }}
+                  >
+                    {allVOS.length === 0 && (
+                      <option value=''>暂无 VOS 节点</option>
+                    )}
+                    {allVOS.map(vos => (
+                      <option key={vos.id} value={vos.id} className='text-gray-900 bg-white'>
+                        {vos.name}
+                        {!vos.enabled && ' (禁用)'}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <svg className='w-4 h-4 text-white text-opacity-75' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
+                <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M19 9l-7 7-7-7' />
+              </svg>
+            </div>
+            {currentVOS?.enabled === false && (
+              <div className='absolute -bottom-1 -right-1 px-2 py-0.5 bg-orange-500 text-white text-xs rounded-full shadow-md'>
+                已禁用
+              </div>
+            )}
           </div>
         )}
         

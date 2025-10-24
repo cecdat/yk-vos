@@ -257,7 +257,7 @@ export default function CdrPage() {
     }
   }
 
-  // 导出Excel
+  // 导出Excel - 导出全部查询结果
   async function handleExport() {
     try {
       if (!currentVOS) {
@@ -265,7 +265,21 @@ export default function CdrPage() {
         return
       }
 
-      // 使用当前查询条件
+      if (totalCount === 0) {
+        alert('没有数据可以导出')
+        return
+      }
+
+      // 确认导出
+      const confirmMsg = totalCount > 1000 
+        ? `即将导出 ${totalCount} 条记录，数据量较大，可能需要一些时间，确定继续吗？`
+        : `确定导出 ${totalCount} 条记录吗？`
+      
+      if (!confirm(confirmMsg)) {
+        return
+      }
+
+      // 使用当前查询条件导出全部数据（不分页）
       const payload = {
         begin_time: beginTime,
         end_time: endTime,
@@ -275,6 +289,7 @@ export default function CdrPage() {
         callee_gateway: gateway ? gateway.trim() : undefined
       }
 
+      setLoading(true)
       const res = await api.post(
         `/cdr/export/${currentVOS.id}`,
         payload,
@@ -291,9 +306,13 @@ export default function CdrPage() {
       link.click()
       link.remove()
       window.URL.revokeObjectURL(url)
+      
+      alert(`成功导出 ${totalCount} 条记录！`)
     } catch (e: any) {
       console.error('导出失败:', e)
       alert(e.response?.data?.detail || '导出失败')
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -414,18 +433,29 @@ export default function CdrPage() {
 
         {/* 导出按钮 */}
         {cdrs.length > 0 && (
-          <div className='mt-3 flex items-center gap-2'>
+          <div className='mt-3 flex items-center gap-3'>
             <button
               onClick={handleExport}
               disabled={loading}
-              className='px-4 py-2 text-sm bg-gradient-to-r from-green-600 to-teal-600 text-white rounded-lg font-medium hover:from-green-700 hover:to-teal-700 transition disabled:opacity-50 flex items-center gap-2'
+              className='px-4 py-2 text-sm bg-gradient-to-r from-green-600 to-teal-600 text-white rounded-lg font-medium hover:from-green-700 hover:to-teal-700 transition disabled:opacity-50 flex items-center gap-2 shadow-md hover:shadow-lg'
             >
-              <svg className='w-4 h-4' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
-                <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z' />
-              </svg>
-              导出Excel ({cdrs.length}条)
+              {loading ? (
+                <svg className='animate-spin h-4 w-4' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
+                  <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15' />
+                </svg>
+              ) : (
+                <svg className='w-4 h-4' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
+                  <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z' />
+                </svg>
+              )}
+              {loading ? '导出中...' : `导出Excel (${totalCount}条)`}
             </button>
-            <span className='text-xs text-gray-500'>当前查询结果</span>
+            <div className='flex flex-col text-xs text-gray-500'>
+              <span>📊 导出全部查询结果</span>
+              {totalCount !== cdrs.length && (
+                <span className='text-orange-600'>⚠️ 当前页显示{cdrs.length}条，将导出全部{totalCount}条</span>
+              )}
+            </div>
           </div>
         )}
       </div>

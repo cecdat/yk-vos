@@ -28,7 +28,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           ) : (
             // 其他页面：显示完整布局
             <div className='flex min-h-screen'>
-              <aside className='w-64 p-6 bg-white bg-opacity-95 backdrop-filter backdrop-blur-lg border-r border-white border-opacity-30 shadow-lg hidden md:block'>
+              <aside className='w-64 p-6 bg-white bg-opacity-95 backdrop-filter backdrop-blur-lg border-r border-white border-opacity-30 shadow-lg hidden md:block fixed left-0 top-0 bottom-0 overflow-y-auto'>
                 <div className='flex items-center gap-2 mb-8'>
                   <div className='w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center flex-shrink-0'>
                     <svg className='w-6 h-6 text-white' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
@@ -88,7 +88,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                   </div>
             </nav>
           </aside>
-              <div className='flex-1 p-6 main-content'>
+              <div className='flex-1 p-6 main-content ml-64'>
             <Navbar />
             {children}
           </div>
