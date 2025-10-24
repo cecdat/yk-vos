@@ -15,6 +15,7 @@ from app.models.vos_instance import VOSInstance
 from app.models.customer import Customer
 from app.tasks.sync_tasks import sync_all_instances_cdrs, sync_customers_for_instance
 from app.tasks.initial_sync_tasks import sync_cdrs_for_single_day
+from app.tasks.manual_sync_tasks import sync_single_customer_cdrs
 from datetime import datetime, timedelta
 
 logger = logging.getLogger(__name__)
@@ -153,23 +154,19 @@ async def manual_cdr_sync(
         
         else:
             # 模式3：指定节点指定客户
-            # 这需要专门的任务函数，暂时用现有任务
-            today = datetime.now().date()
-            tasks = []
-            for i in range(params.days):
-                sync_date = today - timedelta(days=i)
-                task = sync_cdrs_for_single_day.apply_async(
-                    args=[params.instance_id, sync_date.strftime('%Y%m%d')],
-                    countdown=i * 5
-                )
-                tasks.append(str(task.id))
-            
             customer = db.query(Customer).filter(Customer.id == params.customer_id).first()
+            
+            # 使用专门的单客户同步任务
+            task = sync_single_customer_cdrs.apply_async(
+                args=[params.instance_id, params.customer_id, params.days]
+            )
+            
             logger.info(f'用户 {current_user.username} 触发节点 {params.instance_id} 客户 {customer.account} 话单同步')
             return {
                 'success': True,
-                'message': f'已启动指定客户 {customer.account} 的话单同步（最近{params.days}天，共{len(tasks)}个任务）',
-                'task_ids': tasks
+                'message': f'已启动客户 {customer.account} 的话单同步（最近{params.days}天）',
+                'task_id': str(task.id),
+                'customer': customer.account
             }
     
     except HTTPException:
