@@ -16,26 +16,21 @@ interface CustomerSummary {
   instance_count: number
 }
 
-interface TaskStatus {
-  workers: {
-    count: number
-    status: string
-  }
-  tasks: {
-    active: number
-    scheduled: number
-    reserved: number
-    active_list: Array<{
-      name: string
-      worker: string
-      id: string
-    }>
-  }
-  sync_tasks: {
-    registered_count: number
-    task_types: string[]
-  }
+interface CDRSyncStatus {
+  success: boolean
   status: string
+  is_syncing: boolean
+  total_cdrs: number
+  last_sync_time: string | null
+  instances_count: number
+  instances: Array<{
+    instance_id: number
+    instance_name: string
+    total_cdrs: number
+    last_sync_time: string | null
+    status: string
+  }>
+  next_sync: string
 }
 
 export default function Page(){
@@ -43,7 +38,7 @@ export default function Page(){
   const [instances, setInstances] = useState<any[]>([])
   const [customerSummary, setCustomerSummary] = useState<CustomerSummary | null>(null)
   const [debtCustomers, setDebtCustomers] = useState(0)
-  const [taskStatus, setTaskStatus] = useState<TaskStatus | null>(null)
+  const [cdrSyncStatus, setCdrSyncStatus] = useState<CDRSyncStatus | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -56,7 +51,7 @@ export default function Page(){
       fetchInstances(),
       fetchCustomerSummary(),
       fetchDebtCustomers(),
-      fetchTaskStatus()
+      fetchCDRSyncStatus()
     ])
     setLoading(false)
   }
@@ -90,18 +85,46 @@ export default function Page(){
     }
   }
 
-  async function fetchTaskStatus() {
+  async function fetchCDRSyncStatus() {
     try {
-      const res = await api.get('/tasks/status')
-      setTaskStatus(res.data)
+      const res = await api.get('/tasks/cdr-sync-status')
+      setCdrSyncStatus(res.data)
     } catch (e) {
-      console.error('获取任务状态失败:', e)
-      setTaskStatus({
-        workers: { count: 0, status: 'unknown' },
-        tasks: { active: 0, scheduled: 0, reserved: 0, active_list: [] },
-        sync_tasks: { registered_count: 0, task_types: [] },
-        status: 'error'
+      console.error('获取话单同步状态失败:', e)
+      setCdrSyncStatus({
+        success: false,
+        status: 'error',
+        is_syncing: false,
+        total_cdrs: 0,
+        last_sync_time: null,
+        instances_count: 0,
+        instances: [],
+        next_sync: ''
       })
+    }
+  }
+  
+  function formatNumber(num: number): string {
+    if (num >= 100000000) {
+      return (num / 100000000).toFixed(1) + '亿'
+    } else if (num >= 10000) {
+      return (num / 10000).toFixed(1) + '万'
+    }
+    return num.toString()
+  }
+  
+  function formatDateTime(dateStr: string | null): string {
+    if (!dateStr) return '暂无数据'
+    try {
+      const date = new Date(dateStr)
+      return date.toLocaleString('zh-CN', {
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit'
+      })
+    } catch {
+      return '无效时间'
     }
   }
 
@@ -168,25 +191,31 @@ export default function Page(){
         </div>
 
         <div className={`bg-gradient-to-br ${
-          taskStatus?.status === 'healthy' ? 'from-teal-500 to-teal-600' :
-          taskStatus?.status === 'warning' ? 'from-yellow-500 to-yellow-600' :
+          cdrSyncStatus?.is_syncing ? 'from-blue-500 to-blue-600' :
+          cdrSyncStatus?.total_cdrs > 0 ? 'from-teal-500 to-teal-600' :
           'from-gray-500 to-gray-600'
         } rounded-xl p-6 text-white shadow-lg`}>
           <div className='flex items-center justify-between'>
-            <div>
-              <p className='text-white text-opacity-90 text-sm mb-1'>任务服务</p>
+            <div className='flex-1'>
+              <p className='text-white text-opacity-90 text-sm mb-1'>话单同步</p>
               <p className='text-3xl font-bold'>
-                {taskStatus?.status === 'healthy' ? '正常' :
-                 taskStatus?.status === 'warning' ? '警告' : '异常'}
+                {cdrSyncStatus?.is_syncing ? '同步中' : 
+                 cdrSyncStatus?.total_cdrs ? formatNumber(cdrSyncStatus.total_cdrs) : '0'}
               </p>
-              <p className='text-xs text-white text-opacity-75 mt-1'>
-                Worker: {taskStatus?.workers.count || 0} | 活跃: {taskStatus?.tasks.active || 0}
+              <p className='text-xs text-white text-opacity-75 mt-1' title={cdrSyncStatus?.last_sync_time || ''}>
+                {cdrSyncStatus?.last_sync_time ? `最后同步: ${formatDateTime(cdrSyncStatus.last_sync_time)}` : '暂无同步记录'}
               </p>
             </div>
             <div className='w-12 h-12 bg-white bg-opacity-20 rounded-lg flex items-center justify-center'>
-              <svg className='w-6 h-6' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
-                <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z' />
-              </svg>
+              {cdrSyncStatus?.is_syncing ? (
+                <svg className='w-6 h-6 animate-spin' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
+                  <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15' />
+                </svg>
+              ) : (
+                <svg className='w-6 h-6' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
+                  <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z' />
+                </svg>
+              )}
             </div>
           </div>
         </div>

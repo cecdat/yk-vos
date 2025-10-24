@@ -189,20 +189,22 @@ def sync_customers_for_new_instance(instance_id: int):
 @celery.task
 def sync_cdrs_for_single_day(instance_id: int, date_str: str):
     """
-    同步单个VOS实例单天的历史话单
+    同步单个VOS实例单天的历史话单到ClickHouse
     
     Args:
         instance_id: VOS实例ID
         date_str: 日期字符串，格式：YYYYMMDD
     """
     db = SessionLocal()
+    from app.models.clickhouse_cdr import ClickHouseCDR
+    
     try:
         inst = db.query(VOSInstance).filter(VOSInstance.id == instance_id).first()
         if not inst:
             logger.error(f'VOS实例 {instance_id} 未找到')
             return {'success': False, 'message': 'VOS实例未找到'}
         
-        logger.info(f'📞 开始同步 VOS {inst.name} 在 {date_str} 的话单数据...')
+        logger.info(f'📞 开始同步 VOS {inst.name} 在 {date_str} 的话单数据到 ClickHouse...')
         
         client = VOSClient(inst.base_url)
         
@@ -240,114 +242,25 @@ def sync_cdrs_for_single_day(instance_id: int, date_str: str):
             return {'success': True, 'total': 0, 'new': 0, 'date': date_str}
         
         total = len(cdrs)
-        new_count = 0
         
-        for c in cdrs:
-            # 提取话单唯一标识（flowNo）- VOS返回的是整数
-            flow_no = c.get('flowNo')
-            if not flow_no:
-                logger.warning(f'话单缺少flowNo字段，跳过: {c}')
-                continue
+        # 存储到 ClickHouse
+        try:
+            inserted = ClickHouseCDR.insert_cdrs(cdrs, vos_id=inst.id)
+            logger.info(f'✅ VOS {inst.name} 在 {date_str} 话单同步完成: 总数={total}, 新增={inserted}')
             
-            # 转换为字符串存储
-            flow_no_str = str(flow_no)
-            
-            # 检查是否已存在（使用flowNo去重）
-            exists = db.query(CDR).filter(CDR.flow_no == flow_no_str).first()
-            if exists:
-                continue
-            
-            # 提取账户信息（完全匹配VOS字段名）
-            account_name = c.get('accountName', '')
-            account = c.get('account', '')
-            
-            # 提取呼叫信息（完全匹配VOS字段名）
-            caller_e164 = c.get('callerE164', '')
-            callee_access_e164 = c.get('calleeAccessE164', '')
-            
-            # 提取时间信息（VOS返回的是毫秒时间戳）
-            start_timestamp = c.get('start')  # 毫秒时间戳，如 1760922383500
-            stop_timestamp = c.get('stop')
-            
-            # 时间戳转换（毫秒 → datetime）
-            start_dt = None
-            stop_dt = None
-            
-            if start_timestamp:
-                try:
-                    # 毫秒转秒，然后转datetime
-                    start_dt = datetime.fromtimestamp(start_timestamp / 1000.0)
-                except Exception as e:
-                    logger.warning(f'start时间戳转换失败: {start_timestamp}, 错误: {e}')
-            
-            if stop_timestamp:
-                try:
-                    stop_dt = datetime.fromtimestamp(stop_timestamp / 1000.0)
-                except Exception as e:
-                    logger.warning(f'stop时间戳转换失败: {stop_timestamp}, 错误: {e}')
-            
-            # 如果start转换失败，跳过这条记录
-            if not start_dt:
-                logger.warning(f'话单缺少有效的start时间，跳过: flowNo={flow_no}')
-                continue
-            
-            # 提取时长和费用（完全匹配VOS字段名）
-            hold_time = c.get('holdTime', 0)
-            fee_time = c.get('feeTime', 0)
-            fee_value = c.get('fee', 0)
-            
-            # 提取终止信息（完全匹配VOS字段名）
-            end_reason_raw = c.get('endReason')
-            end_reason = str(end_reason_raw) if end_reason_raw is not None else ''
-            
-            end_direction = c.get('endDirection')
-            if end_direction is not None:
-                try:
-                    end_direction = int(end_direction)
-                except:
-                    end_direction = None
-            
-            # 提取网关和IP（完全匹配VOS字段名）
-            callee_gateway = c.get('calleeGateway', '')
-            callee_ip = c.get('calleeip', '')
-            
-            # 创建新记录
-            newc = CDR(
-                vos_id=inst.id,
-                account_name=account_name,
-                account=account,
-                caller_e164=caller_e164,
-                callee_access_e164=callee_access_e164,
-                start=start_dt,
-                stop=stop_dt,
-                hold_time=hold_time,
-                fee_time=fee_time,
-                fee=fee_value,
-                end_reason=end_reason,
-                end_direction=end_direction,
-                callee_gateway=callee_gateway,
-                callee_ip=callee_ip,
-                raw=c,  # 保存原始JSON数据（JSONB格式）
-                flow_no=flow_no_str
-            )
-            db.add(newc)
-            new_count += 1
-        
-        db.commit()
-        
-        logger.info(f'✅ VOS {inst.name} 在 {date_str} 话单同步完成: 总数={total}, 新增={new_count}')
-        
-        return {
-            'success': True,
-            'total': total,
-            'new': new_count,
-            'date': date_str,
-            'instance_name': inst.name
-        }
+            return {
+                'success': True,
+                'total': total,
+                'new': inserted,
+                'date': date_str,
+                'instance_name': inst.name
+            }
+        except Exception as e:
+            logger.exception(f'存储话单到 ClickHouse 失败 ({inst.name}, {date_str}): {e}')
+            return {'success': False, 'message': f'ClickHouse 存储失败: {str(e)}', 'date': date_str}
         
     except Exception as e:
         logger.exception(f'同步VOS实例 {instance_id} 在 {date_str} 的话单数据时发生错误: {e}')
-        db.rollback()
         return {'success': False, 'message': str(e), 'date': date_str}
     finally:
         db.close()

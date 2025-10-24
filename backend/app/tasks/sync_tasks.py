@@ -50,14 +50,24 @@ def sync_all_instances_online_phones():
 
 @celery.task
 def sync_all_instances_cdrs(days=1):
+    """
+    定时同步所有VOS实例的历史话单到ClickHouse
+    默认同步最近1天的数据
+    """
     db = SessionLocal()
+    from app.models.clickhouse_cdr import ClickHouseCDR
+    
     try:
         instances = db.query(VOSInstance).filter(VOSInstance.enabled == True).all()
         if not instances:
             logger.info('没有启用的VOS实例，跳过同步话单任务')
             return {'success': True, 'message': '没有VOS实例需要同步', 'instances_count': 0}
         
+        results = []
+        total_synced = 0
+        
         for inst in instances:
+            logger.info(f'开始同步 VOS 实例话单: {inst.name}')
             client = VOSClient(inst.base_url)
             end = datetime.utcnow()
             start = end - timedelta(days=days)
@@ -70,52 +80,86 @@ def sync_all_instances_cdrs(days=1):
                 'beginTime': start.strftime('%Y%m%d'),
                 'endTime': end.strftime('%Y%m%d')
             }
+            
             try:
                 res = client.post('/external/server/GetCdr', payload=payload)
             except Exception as e:
-                logger.exception('VOS CDR fetch failed for %s: %s', inst.base_url, e)
+                logger.exception(f'VOS CDR fetch failed for {inst.name}: {e}')
+                results.append({
+                    'instance_id': inst.id,
+                    'instance_name': inst.name,
+                    'success': False,
+                    'error': str(e)
+                })
                 continue
+            
             if not isinstance(res, dict):
-                logger.warning('Unexpected CDR response type from %s', inst.base_url)
+                logger.warning(f'Unexpected CDR response type from {inst.name}')
+                results.append({
+                    'instance_id': inst.id,
+                    'instance_name': inst.name,
+                    'success': False,
+                    'error': 'Invalid response type'
+                })
                 continue
+            
             if res.get('retCode') != 0:
-                logger.warning('VOS returned retCode!=0 for %s: %s', inst.base_url, res.get('exception'))
+                error_msg = res.get('exception', 'Unknown error')
+                logger.warning(f'VOS returned retCode!=0 for {inst.name}: {error_msg}')
+                results.append({
+                    'instance_id': inst.id,
+                    'instance_name': inst.name,
+                    'success': False,
+                    'error': error_msg
+                })
                 continue
+            
             cdrs = res.get('infoCdrs') or res.get('cdrs') or res.get('CDRList') or []
             if not isinstance(cdrs, list):
                 for v in res.values():
                     if isinstance(v, list):
                         cdrs = v
                         break
-            for c in cdrs:
-                caller = c.get('callerE164') or c.get('caller') or c.get('src') or c.get('from') or ''
-                callee = c.get('calleeE164') or c.get('callee') or c.get('dst') or c.get('to') or ''
-                caller_gw = c.get('callerGateway') or c.get('caller_gateway') or ''
-                callee_gw = c.get('calleeGateway') or c.get('callee_gateway') or ''
-                start_time = c.get('startTime') or c.get('start_time') or c.get('StartTime') or None
-                end_time = c.get('endTime') or c.get('end_time') or c.get('EndTime') or None
+            
+            # 存储到 ClickHouse
+            if cdrs:
                 try:
-                    if isinstance(start_time, str):
-                        parsed = dateparser.parse(start_time)
-                        start_time_norm = parsed
-                    else:
-                        start_time_norm = start_time
-                except Exception:
-                    start_time_norm = start_time
-                duration = c.get('duration') or c.get('billsec') or 0
-                cost = c.get('fee') or c.get('cost') or 0
-                disposition = c.get('releaseCause') or c.get('disposition') or c.get('status') or ''
-                raw = json.dumps(c, ensure_ascii=False)
-                h_src = f"{caller}|{callee}|{start_time_norm}|{int(duration)}"
-                h = hashlib.sha256(h_src.encode('utf-8')).hexdigest()[:16]
-                exists = db.query(CDR).filter(CDR.vos_id==inst.id, CDR.hash==h).first()
-                if exists:
-                    continue
-                newc = CDR(vos_id=inst.id, caller=caller, callee=callee, start_time=start_time_norm, end_time=end_time, duration=duration, cost=cost, disposition=disposition, raw=raw, caller_gateway=caller_gw, callee_gateway=callee_gw, hash=h)
-                db.add(newc)
-            db.commit()
+                    inserted = ClickHouseCDR.insert_cdrs(cdrs, vos_id=inst.id)
+                    total_synced += inserted
+                    logger.info(f'✅ VOS {inst.name} 话单同步完成: {inserted} 条')
+                    results.append({
+                        'instance_id': inst.id,
+                        'instance_name': inst.name,
+                        'success': True,
+                        'synced_count': inserted
+                    })
+                except Exception as e:
+                    logger.exception(f'存储话单到 ClickHouse 失败 ({inst.name}): {e}')
+                    results.append({
+                        'instance_id': inst.id,
+                        'instance_name': inst.name,
+                        'success': False,
+                        'error': f'ClickHouse 存储失败: {str(e)}'
+                    })
+            else:
+                logger.info(f'VOS {inst.name} 没有新话单数据')
+                results.append({
+                    'instance_id': inst.id,
+                    'instance_name': inst.name,
+                    'success': True,
+                    'synced_count': 0
+                })
+        
+        return {
+            'success': True,
+            'instances_count': len(instances),
+            'total_synced': total_synced,
+            'results': results
+        }
+        
     except Exception as e:
-        logger.exception('Error syncing CDRs: %s', e)
+        logger.exception(f'Error syncing CDRs: {e}')
+        return {'success': False, 'message': str(e)}
     finally:
         db.close()
 

@@ -232,6 +232,37 @@ class ClickHouseCDR:
         return result[0][0]
     
     @staticmethod
+    def get_sync_status(vos_id: int) -> Tuple[int, Optional[datetime]]:
+        """获取指定VOS实例的话单同步状态
+        
+        Returns:
+            (total_count, last_sync_time): 总记录数和最后同步时间
+        """
+        try:
+            ch_db = get_clickhouse_db()
+            
+            # 查询总记录数和最后同步时间
+            query = f"""
+                SELECT 
+                    count() as count,
+                    MAX(created_at) as last_sync
+                FROM cdrs
+                WHERE vos_id = {vos_id}
+            """
+            result = ch_db.execute(query)
+            
+            if result and result[0]:
+                total_count = result[0][0]
+                last_sync = result[0][1]
+                return (total_count, last_sync)
+            else:
+                return (0, None)
+                
+        except Exception as e:
+            logger.error(f'获取同步状态失败 (vos_id={vos_id}): {e}')
+            return (0, None)
+    
+    @staticmethod
     def delete_old_partitions(months_to_keep: int = 12) -> List[str]:
         """删除旧分区（保留最近 N 个月）
         

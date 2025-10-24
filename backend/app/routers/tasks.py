@@ -169,3 +169,97 @@ async def get_recent_task_logs(
         'logs': []
     }
 
+
+@router.get('/cdr-sync-status')
+async def get_cdr_sync_status(
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Session = Depends(get_db)
+):
+    """
+    获取历史话单同步状态
+    
+    返回:
+    - 最后同步时间
+    - 同步的数据量
+    - 任务状态（运行中/成功/失败）
+    """
+    try:
+        from app.models.clickhouse_cdr import ClickHouseCDR
+        from app.models.vos_instance import VOSInstance
+        
+        # 获取所有启用的VOS实例
+        instances = db.query(VOSInstance).filter(VOSInstance.enabled == True).all()
+        
+        if not instances:
+            return {
+                'success': True,
+                'status': 'no_instances',
+                'message': '没有启用的VOS实例',
+                'instances': []
+            }
+        
+        # 获取每个实例的同步状态
+        instance_stats = []
+        total_count = 0
+        latest_sync_time = None
+        
+        for inst in instances:
+            try:
+                # 查询最近的话单数据（获取最后同步时间和数量）
+                count, last_sync = ClickHouseCDR.get_sync_status(vos_id=inst.id)
+                total_count += count
+                
+                if last_sync and (not latest_sync_time or last_sync > latest_sync_time):
+                    latest_sync_time = last_sync
+                
+                instance_stats.append({
+                    'instance_id': inst.id,
+                    'instance_name': inst.name,
+                    'total_cdrs': count,
+                    'last_sync_time': last_sync.isoformat() if last_sync else None,
+                    'status': 'synced' if count > 0 else 'empty'
+                })
+            except Exception as e:
+                logger.error(f'获取VOS实例 {inst.name} 同步状态失败: {e}')
+                instance_stats.append({
+                    'instance_id': inst.id,
+                    'instance_name': inst.name,
+                    'total_cdrs': 0,
+                    'last_sync_time': None,
+                    'status': 'error',
+                    'error': str(e)
+                })
+        
+        # 检查任务是否正在运行
+        inspect = celery.control.inspect()
+        active_tasks = inspect.active()
+        is_syncing = False
+        
+        if active_tasks:
+            for worker, tasks in active_tasks.items():
+                for task in tasks:
+                    if 'sync_all_instances_cdrs' in task.get('name', '') or 'sync_cdrs_for_single_day' in task.get('name', ''):
+                        is_syncing = True
+                        break
+        
+        return {
+            'success': True,
+            'status': 'syncing' if is_syncing else 'idle',
+            'is_syncing': is_syncing,
+            'total_cdrs': total_count,
+            'last_sync_time': latest_sync_time.isoformat() if latest_sync_time else None,
+            'instances_count': len(instances),
+            'instances': instance_stats,
+            'next_sync': '每天凌晨 01:30 自动同步'
+        }
+        
+    except Exception as e:
+        logger.exception(f'获取话单同步状态失败: {e}')
+        return {
+            'success': False,
+            'error': str(e),
+            'status': 'error',
+            'total_cdrs': 0,
+            'last_sync_time': None,
+            'instances': []
+        }
