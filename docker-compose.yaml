@@ -1,24 +1,45 @@
-# YK-VOS 生产环境配置
-# 特点：使用基础镜像 + 代码挂载，修改代码后重启容器即可生效
+# YK-VOS ClickHouse 架构配置
+# 特点：使用 ClickHouse 存储海量话单数据，PostgreSQL 存储配置数据
 
 services:
+  # ClickHouse - 话单数据存储（OLAP）
+  clickhouse:
+    image: docker.1ms.run/clickhouse/clickhouse-server:latest
+    container_name: yk_vos_clickhouse
+    environment:
+      CLICKHOUSE_DB: vos_cdrs
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-vos_user}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-vos_password}
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+    volumes:
+      - ./data/clickhouse:/var/lib/clickhouse
+      - ./clickhouse/init:/docker-entrypoint-initdb.d
+    ports:
+      - "8123:8123"  # HTTP 接口
+      - "9000:9000"  # Native 接口
+    networks:
+      - vos-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "clickhouse-client", "--query", "SELECT 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+
+  # PostgreSQL - 配置数据存储（OLTP）
   postgres:
-    image: docker.1ms.run/timescale/timescaledb:latest-pg15
-    container_name: yk_vos_timescaledb
+    image: docker.1ms.run/postgres:15
+    container_name: yk_vos_postgres
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-vos_user}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-vos_password}
       POSTGRES_DB: ${POSTGRES_DB:-vosadmin}
-      # TimescaleDB优化配置
-      TIMESCALEDB_TELEMETRY: "off"
-      # PostgreSQL性能优化（适合16GB服务器，可根据实际内存调整）
-      TS_TUNE_MEMORY: "4GB"
-      TS_TUNE_NUM_CPUS: "2"
     volumes:
-      # 使用本地目录映射，方便备份和迁移
       - ./data/postgres:/var/lib/postgresql/data
-      # 挂载TimescaleDB配置文件（可选）
-      - ./postgresql.conf:/etc/postgresql/postgresql.conf:ro
     ports:
       - "5430:5432"
     networks:
@@ -29,8 +50,6 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-    # 设置共享内存大小（TimescaleDB需要）
-    shm_size: 2gb
 
   redis:
     image: docker.1ms.run/redis:7
@@ -50,25 +69,36 @@ services:
     image: yk-vos-backend-base:latest
     container_name: yk_vos_backend
     working_dir: /srv
-    command: sh -c "chmod +x docker-entrypoint.sh && ./docker-entrypoint.sh uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+    command: sh -c "chmod +x docker-entrypoint-clickhouse.sh && ./docker-entrypoint-clickhouse.sh uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
     ports:
       - "8000:8000"
     environment:
+      # PostgreSQL 连接（配置数据）
       DATABASE_URL: postgresql://${POSTGRES_USER:-vos_user}:${POSTGRES_PASSWORD:-vos_password}@postgres:5432/${POSTGRES_DB:-vosadmin}
+      # ClickHouse 连接（话单数据）
+      CLICKHOUSE_HOST: clickhouse
+      CLICKHOUSE_PORT: 9000
+      CLICKHOUSE_HTTP_PORT: 8123
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-vos_user}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-vos_password}
+      CLICKHOUSE_DB: vos_cdrs
+      # Redis
       REDIS_URL: redis://redis:6379
+      # 认证
       SECRET_KEY: ${SECRET_KEY:-your-secret-key-change-in-production}
       ALGORITHM: HS256
       ACCESS_TOKEN_EXPIRE_MINUTES: 30
+      # Celery
       CELERY_BROKER_URL: redis://redis:6379/0
       CELERY_RESULT_BACKEND: redis://redis:6379/0
     volumes:
-      # 挂载代码目录（核心）
       - ./backend:/srv
-      # 排除缓存目录
       - /srv/__pycache__
       - /srv/.venv
     depends_on:
       postgres:
+        condition: service_healthy
+      clickhouse:
         condition: service_healthy
       redis:
         condition: service_healthy
@@ -88,14 +118,10 @@ services:
     ports:
       - "3000:3000"
     environment:
-      # 浏览器端API地址（通过Next.js代理，使用相对路径）
       NEXT_PUBLIC_API_BASE: /api/v1
-      # Next.js服务端代理到后端（容器内部网络）
       BACKEND_API_URL: http://backend:8000
     volumes:
-      # 挂载代码目录（核心）
       - ./frontend:/usr/src/app
-      # 排除 node_modules 和 .next（使用镜像中的）
       - /usr/src/app/node_modules
       - /usr/src/app/.next
     depends_on:
@@ -111,16 +137,22 @@ services:
     command: celery -A app.tasks.celery_app worker -l info
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-vos_user}:${POSTGRES_PASSWORD:-vos_password}@postgres:5432/${POSTGRES_DB:-vosadmin}
+      CLICKHOUSE_HOST: clickhouse
+      CLICKHOUSE_PORT: 9000
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-vos_user}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-vos_password}
+      CLICKHOUSE_DB: vos_cdrs
       REDIS_URL: redis://redis:6379
       CELERY_BROKER_URL: redis://redis:6379/0
       CELERY_RESULT_BACKEND: redis://redis:6379/0
     volumes:
-      # 挂载代码目录
       - ./backend:/srv
       - /srv/__pycache__
       - /srv/.venv
     depends_on:
       postgres:
+        condition: service_healthy
+      clickhouse:
         condition: service_healthy
       redis:
         condition: service_healthy
@@ -135,16 +167,22 @@ services:
     command: celery -A app.tasks.celery_app beat -l info
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-vos_user}:${POSTGRES_PASSWORD:-vos_password}@postgres:5432/${POSTGRES_DB:-vosadmin}
+      CLICKHOUSE_HOST: clickhouse
+      CLICKHOUSE_PORT: 9000
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-vos_user}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-vos_password}
+      CLICKHOUSE_DB: vos_cdrs
       REDIS_URL: redis://redis:6379
       CELERY_BROKER_URL: redis://redis:6379/0
       CELERY_RESULT_BACKEND: redis://redis:6379/0
     volumes:
-      # 挂载代码目录
       - ./backend:/srv
       - /srv/__pycache__
       - /srv/.venv
     depends_on:
       postgres:
+        condition: service_healthy
+      clickhouse:
         condition: service_healthy
       redis:
         condition: service_healthy
