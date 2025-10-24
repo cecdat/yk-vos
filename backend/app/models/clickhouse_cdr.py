@@ -14,12 +14,14 @@ class ClickHouseCDR:
     """ClickHouse CDR 数据操作"""
     
     @staticmethod
-    def _generate_id(flow_no: str) -> int:
+    def _generate_id(flow_no) -> int:
         """根据 flow_no 生成唯一 ID"""
         if not flow_no:
             return 0
+        # 确保 flow_no 是字符串类型
+        flow_no_str = str(flow_no)
         # 使用 MD5 哈希前8字节转为整数
-        hash_obj = hashlib.md5(flow_no.encode())
+        hash_obj = hashlib.md5(flow_no_str.encode())
         return int(hash_obj.hexdigest()[:16], 16)
     
     @staticmethod
@@ -59,11 +61,13 @@ class ClickHouseCDR:
                 stop_dt = None
             
             flow_no = cdr.get('flowNo', '')
+            # 确保 flow_no 是字符串类型
+            flow_no_str = str(flow_no) if flow_no else ''
             
             ch_cdr = {
-                'id': ClickHouseCDR._generate_id(flow_no),
+                'id': ClickHouseCDR._generate_id(flow_no_str),
                 'vos_id': cdr_vos_id,
-                'flow_no': flow_no,
+                'flow_no': flow_no_str,
                 'account_name': cdr.get('accountName', ''),
                 'account': cdr.get('account', ''),
                 'caller_e164': cdr.get('callerE164', ''),
