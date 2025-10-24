@@ -407,8 +407,12 @@ async def export_cdrs_to_excel(
         )
     )
     
-    # 添加过滤条件
+    # 添加过滤条件并记录
+    logger.info(f'导出话单查询条件 - instance_id={instance_id}, begin={query_params.begin_time}, end={query_params.end_time}')
+    logger.info(f'导出话单过滤条件 - accounts={query_params.accounts}, caller={query_params.caller_e164}, callee={query_params.callee_e164}')
+    
     if query_params.accounts and len(query_params.accounts) > 0:
+        logger.info(f'导出话单: 使用账号过滤，账号列表: {query_params.accounts}')
         query = query.filter(CDR.account.in_(query_params.accounts))
     
     if query_params.caller_e164:
@@ -424,11 +428,38 @@ async def export_cdrs_to_excel(
     cdrs = query.order_by(desc(CDR.start)).limit(10000).all()
     
     # 添加日志，便于调试
-    logger.info(f'导出话单查询到 {len(cdrs)} 条记录 (实例: {instance.name}, 时间: {query_params.begin_time}-{query_params.end_time})')
+    logger.info(f'导出话单查询结果: {len(cdrs)} 条记录 (实例: {instance.name}, 时间范围: {begin_dt} 到 {end_dt})')
     
-    # 如果没有数据，返回提示
+    # 如果没有数据，记录详细调试信息
     if len(cdrs) == 0:
-        logger.warning(f'导出话单查询条件: accounts={query_params.accounts}, caller={query_params.caller_e164}, callee={query_params.callee_e164}, gateway={query_params.callee_gateway}')
+        logger.warning(f'导出话单无数据！查询条件详情:')
+        logger.warning(f'  - VOS实例: {instance_id} ({instance.name})')
+        logger.warning(f'  - 时间范围: {begin_dt} ~ {end_dt}')
+        logger.warning(f'  - 账号列表: {query_params.accounts}')
+        logger.warning(f'  - 主叫号码: {query_params.caller_e164}')
+        logger.warning(f'  - 被叫号码: {query_params.callee_e164}')
+        logger.warning(f'  - 网关: {query_params.callee_gateway}')
+        
+        # 查询一下该时间段内有多少条记录（不加账号过滤）
+        total_in_timerange = db.query(CDR).filter(
+            and_(
+                CDR.vos_id == instance_id,
+                CDR.start >= begin_dt,
+                CDR.start < end_dt
+            )
+        ).count()
+        logger.warning(f'  - 该时间段内总话单数（无账号过滤）: {total_in_timerange}')
+        
+        # 如果有账号过滤，查询数据库中该VOS实例的所有账号
+        if query_params.accounts and len(query_params.accounts) > 0:
+            distinct_accounts = db.query(CDR.account).filter(
+                and_(
+                    CDR.vos_id == instance_id,
+                    CDR.start >= begin_dt,
+                    CDR.start < end_dt
+                )
+            ).distinct().limit(20).all()
+            logger.warning(f'  - 该时间段内的账号列表（前20个）: {[acc[0] for acc in distinct_accounts]}')
     
     # 创建Excel工作簿
     wb = Workbook()
