@@ -38,7 +38,7 @@ export default function CdrPage() {
   
   // 分页
   const [currentPage, setCurrentPage] = useState(1)
-  const [pageSize, setPageSize] = useState(50)
+  const [pageSize, setPageSize] = useState(20)  // 默认20条
 
   // 格式化日期为 yyyyMMdd
   function formatDate(date: Date): string {
@@ -127,6 +127,57 @@ export default function CdrPage() {
       setLoading(false)
     }
   }
+
+  // 加载最近的话单记录（页面初始化时调用）
+  async function loadRecentCdrs() {
+    if (!currentVOS) return
+    
+    setLoading(true)
+    try {
+      // 获取最近7天的日期范围
+      const endDate = new Date()
+      const startDate = new Date()
+      startDate.setDate(startDate.getDate() - 7)
+      
+      const payload = {
+        begin_time: formatDate(startDate),
+        end_time: formatDate(endDate),
+        page: 1,
+        page_size: 20
+      }
+
+      const res = await api.post(
+        `/cdr/query-from-vos/${currentVOS.id}?force_vos=false`, 
+        payload
+      )
+      
+      if (res.data.success) {
+        const cdrsWithInstance = res.data.cdrs.map((cdr: any) => ({
+          ...cdr,
+          _instance_name: res.data.instance_name
+        }))
+        setCdrs(cdrsWithInstance || [])
+        setDataSource(res.data.data_source)
+        setQueryTime(res.data.query_time_ms)
+      } else {
+        setCdrs([])
+      }
+      
+      setCurrentPage(1)
+    } catch (e: any) {
+      console.error('加载最近话单失败:', e)
+      setCdrs([])
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // 页面加载时自动加载最近的话单记录
+  useEffect(() => {
+    if (currentVOS) {
+      loadRecentCdrs()
+    }
+  }, [currentVOS])
 
   // 分页
   const totalPages = Math.ceil(cdrs.length / pageSize)
