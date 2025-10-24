@@ -21,6 +21,14 @@ interface SyncConfig {
   cdr_sync_days: number
 }
 
+interface SyncProgress {
+  is_syncing: boolean
+  current_instance?: string
+  current_customer?: string
+  synced_count?: number
+  message?: string
+}
+
 export default function SyncManagementPage() {
   const [activeTab, setActiveTab] = useState<'cdr' | 'customer'>('cdr')
   const [instances, setInstances] = useState<VOSInstance[]>([])
@@ -33,8 +41,10 @@ export default function SyncManagementPage() {
     cdr_sync_days: 1
   })
   const [loading, setLoading] = useState(false)
-  const [syncing, setSyncing] = useState(false)
+  const [syncProgress, setSyncProgress] = useState<SyncProgress>({ is_syncing: false })
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null)
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false)
+  const [confirmAction, setConfirmAction] = useState<{ type: 'cdr' | 'customer', message: string } | null>(null)
 
   useEffect(() => {
     fetchInstances()
@@ -49,6 +59,36 @@ export default function SyncManagementPage() {
       setSelectedCustomer('all')
     }
   }, [selectedInstance])
+
+  // 定时轮询同步进度
+  useEffect(() => {
+    let interval: NodeJS.Timeout | null = null
+    if (syncProgress.is_syncing) {
+      interval = setInterval(async () => {
+        try {
+          const res = await api.get('/tasks/cdr-sync-progress')
+          if (res.data.is_syncing) {
+            setSyncProgress({
+              is_syncing: true,
+              current_instance: res.data.current_instance,
+              current_customer: res.data.current_customer,
+              synced_count: res.data.synced_count,
+              message: `正在同步 ${res.data.current_instance} - ${res.data.current_customer || '准备中'}`
+            })
+          } else {
+            setSyncProgress({ is_syncing: false, message: '同步完成' })
+            setMessage({ type: 'success', text: '同步任务已完成！' })
+          }
+        } catch (e) {
+          console.error('获取同步进度失败:', e)
+        }
+      }, 3000)
+    }
+    
+    return () => {
+      if (interval) clearInterval(interval)
+    }
+  }, [syncProgress.is_syncing])
 
   async function fetchInstances() {
     try {
@@ -94,31 +134,43 @@ export default function SyncManagementPage() {
     }
   }
 
-  async function handleManualSync(type: 'cdr' | 'customer') {
+  function showConfirm(type: 'cdr' | 'customer') {
+    let confirmMessage = ''
+    
     if (type === 'cdr' && selectedInstance === 'all') {
-      // 全部节点同步
-      if (!confirm('确定要同步所有VOS节点的历史话单吗？')) return
+      confirmMessage = '确定要同步所有VOS节点的历史话单吗？'
     } else if (type === 'cdr' && selectedInstance !== 'all' && selectedCustomer === 'all') {
-      // 指定节点全部客户
       const inst = instances.find(i => i.id === selectedInstance)
-      if (!confirm(`确定要同步 ${inst?.name} 的所有客户历史话单吗？`)) return
+      confirmMessage = `确定要同步 ${inst?.name} 的所有客户历史话单吗？`
     } else if (type === 'cdr' && selectedInstance !== 'all' && selectedCustomer !== 'all') {
-      // 指定节点指定客户
       const inst = instances.find(i => i.id === selectedInstance)
       const cust = customers.find(c => c.id === selectedCustomer)
-      if (!confirm(`确定要同步 ${inst?.name} - ${cust?.account} 的历史话单吗？`)) return
+      confirmMessage = `确定要同步 ${inst?.name} - ${cust?.account} 的历史话单吗？`
     } else if (type === 'customer') {
-      if (!confirm('确定要同步所有VOS节点的客户数据吗？')) return
+      if (selectedInstance === 'all') {
+        confirmMessage = '确定要同步所有VOS节点的客户数据吗？'
+      } else {
+        const inst = instances.find(i => i.id === selectedInstance)
+        confirmMessage = `确定要同步 ${inst?.name} 的客户数据吗？`
+      }
     }
+    
+    setConfirmAction({ type, message: confirmMessage })
+    setShowConfirmDialog(true)
+  }
 
-    setSyncing(true)
+  async function executeSync() {
+    if (!confirmAction) return
+    
+    setShowConfirmDialog(false)
+    setSyncProgress({ is_syncing: true, message: '正在启动同步任务...' })
     setMessage(null)
     
     try {
       let endpoint = ''
       let payload: any = {}
 
-      if (type === 'cdr') {
+      if (confirmAction.type === 'cdr') {
         endpoint = '/sync/manual/cdr'
         payload = {
           instance_id: selectedInstance === 'all' ? null : selectedInstance,
@@ -135,11 +187,16 @@ export default function SyncManagementPage() {
       const res = await api.post(endpoint, payload)
       
       if (res.data.success) {
+        setSyncProgress({ 
+          is_syncing: true, 
+          message: res.data.message || '同步任务已启动'
+        })
         setMessage({ 
           type: 'success', 
-          text: `同步任务已启动！${res.data.message || ''}` 
+          text: `✅ ${res.data.message || '同步任务已启动'}` 
         })
       } else {
+        setSyncProgress({ is_syncing: false })
         setMessage({ 
           type: 'error', 
           text: res.data.message || '同步启动失败' 
@@ -147,12 +204,11 @@ export default function SyncManagementPage() {
       }
     } catch (e: any) {
       console.error('触发同步失败:', e)
+      setSyncProgress({ is_syncing: false })
       setMessage({ 
         type: 'error', 
         text: e.response?.data?.detail || '触发同步失败' 
       })
-    } finally {
-      setSyncing(false)
     }
   }
 
@@ -162,11 +218,41 @@ export default function SyncManagementPage() {
         同步管理
       </h1>
 
+      {/* 消息提示 */}
       {message && (
-        <div className={`mb-6 p-4 rounded-lg ${
+        <div className={`mb-6 p-4 rounded-lg flex items-center justify-between ${
           message.type === 'success' ? 'bg-green-50 text-green-800 border border-green-200' : 'bg-red-50 text-red-800 border border-red-200'
         }`}>
-          {message.text}
+          <span>{message.text}</span>
+          <button onClick={() => setMessage(null)} className='text-gray-500 hover:text-gray-700'>
+            <svg className='w-5 h-5' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
+              <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M6 18L18 6M6 6l12 12' />
+            </svg>
+          </button>
+        </div>
+      )}
+
+      {/* 同步进度卡片 */}
+      {syncProgress.is_syncing && (
+        <div className='mb-6 bg-gradient-to-r from-blue-500 to-purple-600 rounded-xl p-6 text-white shadow-lg'>
+          <div className='flex items-center gap-3 mb-3'>
+            <svg className='w-6 h-6 animate-spin' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
+              <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15' />
+            </svg>
+            <h3 className='text-xl font-bold'>正在同步...</h3>
+          </div>
+          <div className='space-y-2'>
+            {syncProgress.current_instance && (
+              <p className='text-sm'>📍 当前节点: {syncProgress.current_instance}</p>
+            )}
+            {syncProgress.current_customer && (
+              <p className='text-sm'>👤 当前客户: {syncProgress.current_customer}</p>
+            )}
+            {syncProgress.synced_count !== undefined && (
+              <p className='text-sm'>📊 已同步: {syncProgress.synced_count} 条</p>
+            )}
+            <p className='text-sm opacity-90'>{syncProgress.message}</p>
+          </div>
         </div>
       )}
 
@@ -290,15 +376,18 @@ export default function SyncManagementPage() {
                       <option key={cust.id} value={cust.id}>{cust.account}</option>
                     ))}
                   </select>
+                  <p className='text-xs text-gray-500 mt-1'>
+                    {selectedCustomer === 'all' ? '将同步该节点的所有客户' : '仅同步选中的客户'}
+                  </p>
                 </div>
               )}
 
               <button
-                onClick={() => handleManualSync('cdr')}
-                disabled={syncing || instances.length === 0}
+                onClick={() => showConfirm('cdr')}
+                disabled={syncProgress.is_syncing || instances.length === 0}
                 className='w-full px-6 py-3 bg-gradient-to-r from-green-600 to-teal-600 text-white rounded-lg hover:from-green-700 hover:to-teal-700 transition disabled:opacity-50 font-medium'
               >
-                {syncing ? (
+                {syncProgress.is_syncing ? (
                   <span className='flex items-center justify-center gap-2'>
                     <svg className='w-5 h-5 animate-spin' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
                       <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15' />
@@ -381,11 +470,11 @@ export default function SyncManagementPage() {
               </div>
 
               <button
-                onClick={() => handleManualSync('customer')}
-                disabled={syncing || instances.length === 0}
+                onClick={() => showConfirm('customer')}
+                disabled={syncProgress.is_syncing || instances.length === 0}
                 className='w-full px-6 py-3 bg-gradient-to-r from-green-600 to-teal-600 text-white rounded-lg hover:from-green-700 hover:to-teal-700 transition disabled:opacity-50 font-medium'
               >
-                {syncing ? (
+                {syncProgress.is_syncing ? (
                   <span className='flex items-center justify-center gap-2'>
                     <svg className='w-5 h-5 animate-spin' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
                       <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15' />
@@ -404,7 +493,41 @@ export default function SyncManagementPage() {
           </div>
         </div>
       )}
+
+      {/* 自定义确认对话框 */}
+      {showConfirmDialog && confirmAction && (
+        <div className='fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50'>
+          <div className='bg-white rounded-2xl p-8 max-w-md w-full mx-4 shadow-2xl'>
+            <div className='flex items-center gap-4 mb-6'>
+              <div className='w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center flex-shrink-0'>
+                <svg className='w-6 h-6 text-white' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
+                  <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z' />
+                </svg>
+              </div>
+              <h3 className='text-xl font-bold text-gray-900'>确认同步操作</h3>
+            </div>
+            
+            <p className='text-gray-700 mb-8 leading-relaxed'>
+              {confirmAction.message}
+            </p>
+            
+            <div className='flex gap-4'>
+              <button
+                onClick={() => setShowConfirmDialog(false)}
+                className='flex-1 px-6 py-3 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition font-medium'
+              >
+                取消
+              </button>
+              <button
+                onClick={executeSync}
+                className='flex-1 px-6 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg hover:from-blue-700 hover:to-purple-700 transition font-medium'
+              >
+                确认同步
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
-

@@ -250,6 +250,34 @@ async def delete_instance(
         logger.error(f'删除 VOS 实例失败: {e}')
         raise HTTPException(status_code=500, detail=f'删除失败: {str(e)}')
 
+@router.get('/customers/{instance_id}')
+async def get_customers_by_instance(
+    instance_id: int,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Session = Depends(get_db)
+):
+    """
+    获取指定 VOS 实例的所有客户（简化版，用于下拉选择）
+    从数据库直接读取
+    """
+    instance = db.query(VOSInstance).filter(VOSInstance.id == instance_id).first()
+    if not instance:
+        raise HTTPException(status_code=404, detail='VOS实例未找到')
+    
+    customers = db.query(Customer).filter(
+        Customer.vos_instance_id == instance_id
+    ).all()
+    
+    return [
+        {
+            'id': c.id,
+            'account': c.account,
+            'vos_instance_id': c.vos_instance_id
+        }
+        for c in customers
+    ]
+
+
 @router.get('/instances/{instance_id}/customers')
 async def get_instance_customers(
     instance_id: int,
@@ -258,7 +286,7 @@ async def get_instance_customers(
     refresh: bool = Query(False, description="强制从VOS刷新数据")
 ):
     """
-    获取指定 VOS 实例的所有客户
+    获取指定 VOS 实例的所有客户（详细版）
     三级缓存策略：Redis → PostgreSQL → VOS API
     """
     instance = db.query(VOSInstance).filter(VOSInstance.id == instance_id).first()
