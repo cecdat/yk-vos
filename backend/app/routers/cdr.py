@@ -477,19 +477,9 @@ async def export_cdrs_to_excel(
         vos_cdrs = result.get('infoCdrs', [])
         logger.info(f'VOS API返回 {len(vos_cdrs)} 条记录')
         
-        # 存储到数据库（异步，不阻塞）
-        if vos_cdrs:
-            from app.tasks.sync_tasks import store_cdrs_batch
-            # 触发后台任务存储（不等待）
-            try:
-                store_cdrs_batch.delay(instance_id, vos_cdrs)
-            except:
-                # 如果Celery不可用，同步存储（阻塞）
-                logger.warning('Celery不可用，同步存储话单')
-                pass
-        
-        # 将VOS返回的数据转换为CDR对象格式用于导出
-        cdrs = vos_cdrs  # 直接使用VOS返回的数据
+        # 直接使用VOS返回的数据用于导出
+        # 注意：这里不存储到数据库，用户查询时会自动存储
+        cdrs = vos_cdrs
         data_source = 'vos_api'
     
     # 创建Excel工作簿
