@@ -158,10 +158,13 @@ export default function Page(){
     try {
       const date = new Date(dateStr)
       return date.toLocaleString('zh-CN', {
+        year: 'numeric',
         month: '2-digit',
         day: '2-digit',
         hour: '2-digit',
-        minute: '2-digit'
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false
       })
     } catch {
       return '无效时间'
@@ -252,9 +255,9 @@ export default function Page(){
                   <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15' />
                 </svg>
               ) : (
-                <svg className='w-6 h-6' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
+              <svg className='w-6 h-6' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
                   <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z' />
-                </svg>
+              </svg>
               )}
             </div>
           </div>
@@ -270,14 +273,14 @@ export default function Page(){
               <h2 className='text-xl font-bold flex items-center gap-2'>
                 <svg className='w-6 h-6 animate-spin' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
                   <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15' />
-                </svg>
+            </svg>
                 正在同步话单数据
               </h2>
               <span className='text-sm opacity-90'>
                 进度: {cdrSyncProgress.progress_percent?.toFixed(1)}%
-              </span>
+            </span>
             </div>
-            
+
             <div className='grid grid-cols-1 md:grid-cols-3 gap-4 mb-4'>
               <div className='bg-white bg-opacity-20 rounded-lg p-4'>
                 <p className='text-sm opacity-75 mb-1'>当前节点</p>
@@ -301,7 +304,7 @@ export default function Page(){
                 <p className='text-lg font-semibold'>{formatNumber(cdrSyncProgress.synced_count || 0)} 条</p>
               </div>
             </div>
-            
+
             {/* 进度条 */}
             <div className='bg-white bg-opacity-20 rounded-full h-3 overflow-hidden'>
               <div 
@@ -427,9 +430,9 @@ export default function Page(){
                   )}
                   <div className='mt-3 pt-3 border-t flex items-center justify-between'>
                     <div className='flex items-center gap-2'>
-                      <span className={`text-xs px-2 py-1 rounded-full ${inst.enabled ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>
-                        {inst.enabled ? '✓ 启用中' : '○ 已禁用'}
-                      </span>
+                    <span className={`text-xs px-2 py-1 rounded-full ${inst.enabled ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>
+                      {inst.enabled ? '✓ 启用中' : '○ 已禁用'}
+                    </span>
                       <span className={`text-xs px-2 py-1 rounded-full ${statusConfig.bg} ${statusConfig.text}`} title={inst.health_error || `响应时间: ${inst.health_response_time?.toFixed(0)}ms`}>
                         {statusConfig.icon} {statusConfig.label}
                       </span>

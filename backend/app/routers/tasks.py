@@ -5,7 +5,7 @@
 from typing import Annotated
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import logging
 
 from app.core.db import get_db
@@ -212,11 +212,20 @@ async def get_cdr_sync_status(
                 if last_sync and (not latest_sync_time or last_sync > latest_sync_time):
                     latest_sync_time = last_sync
                 
+                # 转换UTC时间到东八区（Asia/Shanghai）
+                last_sync_str = None
+                if last_sync:
+                    # ClickHouse返回的是naive datetime（UTC），需要添加时区信息
+                    utc_time = last_sync.replace(tzinfo=timezone.utc)
+                    # 转换为东八区时间
+                    cn_time = utc_time.astimezone(timezone(timedelta(hours=8)))
+                    last_sync_str = cn_time.isoformat()
+                
                 instance_stats.append({
                     'instance_id': inst.id,
                     'instance_name': inst.name,
                     'total_cdrs': count,
-                    'last_sync_time': last_sync.isoformat() if last_sync else None,
+                    'last_sync_time': last_sync_str,
                     'status': 'synced' if count > 0 else 'empty'
                 })
             except Exception as e:
@@ -242,12 +251,19 @@ async def get_cdr_sync_status(
                         is_syncing = True
                         break
         
+        # 转换最后同步时间到东八区
+        latest_sync_str = None
+        if latest_sync_time:
+            utc_time = latest_sync_time.replace(tzinfo=timezone.utc)
+            cn_time = utc_time.astimezone(timezone(timedelta(hours=8)))
+            latest_sync_str = cn_time.isoformat()
+        
         return {
             'success': True,
             'status': 'syncing' if is_syncing else 'idle',
             'is_syncing': is_syncing,
             'total_cdrs': total_count,
-            'last_sync_time': latest_sync_time.isoformat() if latest_sync_time else None,
+            'last_sync_time': latest_sync_str,
             'instances_count': len(instances),
             'instances': instance_stats,
             'next_sync': '每天凌晨 01:30 自动同步'
