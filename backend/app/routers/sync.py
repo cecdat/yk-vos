@@ -8,7 +8,8 @@ from typing import Optional, Annotated
 from pydantic import BaseModel
 import logging
 
-from app.core.deps import get_db, get_current_user
+from app.core.db import get_db
+from app.routers.auth import get_current_user
 from app.models.user import User
 from app.models.vos_instance import VOSInstance
 from app.models.customer import Customer
