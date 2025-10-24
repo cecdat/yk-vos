@@ -405,6 +405,9 @@ async def export_cdrs_to_excel(
     )
     
     # 添加过滤条件
+    if query_params.accounts:
+        query = query.filter(CDR.account.in_(query_params.accounts))
+    
     if query_params.caller_e164:
         query = query.filter(CDR.caller_e164.like(f'%{query_params.caller_e164}%'))
     
@@ -447,7 +450,9 @@ async def export_cdrs_to_excel(
         ws.cell(row=row_num, column=2, value=instance.name)
         ws.cell(row=row_num, column=3, value=cdr.account_name or '')
         ws.cell(row=row_num, column=4, value=cdr.account or '')
-        ws.cell(row=row_num, column=5, value=cdr.caller_e164 or '')
+        # 主叫号码：优先callerAccessE164，如果没有则使用caller_e164
+        caller = getattr(cdr, 'caller_access_e164', None) or cdr.caller_e164 or ''
+        ws.cell(row=row_num, column=5, value=caller)
         ws.cell(row=row_num, column=6, value=cdr.callee_access_e164 or '')
         ws.cell(row=row_num, column=7, value=cdr.callee_gateway or '')
         ws.cell(row=row_num, column=8, value=cdr.start.strftime('%Y-%m-%d %H:%M:%S') if cdr.start else '')
