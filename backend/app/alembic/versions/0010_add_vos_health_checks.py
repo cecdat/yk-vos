@@ -1,7 +1,7 @@
 """add vos health checks table
 
-Revision ID: 0010
-Revises: 0009
+Revision ID: 0010_add_vos_health_checks
+Revises: 0009_timescale_cdrs
 Create Date: 2025-10-23
 
 """
@@ -10,8 +10,8 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision = '0010'
-down_revision = '0009'
+revision = '0010_add_vos_health_checks'
+down_revision = '0009_timescale_cdrs'
 branch_labels = None
 depends_on = None
 
