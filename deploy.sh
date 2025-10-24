@@ -78,20 +78,18 @@ echo -e "${BLUE}━━━ 步骤 3/8: 检查配置文件 ━━━${NC}"
 if [ ! -f ".env" ]; then
     echo -e "${YELLOW}⚠️${NC}  未找到 .env 文件，创建默认配置..."
     
-    # 生成随机密码
-    PG_PASSWORD=$(openssl rand -base64 16 | tr -d "=+/" | cut -c1-16)
-    CH_PASSWORD=$(openssl rand -base64 16 | tr -d "=+/" | cut -c1-16)
-    SECRET_KEY=$(openssl rand -base64 32 | tr -d "=+/")
+    # 生成随机 SECRET_KEY
+    SECRET_KEY=$(openssl rand -base64 32 | tr -d "=+/" 2>/dev/null || echo "your-secret-key-please-change-in-production")
     
     cat > .env << EOF
 # PostgreSQL (配置数据)
-POSTGRES_USER=vos_user
-POSTGRES_PASSWORD=${PG_PASSWORD}
+POSTGRES_USER=vosadmin
+POSTGRES_PASSWORD=Ykxx@2025
 POSTGRES_DB=vosadmin
 
 # ClickHouse (话单数据)
-CLICKHOUSE_USER=vos_user
-CLICKHOUSE_PASSWORD=${CH_PASSWORD}
+CLICKHOUSE_USER=vosadmin
+CLICKHOUSE_PASSWORD=Ykxx@2025
 
 # Redis
 REDIS_URL=redis://redis:6379
@@ -103,7 +101,7 @@ SECRET_KEY=${SECRET_KEY}
 CELERY_BROKER_URL=redis://redis:6379/0
 CELERY_RESULT_BACKEND=redis://redis:6379/0
 EOF
-    echo -e "${GREEN}✓${NC} 已创建 .env 文件，并生成随机密码"
+    echo -e "${GREEN}✓${NC} 已创建 .env 文件"
 else
     echo -e "${GREEN}✓${NC} .env 文件已存在"
 fi
@@ -170,7 +168,7 @@ echo -e "${BLUE}━━━ 步骤 7/8: 等待服务就绪 ━━━${NC}"
 
 echo "⏳ 等待 PostgreSQL..."
 for i in {1..30}; do
-    if docker-compose exec -T postgres pg_isready -U vos_user -d vosadmin > /dev/null 2>&1; then
+    if docker-compose exec -T postgres pg_isready -U vosadmin -d vosadmin > /dev/null 2>&1; then
         echo -e "${GREEN}✓${NC} PostgreSQL 已就绪"
         break
     fi
@@ -241,22 +239,13 @@ echo "   Redis:       localhost:6379"
 echo ""
 
 echo -e "${BLUE}🔐 数据库账号密码：${NC}"
-if [ -f ".env" ]; then
-    echo "   PostgreSQL:"
-    PG_USER=$(grep "^POSTGRES_USER=" .env | cut -d'=' -f2)
-    PG_PASSWORD=$(grep "^POSTGRES_PASSWORD=" .env | cut -d'=' -f2)
-    echo "      用户名: ${PG_USER:-vos_user}"
-    echo "      密码:   ${PG_PASSWORD:-vos_password}"
-    echo ""
-    echo "   ClickHouse:"
-    CLICKHOUSE_USER=$(grep "^CLICKHOUSE_USER=" .env | cut -d'=' -f2)
-    CLICKHOUSE_PASSWORD=$(grep "^CLICKHOUSE_PASSWORD=" .env | cut -d'=' -f2)
-    echo "      用户名: ${CLICKHOUSE_USER:-vos_user}"
-    echo "      密码:   ${CLICKHOUSE_PASSWORD:-vos_password}"
-else
-    echo "   PostgreSQL: vos_user / vos_password"
-    echo "   ClickHouse: vos_user / vos_password"
-fi
+echo "   PostgreSQL:"
+echo "      用户名: vosadmin"
+echo "      密码:   Ykxx@2025"
+echo ""
+echo "   ClickHouse:"
+echo "      用户名: vosadmin"
+echo "      密码:   Ykxx@2025"
 echo ""
 
 echo -e "${BLUE}📝 默认管理员账号：${NC}"

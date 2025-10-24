@@ -154,10 +154,10 @@ create_env_files() {
         print_info "创建 backend/.env..."
         cat > backend/.env <<EOF
 # 数据库配置
-POSTGRES_USER=vos_user
-POSTGRES_PASSWORD=$DB_PASSWORD
+POSTGRES_USER=vosadmin
+POSTGRES_PASSWORD=Ykxx@2025
 POSTGRES_DB=vosadmin
-DATABASE_URL=postgresql://vos_user:$DB_PASSWORD@postgres:5432/vosadmin
+DATABASE_URL=postgresql://vosadmin:Ykxx@2025@postgres:5432/vosadmin
 
 # JWT 配置
 SECRET_KEY=$SECRET_KEY
@@ -203,8 +203,8 @@ EOF
         print_info "创建 .env..."
         cat > .env <<EOF
 # 数据库配置
-POSTGRES_USER=vos_user
-POSTGRES_PASSWORD=$DB_PASSWORD
+POSTGRES_USER=vosadmin
+POSTGRES_PASSWORD=Ykxx@2025
 POSTGRES_DB=vosadmin
 
 # JWT 配置

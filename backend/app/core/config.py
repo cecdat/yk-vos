@@ -3,14 +3,14 @@ from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
     # PostgreSQL Database (配置数据)
-    DATABASE_URL: str = os.getenv('DATABASE_URL', 'postgresql://vos_user:vos_password@postgres:5432/vosadmin')
+    DATABASE_URL: str = os.getenv('DATABASE_URL', 'postgresql://vosadmin:Ykxx@2025@postgres:5432/vosadmin')
     
     # ClickHouse Database (话单数据)
     CLICKHOUSE_HOST: str = os.getenv('CLICKHOUSE_HOST', 'clickhouse')
     CLICKHOUSE_PORT: int = int(os.getenv('CLICKHOUSE_PORT', '9000'))
     CLICKHOUSE_HTTP_PORT: int = int(os.getenv('CLICKHOUSE_HTTP_PORT', '8123'))
-    CLICKHOUSE_USER: str = os.getenv('CLICKHOUSE_USER', 'vos_user')
-    CLICKHOUSE_PASSWORD: str = os.getenv('CLICKHOUSE_PASSWORD', 'vos_password')
+    CLICKHOUSE_USER: str = os.getenv('CLICKHOUSE_USER', 'vosadmin')
+    CLICKHOUSE_PASSWORD: str = os.getenv('CLICKHOUSE_PASSWORD', 'Ykxx@2025')
     CLICKHOUSE_DB: str = os.getenv('CLICKHOUSE_DB', 'vos_cdrs')
     
     # Redis

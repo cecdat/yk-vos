@@ -8,8 +8,8 @@ services:
     container_name: yk_vos_clickhouse
     environment:
       CLICKHOUSE_DB: vos_cdrs
-      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-vos_user}
-      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-vos_password}
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-vosadmin}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-Ykxx@2025}
       CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
     volumes:
       - ./data/clickhouse:/var/lib/clickhouse
@@ -35,8 +35,8 @@ services:
     image: docker.1ms.run/postgres:15
     container_name: yk_vos_postgres
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-vos_user}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-vos_password}
+      POSTGRES_USER: ${POSTGRES_USER:-vosadmin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-Ykxx@2025}
       POSTGRES_DB: ${POSTGRES_DB:-vosadmin}
     volumes:
       - ./data/postgres:/var/lib/postgresql/data
@@ -46,7 +46,7 @@ services:
       - vos-network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-vos_user} -d ${POSTGRES_DB:-vosadmin}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-vosadmin} -d ${POSTGRES_DB:-vosadmin}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -74,13 +74,13 @@ services:
       - "8000:8000"
     environment:
       # PostgreSQL 连接（配置数据）
-      DATABASE_URL: postgresql://${POSTGRES_USER:-vos_user}:${POSTGRES_PASSWORD:-vos_password}@postgres:5432/${POSTGRES_DB:-vosadmin}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-vosadmin}:${POSTGRES_PASSWORD:-Ykxx@2025}@postgres:5432/${POSTGRES_DB:-vosadmin}
       # ClickHouse 连接（话单数据）
       CLICKHOUSE_HOST: clickhouse
       CLICKHOUSE_PORT: 9000
       CLICKHOUSE_HTTP_PORT: 8123
-      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-vos_user}
-      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-vos_password}
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-vosadmin}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-Ykxx@2025}
       CLICKHOUSE_DB: vos_cdrs
       # Redis
       REDIS_URL: redis://redis:6379
@@ -136,11 +136,11 @@ services:
     working_dir: /srv
     command: celery -A app.tasks.celery_app worker -l info
     environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER:-vos_user}:${POSTGRES_PASSWORD:-vos_password}@postgres:5432/${POSTGRES_DB:-vosadmin}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-vosadmin}:${POSTGRES_PASSWORD:-Ykxx@2025}@postgres:5432/${POSTGRES_DB:-vosadmin}
       CLICKHOUSE_HOST: clickhouse
       CLICKHOUSE_PORT: 9000
-      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-vos_user}
-      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-vos_password}
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-vosadmin}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-Ykxx@2025}
       CLICKHOUSE_DB: vos_cdrs
       REDIS_URL: redis://redis:6379
       CELERY_BROKER_URL: redis://redis:6379/0
@@ -166,11 +166,11 @@ services:
     working_dir: /srv
     command: celery -A app.tasks.celery_app beat -l info
     environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER:-vos_user}:${POSTGRES_PASSWORD:-vos_password}@postgres:5432/${POSTGRES_DB:-vosadmin}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-vosadmin}:${POSTGRES_PASSWORD:-Ykxx@2025}@postgres:5432/${POSTGRES_DB:-vosadmin}
       CLICKHOUSE_HOST: clickhouse
       CLICKHOUSE_PORT: 9000
-      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-vos_user}
-      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-vos_password}
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-vosadmin}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-Ykxx@2025}
       CLICKHOUSE_DB: vos_cdrs
       REDIS_URL: redis://redis:6379
       CELERY_BROKER_URL: redis://redis:6379/0
