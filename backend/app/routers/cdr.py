@@ -164,6 +164,9 @@ async def query_cdrs_from_vos(
         )
         
         # 添加过滤条件（使用新字段名）
+        if query_params.accounts and len(query_params.accounts) > 0:
+            query = query.filter(CDR.account.in_(query_params.accounts))
+        
         if query_params.caller_e164:
             query = query.filter(CDR.caller_e164.like(f'%{query_params.caller_e164}%'))
         
@@ -405,7 +408,7 @@ async def export_cdrs_to_excel(
     )
     
     # 添加过滤条件
-    if query_params.accounts:
+    if query_params.accounts and len(query_params.accounts) > 0:
         query = query.filter(CDR.account.in_(query_params.accounts))
     
     if query_params.caller_e164:
