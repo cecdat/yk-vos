@@ -18,6 +18,8 @@ export default function CdrPage() {
   const [dataSource, setDataSource] = useState('')  // 数据来源
   const [queryTime, setQueryTime] = useState(0)  // 查询耗时
   const [totalCount, setTotalCount] = useState(0)  // 总记录数
+  const [backendTotalPages, setBackendTotalPages] = useState(0)  // 后端返回的总页数
+  const [queryPage, setQueryPage] = useState(1)  // 当前查询的页码（后端分页）
   
   // 查询参数
   const [beginTime, setBeginTime] = useState(() => {
@@ -37,9 +39,8 @@ export default function CdrPage() {
   const [callee, setCallee] = useState('')
   const [gateway, setGateway] = useState('')
   
-  // 分页
-  const [currentPage, setCurrentPage] = useState(1)
-  const [pageSize, setPageSize] = useState(20)  // 默认20条
+  // 前端显示的每页条数（用于下拉选择）
+  const [pageSize, setPageSize] = useState(100)  // 默认每次查询100条
 
   // 格式化日期为 yyyyMMdd
   function formatDate(date: Date): string {
@@ -55,7 +56,16 @@ export default function CdrPage() {
     return `${dateStr.substring(0, 4)}-${dateStr.substring(4, 6)}-${dateStr.substring(6, 8)}`
   }
 
-  async function handleQuery() {
+  async function handleQuery(resetPage: boolean = false) {
+    // 如果是手动点击查询按钮，重置到第一页
+    if (resetPage) {
+      setQueryPage(1)
+      // 如果当前已经在第一页，直接查询；否则setQueryPage会触发查询
+      if (queryPage !== 1) {
+        return
+      }
+    }
+    
     setLoading(true)
     try {
       if (queryMode === 'current') {
@@ -72,8 +82,8 @@ export default function CdrPage() {
           caller_e164: caller ? caller.trim() : undefined,
           callee_e164: callee ? callee.trim() : undefined,
           callee_gateway: gateway ? gateway.trim() : undefined,
-          page: 1,
-          page_size: 1000  // 手动查询时返回更多数据（最大1000条）
+          page: queryPage,  // 使用当前查询页码
+          page_size: pageSize  // 使用选定的每页数量
         }
 
         const res = await api.post(
@@ -90,6 +100,7 @@ export default function CdrPage() {
           setDataSource(res.data.data_source)
           setQueryTime(res.data.query_time_ms)
           setTotalCount(res.data.total || res.data.count || 0)  // 保存总记录数
+          setBackendTotalPages(res.data.total_pages || 0)  // 保存总页数
           setInstanceResults([{
             instance_id: currentVOS.id,
             instance_name: currentVOS.name,
@@ -122,8 +133,6 @@ export default function CdrPage() {
         setInstanceResults(res.data.instances || [])
         setDataSource('multiple_vos')
       }
-      
-      setCurrentPage(1) // 重置到第一页
     } catch (e: any) {
       console.error('查询话单失败:', e)
       alert(e.response?.data?.detail || '查询失败')
@@ -166,8 +175,6 @@ export default function CdrPage() {
       } else {
         setCdrs([])
       }
-      
-      setCurrentPage(1)
     } catch (e: any) {
       console.error('加载最近话单失败:', e)
       setCdrs([])
@@ -179,15 +186,26 @@ export default function CdrPage() {
   // 页面加载时自动加载最近的话单记录
   useEffect(() => {
     if (currentVOS) {
+      setQueryPage(1)  // 重置页码
       loadRecentCdrs()
     }
   }, [currentVOS])
 
-  // 分页
-  const totalPages = Math.ceil(cdrs.length / pageSize)
-  const startIndex = (currentPage - 1) * pageSize
-  const endIndex = startIndex + pageSize
-  const paginatedCdrs = cdrs.slice(startIndex, endIndex)
+  // 查询页码改变时重新查询
+  useEffect(() => {
+    if (queryPage > 1 && cdrs.length > 0) {
+      // 只有在已经有数据且页码>1时才重新查询（避免初始化时重复查询）
+      handleQuery()
+    }
+  }, [queryPage])
+
+  // 每页数量改变时重置到第一页并重新查询
+  useEffect(() => {
+    if (cdrs.length > 0) {
+      setQueryPage(1)
+      handleQuery()
+    }
+  }, [pageSize])
 
   // 格式化时长
   function formatDuration(seconds: number): string {
@@ -380,7 +398,7 @@ export default function CdrPage() {
           </div>
           <div className='flex items-end'>
             <button
-              onClick={handleQuery}
+              onClick={() => handleQuery(true)}
               disabled={loading}
               className='w-full py-2 text-sm bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg font-medium hover:from-blue-700 hover:to-purple-700 transition disabled:opacity-50 flex items-center justify-center gap-2'
             >
@@ -432,18 +450,11 @@ export default function CdrPage() {
           <div className='px-6 py-4 bg-gradient-to-r from-blue-50 to-purple-50 border-b flex items-center justify-between'>
             <div className='flex items-center gap-4'>
               <p className='text-sm text-gray-700'>
-                {totalCount > cdrs.length ? (
-                  <>
-                    共 <span className='font-bold text-blue-600'>{totalCount}</span> 条记录，
-                    当前显示 <span className='font-bold text-blue-600'>{cdrs.length}</span> 条
-                    <span className='ml-2 text-xs text-orange-600'>
-                      (单次最多显示1000条，请使用筛选条件缩小范围)
-                    </span>
-                  </>
-                ) : (
-                  <>
-                    共查询到 <span className='font-bold text-blue-600'>{cdrs.length}</span> 条话单记录
-                  </>
+                共 <span className='font-bold text-blue-600'>{totalCount}</span> 条记录
+                {backendTotalPages > 1 && (
+                  <span className='ml-2 text-xs text-gray-500'>
+                    （第 {queryPage}/{backendTotalPages} 页，每页 {pageSize} 条）
+                  </span>
                 )}
               </p>
               {dataSource && queryMode === 'current' && (
@@ -464,15 +475,13 @@ export default function CdrPage() {
             </div>
             <select
               value={pageSize}
-              onChange={e => {
-                setPageSize(Number(e.target.value))
-                setCurrentPage(1)
-              }}
+              onChange={e => setPageSize(Number(e.target.value))}
               className='p-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white'
             >
-              <option value={20}>20条/页</option>
               <option value={50}>50条/页</option>
               <option value={100}>100条/页</option>
+              <option value={200}>200条/页</option>
+              <option value={500}>500条/页</option>
             </select>
           </div>
 
@@ -497,7 +506,7 @@ export default function CdrPage() {
                 </tr>
               </thead>
               <tbody className='divide-y divide-gray-200'>
-                {paginatedCdrs.map((cdr, index) => (
+                {cdrs.map((cdr, index) => (
                   <tr key={index} className='hover:bg-gray-50 transition'>
                     <td className='px-2 py-2 text-xs'>
                       <span className='px-1.5 py-0.5 bg-gray-100 text-gray-700 rounded text-xs font-mono'>
@@ -558,75 +567,79 @@ export default function CdrPage() {
           </div>
 
           {/* 分页控制 */}
-          <div className='px-6 py-4 bg-gray-50 border-t flex items-center justify-between'>
-            <div className='flex items-center gap-2 text-sm text-gray-600'>
-              <p>第 <span className='font-semibold text-gray-900'>{currentPage}</span> / {totalPages} 页</p>
-              <span className='text-gray-400'>|</span>
-              <p>显示 {startIndex + 1} - {Math.min(endIndex, cdrs.length)} 条</p>
-            </div>
-
-            <div className='flex items-center gap-2'>
-              <button
-                onClick={() => setCurrentPage(1)}
-                disabled={currentPage === 1}
-                className='px-3 py-2 border rounded-lg hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition text-sm'
-              >
-                首页
-              </button>
-              <button
-                onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-                disabled={currentPage === 1}
-                className='px-3 py-2 border rounded-lg hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition text-sm'
-              >
-                上一页
-              </button>
-
-              {/* 页码 */}
-              <div className='flex items-center gap-1'>
-                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                  let pageNum
-                  if (totalPages <= 5) {
-                    pageNum = i + 1
-                  } else if (currentPage <= 3) {
-                    pageNum = i + 1
-                  } else if (currentPage >= totalPages - 2) {
-                    pageNum = totalPages - 4 + i
-                  } else {
-                    pageNum = currentPage - 2 + i
-                  }
-
-                  return (
-                    <button
-                      key={pageNum}
-                      onClick={() => setCurrentPage(pageNum)}
-                      className={`px-3 py-2 rounded-lg transition text-sm ${
-                        currentPage === pageNum
-                          ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white font-semibold'
-                          : 'border hover:bg-gray-100'
-                      }`}
-                    >
-                      {pageNum}
-                    </button>
-                  )
-                })}
+          {/* 后端分页控件 */}
+          {backendTotalPages > 1 && (
+            <div className='px-6 py-4 bg-gray-50 border-t flex items-center justify-between'>
+              <div className='flex items-center gap-2 text-sm text-gray-600'>
+                <p>第 <span className='font-semibold text-gray-900'>{queryPage}</span> / {backendTotalPages} 页</p>
+                <span className='text-gray-400'>|</span>
+                <p>共 {totalCount} 条记录</p>
               </div>
 
-              <button
-                onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-                disabled={currentPage === totalPages}
-                className='px-3 py-2 border rounded-lg hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition text-sm'
-              >
-                下一页
-              </button>
-              <button
-                onClick={() => setCurrentPage(totalPages)}
-                disabled={currentPage === totalPages}
-                className='px-3 py-2 border rounded-lg hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition text-sm'
-              >
-                末页
-              </button>
+              <div className='flex items-center gap-2'>
+                <button
+                  onClick={() => setQueryPage(1)}
+                  disabled={queryPage === 1 || loading}
+                  className='px-3 py-2 border rounded-lg hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition text-sm'
+                >
+                  首页
+                </button>
+                <button
+                  onClick={() => setQueryPage(prev => Math.max(1, prev - 1))}
+                  disabled={queryPage === 1 || loading}
+                  className='px-3 py-2 border rounded-lg hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition text-sm'
+                >
+                  上一页
+                </button>
+
+                {/* 页码 */}
+                <div className='flex items-center gap-1'>
+                  {Array.from({ length: Math.min(5, backendTotalPages) }, (_, i) => {
+                    let pageNum
+                    if (backendTotalPages <= 5) {
+                      pageNum = i + 1
+                    } else if (queryPage <= 3) {
+                      pageNum = i + 1
+                    } else if (queryPage >= backendTotalPages - 2) {
+                      pageNum = backendTotalPages - 4 + i
+                    } else {
+                      pageNum = queryPage - 2 + i
+                    }
+
+                    return (
+                      <button
+                        key={pageNum}
+                        onClick={() => setQueryPage(pageNum)}
+                        disabled={loading}
+                        className={`px-3 py-2 rounded-lg transition text-sm ${
+                          queryPage === pageNum
+                            ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white font-semibold'
+                            : 'border hover:bg-gray-100'
+                        }`}
+                      >
+                        {pageNum}
+                      </button>
+                    )
+                  })}
+                </div>
+
+                <button
+                  onClick={() => setQueryPage(prev => Math.min(backendTotalPages, prev + 1))}
+                  disabled={queryPage === backendTotalPages || loading}
+                  className='px-3 py-2 border rounded-lg hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition text-sm'
+                >
+                  下一页
+                </button>
+                <button
+                  onClick={() => setQueryPage(backendTotalPages)}
+                  disabled={queryPage === backendTotalPages || loading}
+                  className='px-3 py-2 border rounded-lg hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition text-sm'
+                >
+                  末页
+                </button>
+              </div>
             </div>
-          </div>
+          )}
         </div>
       )}
     </div>
