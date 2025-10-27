@@ -38,9 +38,12 @@ export default function CdrPage() {
   const [caller, setCaller] = useState('')
   const [callee, setCallee] = useState('')
   const [gateway, setGateway] = useState('')
+  const [filterZeroFee, setFilterZeroFee] = useState(false)  // 是否过滤0费用话单
   
   // 前端显示的每页条数（用于下拉选择）
   const [pageSize, setPageSize] = useState(100)  // 默认每次查询100条
+  const [filteredCdrs, setFilteredCdrs] = useState<CDR[]>([])  // 过滤后的话单列表
+  const [originalCdrs, setOriginalCdrs] = useState<CDR[]>([])  // 原始话单列表
 
   // 格式化日期为 yyyyMMdd
   function formatDate(date: Date): string {
@@ -96,6 +99,7 @@ export default function CdrPage() {
             ...cdr,
             _instance_name: res.data.instance_name
           }))
+          setOriginalCdrs(cdrsWithInstance || [])
           setCdrs(cdrsWithInstance || [])
           setDataSource(res.data.data_source)
           setQueryTime(res.data.query_time_ms)
@@ -129,6 +133,7 @@ export default function CdrPage() {
         if (callee) params.append('callee', callee)
 
         const res = await api.get(`/cdr/query-all-instances?${params.toString()}`)
+        setOriginalCdrs(res.data.cdrs || [])
         setCdrs(res.data.cdrs || [])
         setInstanceResults(res.data.instances || [])
         setDataSource('multiple_vos')
@@ -169,10 +174,14 @@ export default function CdrPage() {
           ...cdr,
           _instance_name: res.data.instance_name
         }))
+        setOriginalCdrs(cdrsWithInstance || [])
         setCdrs(cdrsWithInstance || [])
         setDataSource(res.data.data_source)
         setQueryTime(res.data.query_time_ms)
+        setTotalCount(res.data.total || res.data.count || 0)
+        setBackendTotalPages(res.data.total_pages || 0)
       } else {
+        setOriginalCdrs([])
         setCdrs([])
       }
     } catch (e: any) {
@@ -206,6 +215,36 @@ export default function CdrPage() {
       handleQuery()
     }
   }, [pageSize])
+
+  // 费用过滤：当filterZeroFee变化时，过滤话单列表
+  useEffect(() => {
+    if (filterZeroFee) {
+      // 过滤掉费用为0或null的话单
+      const filtered = originalCdrs.filter(cdr => {
+        const fee = cdr.fee
+        return fee !== null && fee !== undefined && Number(fee) > 0
+      })
+      setFilteredCdrs(filtered)
+    } else {
+      // 不过滤，显示全部
+      setFilteredCdrs(originalCdrs)
+    }
+  }, [filterZeroFee, originalCdrs])
+
+  // 当原始数据更新时，同步更新过滤后的数据
+  useEffect(() => {
+    if (filterZeroFee) {
+      const filtered = originalCdrs.filter(cdr => {
+        const fee = cdr.fee
+        return fee !== null && fee !== undefined && Number(fee) > 0
+      })
+      setFilteredCdrs(filtered)
+      setCdrs(filtered)  // 更新显示的话单列表
+    } else {
+      setFilteredCdrs(originalCdrs)
+      setCdrs(originalCdrs)  // 更新显示的话单列表
+    }
+  }, [originalCdrs, filterZeroFee])
 
   // 格式化时长
   function formatDuration(seconds: number): string {
@@ -415,12 +454,29 @@ export default function CdrPage() {
               disabled={loading}
             />
           </div>
-          <div className='flex items-end'>
-            <button
-              onClick={() => handleQuery(true)}
+        </div>
+        
+        {/* 过滤选项 */}
+        <div className='mb-3'>
+          <label className='flex items-center gap-2 text-sm cursor-pointer hover:text-blue-600 transition'>
+            <input
+              type='checkbox'
+              checked={filterZeroFee}
+              onChange={e => setFilterZeroFee(e.target.checked)}
+              className='w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 cursor-pointer'
               disabled={loading}
-              className='w-full py-2 text-sm bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg font-medium hover:from-blue-700 hover:to-purple-700 transition disabled:opacity-50 flex items-center justify-center gap-2'
-            >
+            />
+            <span className='text-gray-700 font-medium'>隐藏零费用话单</span>
+          </label>
+        </div>
+
+        {/* 查询按钮 */}
+        <div className='flex items-center justify-end gap-3'>
+          <button
+            onClick={() => handleQuery(true)}
+            disabled={loading}
+            className='px-6 py-2 text-sm bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg font-medium hover:from-blue-700 hover:to-purple-700 transition disabled:opacity-50 flex items-center justify-center gap-2'
+          >
               {loading && (
                 <svg className='animate-spin h-4 w-4' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
                   <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15' />
@@ -480,7 +536,11 @@ export default function CdrPage() {
           <div className='px-6 py-4 bg-gradient-to-r from-blue-50 to-purple-50 border-b flex items-center justify-between'>
             <div className='flex items-center gap-4'>
               <p className='text-sm text-gray-700'>
-                共 <span className='font-bold text-blue-600'>{totalCount}</span> 条记录
+                共 <span className='font-bold text-blue-600'>{filterZeroFee ? filteredCdrs.length : totalCount}</span> 条记录{filterZeroFee && originalCdrs.length !== filteredCdrs.length && (
+                  <span className='ml-2 text-sm text-gray-500'>
+                    (已过滤 {originalCdrs.length - filteredCdrs.length} 条零费用话单)
+                  </span>
+                )}
                 {backendTotalPages > 1 && (
                   <span className='ml-2 text-xs text-gray-500'>
                     （第 {queryPage}/{backendTotalPages} 页，每页 {pageSize} 条）
