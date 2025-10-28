@@ -489,11 +489,11 @@ export default function CdrPage() {
               )}
               {loading ? '查询中...' : '查询'}
             </button>
-          </div>
         </div>
+      </div>
 
-        {/* 导出按钮 */}
-        {cdrs.length > 0 && (
+      {/* 导出按钮 */}
+      {cdrs.length > 0 && (
           <div className='mt-3 flex items-center gap-3'>
             <button
               onClick={handleExport}
@@ -518,8 +518,7 @@ export default function CdrPage() {
               )}
             </div>
           </div>
-        )}
-      </div>
+      )}
 
       {/* 话单列表 */}
       {loading ? (
