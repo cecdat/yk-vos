@@ -36,6 +36,7 @@ class CDRQueryRequest(BaseModel):
     end_time: str    # yyyyMMdd 格式
     page: int = 1    # 页码（从1开始）
     page_size: int = 20  # 每页数量（默认20，最大1000）
+    exclude_zero_fee: bool = False  # 是否排除零费用话单
 
 @router.get('/history')
 async def get_cdr_history(
@@ -485,6 +486,11 @@ async def export_cdrs_to_excel(
         cell.fill = header_fill
         cell.font = header_font
         cell.alignment = header_alignment
+    
+    # 过滤零费用话单（如果需要）
+    if query_params.exclude_zero_fee:
+        cdrs = [cdr for cdr in cdrs if isinstance(cdr, dict) and cdr.get('fee') and float(cdr.get('fee', 0)) > 0]
+        logger.info(f'过滤零费用后剩余 {len(cdrs)} 条记录')
     
     # 写入数据（兼容数据库对象和VOS API字典）
     for row_num, cdr in enumerate(cdrs, 2):

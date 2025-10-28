@@ -309,10 +309,14 @@ export default function CdrPage() {
         return
       }
 
+      // 计算导出数量（前端显示的数量）
+      const displayCount = filterZeroFee ? filteredCdrs.length : totalCount
+      const exportCount = displayCount
+
       // 确认导出
-      const confirmMsg = totalCount > 1000 
-        ? `即将导出 ${totalCount} 条记录，数据量较大，可能需要一些时间，确定继续吗？`
-        : `确定导出 ${totalCount} 条记录吗？`
+      const confirmMsg = exportCount > 1000 
+        ? `即将导出 ${exportCount} 条记录，数据量较大，可能需要一些时间，确定继续吗？`
+        : `确定导出 ${exportCount} 条记录吗？`
       
       if (!confirm(confirmMsg)) {
         return
@@ -325,7 +329,8 @@ export default function CdrPage() {
         accounts: accounts ? accounts.split(',').map(a => a.trim()) : undefined,
         caller_e164: caller ? caller.trim() : undefined,
         callee_e164: callee ? callee.trim() : undefined,
-        callee_gateway: gateway ? gateway.trim() : undefined
+        callee_gateway: gateway ? gateway.trim() : undefined,
+        exclude_zero_fee: filterZeroFee  // 传递过滤参数
       }
 
       setLoading(true)
@@ -346,7 +351,7 @@ export default function CdrPage() {
       link.remove()
       window.URL.revokeObjectURL(url)
       
-      alert(`成功导出 ${totalCount} 条记录！`)
+      alert(`成功导出 ${exportCount} 条记录！`)
     } catch (e: any) {
       console.error('导出失败:', e)
       alert(e.response?.data?.detail || '导出失败')
