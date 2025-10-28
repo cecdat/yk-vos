@@ -411,12 +411,12 @@ def sync_all_vos_common_apis():
             },
             {
                 'api_path': '/external/server/GetGatewayMappingOnline',
-                'params': {'names': []},
+                'params': {},
                 'interval': 30
             },
             {
                 'api_path': '/external/server/GetGatewayRoutingOnline',
-                'params': {'names': []},
+                'params': {},
                 'interval': 30
             },
             {
@@ -433,17 +433,17 @@ def sync_all_vos_common_apis():
             # 配置数据（每小时同步一次）
             {
                 'api_path': '/external/server/GetGatewayMapping',
-                'params': {'names': []},
+                'params': {},
                 'interval': 3600
             },
             {
                 'api_path': '/external/server/GetGatewayRouting',
-                'params': {'names': []},
+                'params': {},
                 'interval': 3600
             },
             {
                 'api_path': '/external/server/GetFeeRateGroup',
-                'params': {'names': []},
+                'params': {},
                 'interval': 3600
             },
             {

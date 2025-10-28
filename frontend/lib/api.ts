@@ -20,10 +20,23 @@ api.interceptors.response.use(
       // 清除 token
       if (typeof window !== 'undefined') {
         localStorage.removeItem('token');
-        // 跳转到登录页
-        if (window.location.pathname !== '/login') {
-          window.location.href = '/login?timeout=1';
-        }
+        // 延迟跳转，避免多个请求同时重定向
+        setTimeout(() => {
+          if (window.location.pathname !== '/login') {
+            window.location.href = '/login?timeout=1';
+          }
+        }, 100);
+      }
+    }
+    // 捕获JWT过期错误（通常表现为401）
+    if (error.message && error.message.includes('expired')) {
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('token');
+        setTimeout(() => {
+          if (window.location.pathname !== '/login') {
+            window.location.href = '/login?timeout=1';
+          }
+        }, 100);
       }
     }
     return Promise.reject(error);

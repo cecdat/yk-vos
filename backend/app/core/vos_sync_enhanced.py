@@ -158,12 +158,12 @@ class VosSyncEnhanced:
         api_path_online = f'{api_path}Online'
         
         # 1. 获取网关配置
-        config_result = self.client.call_api(api_path, {'names': []})
+        config_result = self.client.call_api(api_path, {})
         if not self.client.is_success(config_result):
             return {'success': False, 'error': self.client.get_error_message(config_result)}
         
         # 2. 获取在线状态
-        online_result = self.client.call_api(api_path_online, {'names': []})
+        online_result = self.client.call_api(api_path_online, {})
         online_data = {}
         if self.client.is_success(online_result):
             online_list = online_result.get('infoGatewayMappingsOnline' if gw_type == 'mapping' else 'infoGatewayRoutingsOnline', [])
@@ -230,8 +230,8 @@ class VosSyncEnhanced:
         self.cache_service._save_to_cache(
             vos_instance_id=self.vos_instance_id,
             api_path=api_path,
-            cache_key=VosCacheService.generate_cache_key(api_path, {'names': []}),
-            params={'names': []},
+            cache_key=VosCacheService.generate_cache_key(api_path, {}),
+            params={},
             response_data=config_result,
             is_valid=True,
             ret_code=0,
@@ -249,7 +249,7 @@ class VosSyncEnhanced:
         
         try:
             # 调用 VOS API
-            result = self.client.call_api('/external/server/GetFeeRateGroup', {'names': []})
+            result = self.client.call_api('/external/server/GetFeeRateGroup', {})
             
             if not self.client.is_success(result):
                 error_msg = self.client.get_error_message(result)
@@ -296,8 +296,8 @@ class VosSyncEnhanced:
             self.cache_service._save_to_cache(
                 vos_instance_id=self.vos_instance_id,
                 api_path='/external/server/GetFeeRateGroup',
-                cache_key=VosCacheService.generate_cache_key('/external/server/GetFeeRateGroup', {'names': []}),
-                params={'names': []},
+                cache_key=VosCacheService.generate_cache_key('/external/server/GetFeeRateGroup', {}),
+                params={},
                 response_data=result,
                 is_valid=True,
                 ret_code=0,
@@ -320,7 +320,7 @@ class VosSyncEnhanced:
         
         try:
             # 调用 VOS API
-            result = self.client.call_api('/external/server/GetSuite', {'ids': []})
+            result = self.client.call_api('/external/server/GetSuite', {})
             
             if not self.client.is_success(result):
                 error_msg = self.client.get_error_message(result)
@@ -375,8 +375,8 @@ class VosSyncEnhanced:
             self.cache_service._save_to_cache(
                 vos_instance_id=self.vos_instance_id,
                 api_path='/external/server/GetSuite',
-                cache_key=VosCacheService.generate_cache_key('/external/server/GetSuite', {'ids': []}),
-                params={'ids': []},
+                cache_key=VosCacheService.generate_cache_key('/external/server/GetSuite', {}),
+                params={},
                 response_data=result,
                 is_valid=True,
                 ret_code=0,
