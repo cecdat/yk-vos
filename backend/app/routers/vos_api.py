@@ -230,6 +230,7 @@ async def query_vos_api(
         force_refresh=refresh
     )
     
+    # 如果获取数据失败，返回错误
     if source == 'error' or data is None:
         return {
             'success': False,
@@ -251,14 +252,9 @@ async def query_vos_api(
     
     synced_at = cached.synced_at.isoformat() if cached and cached.synced_at else None
     
-    return {
-        'success': True,
-        'data': data,
-        'error': None,
-        'data_source': source,
-        'synced_at': synced_at,
-        'instance_name': instance.name
-    }
+    # 直接返回VOS原始数据（保持原有接口兼容性）
+    # 这样前端可以直接使用 res.data.gatewayMappings, res.data.retCode 等
+    return data
 
 
 # ==================== 路由处理器 ====================
