@@ -233,6 +233,13 @@ async def manual_customer_sync(
                 'task_id': str(task.id)
             }
     
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f'手动触发客户同步失败: {e}')
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.post('/manual/gateway')
 async def manual_gateway_sync(
     params: ManualGatewaySync,
