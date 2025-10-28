@@ -185,6 +185,16 @@ class VosSyncEnhanced:
             online_info = online_data.get(gateway_name, {})
             is_online = online_info.get('isOnline', False) or online_info.get('online', False)
             
+            # 合并所有数据：优先使用在线数据，然后是配置数据
+            # 确保保存完整的网关配置信息
+            merged_data = gw_data.copy()  # 先复制配置数据
+            merged_data.update(online_info)  # 然后用在线信息覆盖（如果有）
+            # 添加一个标记，标识数据来源
+            merged_data['_data_sources'] = {
+                'config': gw_data,
+                'online': online_info
+            }
+            
             # 查找或创建网关记录
             gateway = self.db.query(Gateway).filter(
                 and_(
@@ -203,7 +213,8 @@ class VosSyncEnhanced:
                 gateway.asr = online_info.get('asr', 0.0)
                 gateway.acd = online_info.get('acd', 0.0)
                 gateway.concurrent_calls = online_info.get('concurrentCalls', 0)
-                gateway.raw_data = {**gw_data, **online_info}
+                # 保存完整数据
+                gateway.raw_data = merged_data
                 gateway.synced_at = datetime.utcnow()
             else:
                 # 创建新记录
@@ -218,7 +229,8 @@ class VosSyncEnhanced:
                     asr=online_info.get('asr', 0.0),
                     acd=online_info.get('acd', 0.0),
                     concurrent_calls=online_info.get('concurrentCalls', 0),
-                    raw_data={**gw_data, **online_info}
+                    # 保存完整数据
+                    raw_data=merged_data
                 )
                 self.db.add(gateway)
             
