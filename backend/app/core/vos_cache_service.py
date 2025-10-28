@@ -6,7 +6,7 @@ import json
 import hashlib
 import logging
 from typing import Optional, Dict, Any, Tuple
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from sqlalchemy.orm import Session
 from sqlalchemy import and_, func
 
@@ -86,7 +86,7 @@ class VosCacheService:
         if cached and not cached.is_expired():
             logger.info(
                 f"从数据库缓存读取: {api_path} "
-                f"(key={cache_key[:8]}, age={int((datetime.utcnow() - cached.synced_at).total_seconds())}s)"
+                f"(key={cache_key[:8]}, age={int((datetime.now(timezone.utc) - cached.synced_at).total_seconds())}s)"
             )
             return cached.response_data, 'database'
         
@@ -94,7 +94,7 @@ class VosCacheService:
         if cached:
             logger.info(
                 f"缓存已过期: {api_path} "
-                f"(key={cache_key[:8]}, expired={int((datetime.utcnow() - cached.expires_at).total_seconds())}s ago)"
+                f"(key={cache_key[:8]}, expired={int((datetime.now(timezone.utc) - cached.expires_at).total_seconds())}s ago)"
             )
         
         # 2️⃣ 第二级：从VOS API获取最新数据
