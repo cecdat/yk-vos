@@ -200,6 +200,22 @@ async def query_vos_api(
     通用的VOS API查询函数
     实现三级缓存：Redis → PostgreSQL → VOS API
     """
+    # 特殊处理：对于网关、费率组等API，空数组参数需要发送空对象
+    special_apis = [
+        '/external/server/GetGatewayMapping',
+        '/external/server/GetGatewayMappingOnline',
+        '/external/server/GetGatewayRouting',
+        '/external/server/GetGatewayRoutingOnline',
+        '/external/server/GetFeeRateGroup',
+        '/external/server/GetSuite'
+    ]
+    
+    if api_path in special_apis:
+        # 过滤空数组参数
+        filtered_params = {k: v for k, v in params.items() if not (isinstance(v, list) and len(v) == 0)}
+        # 如果过滤后参数为空，传空字典
+        params = filtered_params if filtered_params else {}
+    
     # 验证VOS实例
     instance = db.query(VOSInstance).filter(VOSInstance.id == instance_id).first()
     if not instance:
