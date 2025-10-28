@@ -90,15 +90,19 @@ export default function VosApiParamForm({ apiName, paramDefinitions, onSubmit, l
       if (param.type === 'array') {
         // 数组类型：如果API需要空对象且数组为空，传空对象；否则传数组
         const isEmptyArray = Array.isArray(value) && value.length === 0
+        const isNullOrEmpty = !value || (Array.isArray(value) && value.length === 0)
         
-        if (shouldSendEmptyObject && isEmptyArray) {
-          // 对于网关、费率组等API，空数组时传空对象
+        // 对于网关、费率组等API，空数组时不添加该字段
+        if (shouldSendEmptyObject && isNullOrEmpty) {
           // 不传该字段，直接传 {}（在下面处理）
-        } else if (!isEmptyArray) {
+          // 什么都不做
+        } else if (!isNullOrEmpty && Array.isArray(value) && value.length > 0) {
           // 非空数组，正常提交
-          submitData[param.name] = value || []
+          submitData[param.name] = value
+        } else if (!shouldSendEmptyObject && Array.isArray(value)) {
+          // 其他API，即使是空数组也提交
+          submitData[param.name] = value
         }
-        // 如果是空数组且不需要该字段，则跳过
       } else if (param.required || (value !== '' && value !== null && value !== undefined)) {
         // 必填或有值的字段
         if (param.type === 'integer') {
