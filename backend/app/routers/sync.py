@@ -36,6 +36,11 @@ class ManualCDRSync(BaseModel):
     days: int = 1  # 同步天数
 
 
+class ManualCustomerSync(BaseModel):
+    """手动触发客户同步"""
+    instance_id: Optional[int] = None  # None表示全部节点
+
+
 class ManualGatewaySync(BaseModel):
     """手动触发网关同步"""
     instance_id: Optional[int] = None  # None表示全部节点
