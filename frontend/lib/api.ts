@@ -1,8 +1,24 @@
 import axios from 'axios';
-const BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:3001/api/v1';
+
+// API基址配置：支持内外网访问
+// 1. 生产环境：使用相对路径（通过Next.js代理转发到后端），支持任何域名和端口
+// 2. 开发环境：如果设置环境变量则使用，否则使用localhost:3001
+const getBaseURL = () => {
+  // 优先使用环境变量
+  if (process.env.NEXT_PUBLIC_API_BASE) {
+    return process.env.NEXT_PUBLIC_API_BASE;
+  }
+  
+  // 开发环境：使用相对路径（会被Next.js代理）
+  return '/api/v1';
+};
+
+const BASE = getBaseURL();
 
 // 增加超时时间：VOS API 可能响应较慢
 const api = axios.create({ baseURL: BASE, timeout: 60000 }); // 60秒
+
+console.log('API Base URL:', BASE);
 
 // 请求拦截器：添加 token
 api.interceptors.request.use(cfg => {

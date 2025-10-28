@@ -3,7 +3,7 @@ const nextConfig = {
   // 开发模式下的重写规则，将 /api 代理到后端
   async rewrites() {
     // 使用环境变量，如果没有设置则使用容器名
-    const apiUrl = process.env.BACKEND_API_URL || 'http://backend:8000';
+    const apiUrl = process.env.BACKEND_API_URL || 'http://backend:3001';
     
     return [
       {
