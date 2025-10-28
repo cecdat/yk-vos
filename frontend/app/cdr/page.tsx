@@ -541,7 +541,8 @@ export default function CdrPage() {
           <div className='px-6 py-4 bg-gradient-to-r from-blue-50 to-purple-50 border-b flex items-center justify-between'>
             <div className='flex items-center gap-4'>
               <p className='text-sm text-gray-700'>
-                共 <span className='font-bold text-blue-600'>{filterZeroFee ? filteredCdrs.length : totalCount}</span> 条记录{filterZeroFee && originalCdrs.length !== filteredCdrs.length && (
+                共 <span className='font-bold text-blue-600'>{filterZeroFee ? filteredCdrs.length : totalCount}</span> 条记录
+                {filterZeroFee && originalCdrs.length !== filteredCdrs.length && (
                   <span className='ml-2 text-sm text-gray-500'>
                     (已过滤 {originalCdrs.length - filteredCdrs.length} 条零费用话单)
                   </span>
