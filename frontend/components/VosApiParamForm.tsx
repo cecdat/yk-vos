@@ -152,28 +152,71 @@ export default function VosApiParamForm({ apiName, paramDefinitions, onSubmit, l
         }
 
       case 'array':
-        // 数组类型：用文本框输入，逗号分隔
+        // 数组类型：用文本框输入，逗号分隔，或者选择"查询全部"
         const arrayValue = Array.isArray(value) ? value.join(', ') : ''
+        const isGatewayApi = ['names', 'ids'].includes(param.name)
+        
         return (
           <div className='space-y-2'>
-            <input
-              type='text'
-              value={arrayValue}
-              onChange={(e) => {
-                const inputValue = e.target.value
-                const arrayData = inputValue
-                  ? inputValue.split(',').map(item => item.trim()).filter(item => item)
-                  : []
-                setFormData({ ...formData, [param.name]: arrayData })
-              }}
-              className='w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent'
-              placeholder='多个值用逗号分隔，留空表示查询全部'
-            />
-            <p className='text-xs text-gray-500'>
-              {Array.isArray(value) && value.length > 0 
-                ? `当前: [${value.map(v => `"${v}"`).join(', ')}]` 
-                : '留空将查询全部数据'}
-            </p>
+            {/* 查询全部开关 */}
+            {isGatewayApi && (
+              <label className='flex items-center gap-3 p-3 bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg border border-blue-200 cursor-pointer hover:border-blue-400 transition'>
+                <input
+                  type='checkbox'
+                  checked={Array.isArray(value) && value.length === 0}
+                  onChange={(e) => {
+                    if (e.target.checked) {
+                      // 查询全部：设置为空数组
+                      setFormData({ ...formData, [param.name]: [] })
+                    } else {
+                      // 取消查询全部：设置为空字符串
+                      setFormData({ ...formData, [param.name]: '' })
+                    }
+                  }}
+                  className='w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500'
+                />
+                <span className='flex-1'>
+                  <span className='font-medium text-gray-800 block'>查询全部</span>
+                  <span className='text-xs text-gray-600 mt-0.5 block'>
+                    选中后将发送空对象 {} 而不是 {`{"${param.name}": []}`}
+                  </span>
+                </span>
+              </label>
+            )}
+            
+            {/* 输入框 */}
+            {(!isGatewayApi || (Array.isArray(value) && value.length > 0)) && (
+              <input
+                type='text'
+                value={arrayValue}
+                onChange={(e) => {
+                  const inputValue = e.target.value
+                  const arrayData = inputValue
+                    ? inputValue.split(',').map(item => item.trim()).filter(item => item)
+                    : []
+                  setFormData({ ...formData, [param.name]: arrayData })
+                }}
+                className='w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent'
+                placeholder='多个值用逗号分隔，留空表示查询全部'
+                disabled={isGatewayApi && Array.isArray(value) && value.length === 0}
+              />
+            )}
+            
+            {/* 状态提示 */}
+            {isGatewayApi && Array.isArray(value) && value.length === 0 ? (
+              <p className='text-xs text-green-600 font-medium flex items-center gap-1'>
+                <svg className='w-4 h-4' fill='currentColor' viewBox='0 0 20 20'>
+                  <path fillRule='evenodd' d='M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z' clipRule='evenodd' />
+                </svg>
+                将发送空对象 {}
+              </p>
+            ) : (
+              <p className='text-xs text-gray-500'>
+                {Array.isArray(value) && value.length > 0 
+                  ? `当前: [${value.map(v => `"${v}"`).join(', ')}]` 
+                  : '留空将查询全部数据'}
+              </p>
+            )}
           </div>
         )
 
