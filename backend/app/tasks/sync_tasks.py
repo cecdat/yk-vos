@@ -703,7 +703,8 @@ def check_vos_instances_health():
                     health_check.api_success = False
                     health_check.response_time_ms = response_time
                     health_check.error_message = error_msg[:500] if error_msg else 'API返回错误'
-                    health_check.consecutive_failures += 1
+                    # 安全地增加失败次数
+                    health_check.consecutive_failures = (health_check.consecutive_failures or 0) + 1
                     logger.warning(f'✗ VOS实例 {inst.name} 不健康: {error_msg}')
                 
             except Exception as e:
@@ -714,7 +715,8 @@ def check_vos_instances_health():
                 health_check.api_success = False
                 health_check.response_time_ms = response_time
                 health_check.error_message = error_msg[:500]
-                health_check.consecutive_failures += 1
+                # 安全地增加失败次数
+                health_check.consecutive_failures = (health_check.consecutive_failures or 0) + 1
                 logger.error(f'✗ VOS实例 {inst.name} 健康检查异常: {error_msg}')
             
             health_check.last_check_at = datetime.utcnow()
