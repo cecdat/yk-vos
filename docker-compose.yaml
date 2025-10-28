@@ -69,9 +69,9 @@ services:
     image: yk-vos-backend-base:latest
     container_name: yk_vos_backend
     working_dir: /srv
-    command: sh -c "chmod +x docker-entrypoint-clickhouse.sh && ./docker-entrypoint-clickhouse.sh uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+    command: sh -c "chmod +x docker-entrypoint-clickhouse.sh && ./docker-entrypoint-clickhouse.sh uvicorn app.main:app --host 0.0.0.0 --port 3001 --reload"
     ports:
-      - "8000:8000"
+      - "3001:3001"
     environment:
       # PostgreSQL 连接（配置数据）
       DATABASE_URL: postgresql://${POSTGRES_USER:-vosadmin}:${POSTGRES_PASSWORD:-Ykxx@2025}@postgres:5432/${POSTGRES_DB:-vosadmin}
@@ -106,7 +106,7 @@ services:
       - vos-network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -119,7 +119,7 @@ services:
       - "3000:3000"
     environment:
       NEXT_PUBLIC_API_BASE: /api/v1
-      BACKEND_API_URL: http://backend:8000
+      BACKEND_API_URL: http://backend:3001
     volumes:
       - ./frontend:/usr/src/app
       - /usr/src/app/node_modules

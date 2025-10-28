@@ -2,8 +2,8 @@
 import React, {useState, useEffect} from 'react'
 import api from '../../lib/api'
 export default function Login(){
-  const [u,setU]=useState('admin')
-  const [p,setP]=useState('admin123')
+  const [u,setU]=useState('')
+  const [p,setP]=useState('')
   const [msg,setMsg]=useState('')
   const [loading,setLoading]=useState(false)
   
@@ -42,7 +42,7 @@ export default function Login(){
             </svg>
           </div>
           <h1 className='text-3xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent'>云客信息-VOS管理平台</h1>
-          <p className='text-gray-500 mt-2'>欢迎回来，请登录您的账户</p>
+          <p className='text-gray-500 mt-2'>请登录您的账户</p>
         </div>
         <div className='space-y-4'>
           <div>
@@ -83,16 +83,6 @@ export default function Login(){
               {msg}
             </div>
           )}
-          <div className='mt-4 p-4 bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg text-sm border border-blue-200'>
-            <p className='font-semibold text-gray-700 mb-2 flex items-center gap-2'>
-              <svg className='w-4 h-4 text-blue-600' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
-                <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z' />
-              </svg>
-              默认账号
-            </p>
-            <p className='text-gray-600'>用户名: <span className='font-medium text-gray-800'>admin</span></p>
-            <p className='text-gray-600'>密码: <span className='font-medium text-gray-800'>admin123</span></p>
-          </div>
         </div>
       </div>
     </div>
