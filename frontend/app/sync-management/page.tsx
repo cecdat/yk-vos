@@ -30,7 +30,7 @@ interface SyncProgress {
 }
 
 export default function SyncManagementPage() {
-  const [activeTab, setActiveTab] = useState<'cdr' | 'customer'>('cdr')
+  const [activeTab, setActiveTab] = useState<'cdr' | 'customer' | 'gateway'>('cdr')
   const [instances, setInstances] = useState<VOSInstance[]>([])
   const [customers, setCustomers] = useState<Customer[]>([])
   const [selectedInstance, setSelectedInstance] = useState<number | 'all'>('all')
@@ -44,7 +44,7 @@ export default function SyncManagementPage() {
   const [syncProgress, setSyncProgress] = useState<SyncProgress>({ is_syncing: false })
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null)
   const [showConfirmDialog, setShowConfirmDialog] = useState(false)
-  const [confirmAction, setConfirmAction] = useState<{ type: 'cdr' | 'customer', message: string } | null>(null)
+  const [confirmAction, setConfirmAction] = useState<{ type: 'cdr' | 'customer' | 'gateway', message: string } | null>(null)
 
   useEffect(() => {
     fetchInstances()
@@ -134,7 +134,7 @@ export default function SyncManagementPage() {
     }
   }
 
-  function showConfirm(type: 'cdr' | 'customer') {
+  function showConfirm(type: 'cdr' | 'customer' | 'gateway') {
     let confirmMessage = ''
     
     if (type === 'cdr' && selectedInstance === 'all') {
@@ -152,6 +152,13 @@ export default function SyncManagementPage() {
       } else {
         const inst = instances.find(i => i.id === selectedInstance)
         confirmMessage = `确定要同步 ${inst?.name} 的客户数据吗？`
+      }
+    } else if (type === 'gateway') {
+      if (selectedInstance === 'all') {
+        confirmMessage = '确定要同步所有VOS节点的网关数据吗？'
+      } else {
+        const inst = instances.find(i => i.id === selectedInstance)
+        confirmMessage = `确定要同步 ${inst?.name} 的网关数据吗？`
       }
     }
     
@@ -177,10 +184,16 @@ export default function SyncManagementPage() {
           customer_id: selectedCustomer === 'all' ? null : selectedCustomer,
           days: syncConfig.cdr_sync_days
         }
-      } else {
+      } else if (confirmAction.type === 'customer') {
         endpoint = '/sync/manual/customer'
         payload = {
           instance_id: selectedInstance === 'all' ? null : selectedInstance
+        }
+      } else if (confirmAction.type === 'gateway') {
+        endpoint = '/sync/manual/gateway'
+        payload = {
+          instance_id: selectedInstance === 'all' ? null : selectedInstance,
+          gateway_type: 'both'
         }
       }
 
@@ -269,14 +282,14 @@ export default function SyncManagementPage() {
           历史话单同步
         </button>
         <button
-          onClick={() => setActiveTab('customer')}
+          onClick={() => setActiveTab('gateway')}
           className={`px-6 py-3 font-medium transition ${
-            activeTab === 'customer'
+            activeTab === 'gateway'
               ? 'text-blue-600 border-b-2 border-blue-600'
               : 'text-gray-500 hover:text-gray-700'
           }`}
         >
-          客户数据同步
+          网关数据同步
         </button>
       </div>
 
@@ -407,8 +420,8 @@ export default function SyncManagementPage() {
         </div>
       )}
 
-      {/* 客户数据同步 */}
-      {activeTab === 'customer' && (
+      {/* 网关数据同步 */}
+      {activeTab === 'gateway' && (
         <div className='space-y-6'>
           {/* 自动同步配置 */}
           <div className='bg-white rounded-xl p-6 shadow-lg border border-gray-200'>
@@ -419,28 +432,22 @@ export default function SyncManagementPage() {
               自动同步配置
             </h2>
             
-            <div>
-              <label className='block text-sm font-medium text-gray-700 mb-2'>
-                每日同步时间
-              </label>
-              <input
-                type='time'
-                value={syncConfig.customer_sync_time}
-                onChange={e => setSyncConfig({ ...syncConfig, customer_sync_time: e.target.value })}
-                className='w-full max-w-xs px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent'
-              />
-              <p className='text-xs text-gray-500 mt-1'>
-                每天在此时间自动同步所有节点的客户数据
+            <div className='bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg p-4 border border-blue-200'>
+              <div className='flex items-center gap-3 mb-2'>
+                <svg className='w-5 h-5 text-blue-600' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
+                  <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z' />
+                </svg>
+                <span className='font-semibold text-gray-800'>网关自动同步</span>
+              </div>
+              <p className='text-sm text-gray-600'>
+                系统已配置网关自动同步任务，每分钟同步一次网关数据（对接网关 + 落地网关）
               </p>
+              <div className='mt-3 text-xs text-gray-500'>
+                <p>• 对接网关：每分钟同步配置和在线状态</p>
+                <p>• 落地网关：每分钟同步配置和在线状态</p>
+                <p>• 数据存储：同时更新缓存表和专用网关表</p>
+              </div>
             </div>
-
-            <button
-              onClick={handleSaveConfig}
-              disabled={loading}
-              className='mt-6 px-6 py-2 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg hover:from-blue-700 hover:to-purple-700 transition disabled:opacity-50'
-            >
-              {loading ? '保存中...' : '保存配置'}
-            </button>
           </div>
 
           {/* 手动触发同步 */}
@@ -470,7 +477,7 @@ export default function SyncManagementPage() {
               </div>
 
               <button
-                onClick={() => showConfirm('customer')}
+                onClick={() => showConfirm('gateway')}
                 disabled={syncProgress.is_syncing || instances.length === 0}
                 className='w-full px-6 py-3 bg-gradient-to-r from-green-600 to-teal-600 text-white rounded-lg hover:from-green-700 hover:to-teal-700 transition disabled:opacity-50 font-medium'
               >
@@ -481,7 +488,7 @@ export default function SyncManagementPage() {
                     </svg>
                     同步中...
                   </span>
-                ) : '立即同步客户数据'}
+                ) : '立即同步网关数据'}
               </button>
 
               {instances.length === 0 && (

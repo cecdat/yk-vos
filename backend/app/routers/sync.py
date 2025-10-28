@@ -13,7 +13,7 @@ from app.routers.auth import get_current_user
 from app.models.user import User
 from app.models.vos_instance import VOSInstance
 from app.models.customer import Customer
-from app.tasks.sync_tasks import sync_all_instances_cdrs, sync_customers_for_instance
+from app.tasks.sync_tasks import sync_all_instances_cdrs, sync_customers_for_instance, sync_instance_gateways_enhanced, sync_all_instances_gateways
 from app.tasks.initial_sync_tasks import sync_cdrs_for_single_day
 from app.tasks.manual_sync_tasks import sync_single_customer_cdrs
 from datetime import datetime, timedelta
@@ -36,9 +36,10 @@ class ManualCDRSync(BaseModel):
     days: int = 1  # 同步天数
 
 
-class ManualCustomerSync(BaseModel):
-    """手动触发客户同步"""
+class ManualGatewaySync(BaseModel):
+    """手动触发网关同步"""
     instance_id: Optional[int] = None  # None表示全部节点
+    gateway_type: str = 'both'  # 'mapping', 'routing', 'both'
 
 
 @router.get('/config')
@@ -232,9 +233,62 @@ async def manual_customer_sync(
                 'task_id': str(task.id)
             }
     
+@router.post('/manual/gateway')
+async def manual_gateway_sync(
+    params: ManualGatewaySync,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Session = Depends(get_db)
+):
+    """
+    手动触发网关同步
+    
+    支持两种模式：
+    1. 全部节点：instance_id=None
+    2. 指定节点：instance_id=X
+    """
+    try:
+        if params.instance_id is None:
+            # 全部节点
+            instances = db.query(VOSInstance).filter(VOSInstance.enabled == True).all()
+            if not instances:
+                return {
+                    'success': False,
+                    'message': '没有启用的VOS节点'
+                }
+            
+            task = sync_all_instances_gateways.apply_async()
+            
+            logger.info(f'用户 {current_user.username} 触发全部节点网关同步')
+            return {
+                'success': True,
+                'message': f'已启动全部节点的网关同步（共{len(instances)}个节点）',
+                'task_id': str(task.id)
+            }
+        
+        else:
+            # 指定节点
+            instance = db.query(VOSInstance).filter(
+                VOSInstance.id == params.instance_id
+            ).first()
+            
+            if not instance:
+                raise HTTPException(status_code=404, detail='VOS节点不存在')
+            
+            if not instance.enabled:
+                raise HTTPException(status_code=400, detail='VOS节点未启用')
+            
+            task = sync_instance_gateways_enhanced.apply_async(args=[params.instance_id])
+            
+            logger.info(f'用户 {current_user.username} 触发节点 {params.instance_id} ({instance.name}) 网关同步')
+            return {
+                'success': True,
+                'message': f'已启动节点 {instance.name} 的网关同步',
+                'task_id': str(task.id)
+            }
+    
     except HTTPException:
         raise
     except Exception as e:
-        logger.exception(f'手动触发客户同步失败: {e}')
+        logger.exception(f'手动触发网关同步失败: {e}')
         raise HTTPException(status_code=500, detail=str(e))
 
