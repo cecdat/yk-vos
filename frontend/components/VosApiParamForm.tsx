@@ -72,15 +72,33 @@ export default function VosApiParamForm({ apiName, paramDefinitions, onSubmit, l
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     
-    // 构建提交数据，过滤空值（数组除外）
+    // 构建提交数据，特殊处理网关和费率组API
     const submitData: Record<string, any> = {}
+    
+    // 网关和费率组API列表（当names为空数组时，传空对象{}）
+    const apisWithoutEmptyArray = [
+      'GetGatewayMapping', 'GetGatewayMappingOnline',
+      'GetGatewayRouting', 'GetGatewayRoutingOnline',
+      'GetFeeRateGroup', 'GetSuite'
+    ]
+    
+    const shouldSendEmptyObject = apisWithoutEmptyArray.includes(apiName)
     
     paramDefinitions.forEach(param => {
       const value = formData[param.name]
       
       if (param.type === 'array') {
-        // 数组类型：始终提交，即使为空
-        submitData[param.name] = value || []
+        // 数组类型：如果API需要空对象且数组为空，传空对象；否则传数组
+        const isEmptyArray = Array.isArray(value) && value.length === 0
+        
+        if (shouldSendEmptyObject && isEmptyArray) {
+          // 对于网关、费率组等API，空数组时传空对象
+          // 不传该字段，直接传 {}（在下面处理）
+        } else if (!isEmptyArray) {
+          // 非空数组，正常提交
+          submitData[param.name] = value || []
+        }
+        // 如果是空数组且不需要该字段，则跳过
       } else if (param.required || (value !== '' && value !== null && value !== undefined)) {
         // 必填或有值的字段
         if (param.type === 'integer') {
@@ -91,7 +109,12 @@ export default function VosApiParamForm({ apiName, paramDefinitions, onSubmit, l
       }
     })
     
-    onSubmit(submitData)
+    // 如果满足条件且提交的数据为空，传空对象
+    if (shouldSendEmptyObject && Object.keys(submitData).length === 0) {
+      onSubmit({})
+    } else {
+      onSubmit(submitData)
+    }
   }
 
   const renderInput = (param: ParamDefinition) => {
