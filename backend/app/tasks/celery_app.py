@@ -23,6 +23,12 @@ celery.conf.beat_schedule = {
         'schedule': 120.0,  # 每2分钟同步一次（话机、网关、费率、套餐）
     },
     
+    # 网关专用同步任务（更频繁同步以获取实时状态）
+    'sync-all-gateways-every-1min': {
+        'task': 'app.tasks.sync_tasks.sync_all_instances_gateways',
+        'schedule': 60.0,  # 每分钟同步一次网关（对接+落地）
+    },
+    
     # 清理过期缓存（每天凌晨2点）
     'cleanup-expired-cache-daily': {
         'task': 'app.tasks.sync_tasks.cleanup_expired_cache',

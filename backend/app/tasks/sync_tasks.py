@@ -654,6 +654,60 @@ def sync_instance_gateways_enhanced(instance_id: int):
 
 
 @celery.task
+def sync_all_instances_gateways():
+    """
+    同步所有VOS实例的网关数据（定时任务）
+    每分钟运行一次，保持网关状态实时更新
+    """
+    db = SessionLocal()
+    try:
+        instances = db.query(VOSInstance).filter(VOSInstance.enabled == True).all()
+        if not instances:
+            logger.info('没有启用的VOS实例，跳过网关同步任务')
+            return {'success': True, 'message': '没有VOS实例需要同步', 'instances_count': 0}
+        
+        results = []
+        for inst in instances:
+            logger.info(f'开始同步网关: {inst.name}')
+            
+            try:
+                sync_service = VosSyncEnhanced(db, inst.id, inst.base_url)
+                
+                # 同步网关（对接+落地）
+                gateways_result = sync_service.sync_gateways('both')
+                
+                results.append({
+                    'instance_id': inst.id,
+                    'instance_name': inst.name,
+                    'success': gateways_result.get('success', False),
+                    'result': gateways_result
+                })
+            except Exception as e:
+                logger.exception(f'同步网关失败 (instance={inst.name}): {e}')
+                results.append({
+                    'instance_id': inst.id,
+                    'instance_name': inst.name,
+                    'success': False,
+                    'error': str(e)
+                })
+        
+        success_count = sum(1 for r in results if r.get('success'))
+        return {
+            'success': True,
+            'instances_count': len(instances),
+            'success_count': success_count,
+            'failed_count': len(instances) - success_count,
+            'results': results
+        }
+        
+    except Exception as e:
+        logger.exception(f'同步所有实例网关失败: {e}')
+        return {'success': False, 'message': str(e)}
+    finally:
+        db.close()
+
+
+@celery.task
 def check_vos_instances_health():
     """
     定时检查所有VOS实例的健康状态
