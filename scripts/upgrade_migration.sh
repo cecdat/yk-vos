@@ -321,7 +321,43 @@ BEGIN
 END \$\$;
 EOF
         
-        log_success "VOS UUID填充完成"
+        log_success "PostgreSQL VOS UUID填充完成"
+        
+        # 填充ClickHouse中的vos_uuid（使用PostgreSQL中生成的UUID）
+        log_info "填充ClickHouse中的vos_uuid..."
+        if docker compose ps clickhouse | grep -q "Up"; then
+            # ClickHouse服务正在运行，尝试填充UUID
+            # 获取PostgreSQL中的UUID映射并更新ClickHouse
+            log_info "从PostgreSQL获取UUID映射..."
+            UUID_MAP=$(docker compose exec -T postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -t -c "SELECT id::text || ':' || vos_uuid::text FROM vos_instances WHERE vos_uuid IS NOT NULL;" 2>/dev/null)
+            
+            if [[ -n "$UUID_MAP" ]]; then
+                # 检查ClickHouse表是否存在
+                if docker compose exec -T clickhouse clickhouse-client -q "EXISTS TABLE cdrs" 2>/dev/null | grep -q "1"; then
+                    log_info "ClickHouse cdrs表存在，开始填充UUID..."
+                    
+                    # 为每个VOS实例更新ClickHouse中的UUID
+                    echo "$UUID_MAP" | while IFS=: read -r vos_id vos_uuid; do
+                        vos_id=$(echo "$vos_id" | tr -d ' \n')
+                        vos_uuid=$(echo "$vos_uuid" | tr -d ' \n')
+                        if [[ -n "$vos_id" && -n "$vos_uuid" ]]; then
+                            log_info "  更新VOS ID $vos_id 的UUID: $vos_uuid"
+                            docker compose exec -T clickhouse clickhouse-client <<EOF 2>/dev/null || true
+ALTER TABLE cdrs UPDATE vos_uuid = '$vos_uuid' WHERE vos_id = $vos_id AND (vos_uuid = '' OR vos_uuid IS NULL);
+EOF
+                        fi
+                    done
+                    
+                    log_success "ClickHouse UUID填充操作已提交（异步执行）"
+                else
+                    log_warning "ClickHouse cdrs表不存在，跳过UUID填充"
+                fi
+            else
+                log_warning "未获取到UUID映射，跳过ClickHouse UUID填充"
+            fi
+        else
+            log_warning "ClickHouse服务未运行，跳过UUID填充"
+        fi
     else
         log_info "所有VOS节点已有UUID，无需填充"
     fi

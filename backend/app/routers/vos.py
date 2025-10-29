@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from pydantic import BaseModel
 import json
 import logging
+import uuid
 
 from app.core.db import get_db
 from app.core.vos_client import VOSClient
@@ -141,11 +142,13 @@ async def create_instance(
     if existing:
         raise HTTPException(status_code=400, detail='Instance with this name already exists')
     
+    # 确保UUID自动生成（虽然模型有default，但显式生成更安全）
     new_instance = VOSInstance(
         name=instance_data.name,
         base_url=instance_data.base_url.rstrip('/'),
         description=instance_data.description,
-        enabled=instance_data.enabled
+        enabled=instance_data.enabled,
+        vos_uuid=uuid.uuid4()  # 显式生成UUID，确保一致性
     )
     db.add(new_instance)
     db.commit()
@@ -160,6 +163,7 @@ async def create_instance(
     
     return {
         'id': new_instance.id,
+        'vos_uuid': str(new_instance.vos_uuid) if new_instance.vos_uuid else None,
         'name': new_instance.name,
         'base_url': new_instance.base_url,
         'description': new_instance.description,
