@@ -14,6 +14,11 @@ import logging, json, hashlib, time
 from dateutil import parser as dateparser
 logger = logging.getLogger(__name__)
 
+def get_vos_uuid_by_instance_id(db, instance_id):
+    """根据VOS实例ID获取对应的UUID"""
+    instance = db.query(VOSInstance).filter(VOSInstance.id == instance_id).first()
+    return instance.vos_uuid if instance else None
+
 @celery.task
 def sync_all_instances_online_phones():
     db = SessionLocal()
@@ -39,8 +44,9 @@ def sync_all_instances_online_phones():
                 existing = db.query(Phone).filter(Phone.e164 == e164, Phone.vos_id == inst.id).first()
                 if existing:
                     existing.status = 'online'
+                    existing.vos_uuid = inst.vos_uuid  # 更新UUID
                 else:
-                    newp = Phone(e164=e164, status='online', vos_id=inst.id)
+                    newp = Phone(e164=e164, status='online', vos_id=inst.id, vos_uuid=inst.vos_uuid)
                     db.add(newp)
             db.commit()
     except Exception as e:
@@ -183,7 +189,7 @@ def sync_all_instances_cdrs(days=1):
                                 break
                     
                     if cdrs:
-                        inserted = ClickHouseCDR.insert_cdrs(cdrs, vos_id=inst.id)
+                        inserted = ClickHouseCDR.insert_cdrs(cdrs, vos_id=inst.id, vos_uuid=str(inst.vos_uuid))
                         instance_synced += inserted
                         logger.info(f'    ✅ 客户 {account}: 同步 {inserted} 条话单')
                     
@@ -281,12 +287,14 @@ def sync_customers_for_instance(instance_id: int):
                 existing.limit_money = limit_money
                 existing.is_in_debt = is_in_debt
                 existing.raw_data = raw_data_json
+                existing.vos_uuid = inst.vos_uuid  # 更新UUID
                 existing.synced_at = datetime.utcnow()
                 updated_count += 1
             else:
                 # 创建新记录（包括完整的原始数据）
                 new_customer = Customer(
                     vos_instance_id=instance_id,
+                    vos_uuid=inst.vos_uuid,
                     account=account,
                     money=money,
                     limit_money=limit_money,
@@ -730,8 +738,11 @@ def check_vos_instances_health():
             ).first()
             
             if not health_check:
-                health_check = VOSHealthCheck(vos_instance_id=inst.id)
+                health_check = VOSHealthCheck(vos_instance_id=inst.id, vos_uuid=inst.vos_uuid)
                 db.add(health_check)
+            else:
+                # 更新现有记录的UUID
+                health_check.vos_uuid = inst.vos_uuid
             
             # 执行健康检查 - 调用简单的API测试连通性
             client = VOSClient(inst.base_url)

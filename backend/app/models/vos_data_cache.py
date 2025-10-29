@@ -1,6 +1,6 @@
 """Generic VOS data cache model for all VOS API responses"""
 from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Index, Text, Boolean
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.sql import func
 from app.models.base import Base
 from datetime import datetime, timedelta, timezone
@@ -15,6 +15,7 @@ class VosDataCache(Base):
     
     id = Column(Integer, primary_key=True, index=True)
     vos_instance_id = Column(Integer, ForeignKey('vos_instances.id'), nullable=False, index=True)
+    vos_uuid = Column(UUID(as_uuid=True), nullable=True, index=True)  # VOS节点唯一标识
     
     # API 标识
     api_path = Column(String(255), nullable=False, index=True)  # 例如: /external/server/GetCustomer

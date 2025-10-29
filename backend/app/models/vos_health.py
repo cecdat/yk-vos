@@ -1,4 +1,5 @@
 from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, Float
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.sql import func
 from app.models.base import Base
 
@@ -9,6 +10,7 @@ class VOSHealthCheck(Base):
     
     id = Column(Integer, primary_key=True, index=True)
     vos_instance_id = Column(Integer, ForeignKey('vos_instances.id'), nullable=False, index=True)
+    vos_uuid = Column(UUID(as_uuid=True), nullable=True, index=True)  # VOS节点唯一标识
     
     # 健康状态: healthy, unhealthy, unknown
     status = Column(String(20), default='unknown')

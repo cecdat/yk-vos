@@ -250,7 +250,7 @@ async def query_cdrs_from_vos(
             import threading
             def store_to_clickhouse():
                 try:
-                    ClickHouseCDR.insert_cdrs(cdrs, vos_id=instance_id)
+                    ClickHouseCDR.insert_cdrs(cdrs, vos_id=instance_id, vos_uuid=str(instance.vos_uuid))
                 except Exception as e:
                     logger.error(f'存储话单到 ClickHouse 失败: {e}')
             

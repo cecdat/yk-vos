@@ -277,7 +277,7 @@ def sync_cdrs_for_single_day(instance_id: int, date_str: str):
                             break
                 
                 if cdrs:
-                    inserted = ClickHouseCDR.insert_cdrs(cdrs, vos_id=inst.id)
+                    inserted = ClickHouseCDR.insert_cdrs(cdrs, vos_id=inst.id, vos_uuid=str(inst.vos_uuid))
                     total_synced += inserted
                     logger.info(f'      ✅ 客户 {account}: 同步 {inserted} 条话单')
                 

@@ -1,6 +1,6 @@
 """Gateway models for VOS gateway data"""
 from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, ForeignKey, Index, Text
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.sql import func
 from app.models.base import Base
 
@@ -11,6 +11,7 @@ class Gateway(Base):
     
     id = Column(Integer, primary_key=True, index=True)
     vos_instance_id = Column(Integer, ForeignKey('vos_instances.id'), nullable=False, index=True)
+    vos_uuid = Column(UUID(as_uuid=True), nullable=True, index=True)  # VOS节点唯一标识
     
     # 网关基本信息
     gateway_name = Column(String(255), nullable=False, index=True)  # 网关名称

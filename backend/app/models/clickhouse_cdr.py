@@ -25,12 +25,13 @@ class ClickHouseCDR:
         return int(hash_obj.hexdigest()[:16], 16)
     
     @staticmethod
-    def insert_cdrs(cdrs: List[Dict], vos_id: Optional[int] = None) -> int:
+    def insert_cdrs(cdrs: List[Dict], vos_id: Optional[int] = None, vos_uuid: Optional[str] = None) -> int:
         """批量插入话单
         
         Args:
             cdrs: 话单列表（VOS API 格式）
             vos_id: VOS 实例 ID（如果 CDR 中没有则使用此值）
+            vos_uuid: VOS 节点唯一标识（如果 CDR 中没有则使用此值）
             
         Returns:
             成功插入的记录数
@@ -43,8 +44,9 @@ class ClickHouseCDR:
         # 转换字段名（VOS API 格式 -> ClickHouse 格式）
         ch_cdrs = []
         for cdr in cdrs:
-            # 获取 VOS ID
+            # 获取 VOS ID 和 UUID
             cdr_vos_id = cdr.get('vos_id', vos_id or 0)
+            cdr_vos_uuid = cdr.get('vos_uuid', vos_uuid or '')
             
             # 时间处理
             start_time = cdr.get('start')
@@ -92,6 +94,7 @@ class ClickHouseCDR:
             ch_cdr = {
                 'id': ClickHouseCDR._generate_id(flow_no_str),
                 'vos_id': int(cdr_vos_id),
+                'vos_uuid': safe_str(cdr_vos_uuid),
                 'flow_no': safe_str(flow_no_str),
                 'account_name': safe_str(cdr.get('accountName')),
                 'account': safe_str(cdr.get('account')),

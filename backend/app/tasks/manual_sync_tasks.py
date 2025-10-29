@@ -111,7 +111,7 @@ def sync_single_customer_cdrs(instance_id: int, customer_id: int, days: int = 1)
                         break
             
             if cdrs:
-                inserted = ClickHouseCDR.insert_cdrs(cdrs, vos_id=inst.id)
+                inserted = ClickHouseCDR.insert_cdrs(cdrs, vos_id=inst.id, vos_uuid=str(inst.vos_uuid))
                 total_synced += inserted
                 logger.info(f'✅ 客户 {customer.account}: 同步 {inserted} 条话单')
                 

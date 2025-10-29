@@ -1,5 +1,5 @@
 from sqlalchemy import Column, Integer, String, DateTime, Numeric, SmallInteger, PrimaryKeyConstraint
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from app.models.base import Base
 
 
@@ -22,6 +22,7 @@ class CDR(Base):
     # 基础字段
     id = Column(Integer, autoincrement=True, nullable=False, index=True, comment='自增ID（非主键，用于排序和引用）')
     vos_id = Column(Integer, nullable=False, index=True, comment='VOS实例ID')
+    vos_uuid = Column(UUID(as_uuid=True), nullable=True, index=True, comment='VOS节点唯一标识')
     
     # 账户信息
     account_name = Column(String(128), comment='账户名称')
