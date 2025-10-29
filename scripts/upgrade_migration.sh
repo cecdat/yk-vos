@@ -214,7 +214,7 @@ run_database_migration() {
     if [[ "$DB_VERSION" != "2.3" ]]; then
         log_info "执行v2.3升级脚本..."
         if [[ -f "sql/upgrade_db_v2.3.sql" ]]; then
-            docker compose exec -T postgres psql -U yk_vos_user -d yk_vos < sql/upgrade_db_v2.3.sql
+            docker compose exec -T postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" < sql/upgrade_db_v2.3.sql
             log_success "PostgreSQL v2.3升级完成"
         else
             log_error "未找到升级脚本: sql/upgrade_db_v2.3.sql"
