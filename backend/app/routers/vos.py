@@ -48,6 +48,7 @@ async def get_instances(
         
         instance_data = {
             'id': inst.id,
+            'vos_uuid': str(inst.vos_uuid) if inst.vos_uuid else None,
             'name': inst.name,
             'base_url': inst.base_url,
             'description': inst.description,
@@ -72,6 +73,7 @@ async def get_instance(
         raise HTTPException(status_code=404, detail='Instance not found')
     return {
         'id': instance.id,
+        'vos_uuid': str(instance.vos_uuid) if instance.vos_uuid else None,
         'name': instance.name,
         'base_url': instance.base_url,
         'description': instance.description,

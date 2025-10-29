@@ -425,6 +425,11 @@ export default function Page(){
                       )}
                     </div>
                     <p className='text-sm text-gray-600 mt-1 break-all'>{inst.base_url}</p>
+                  {inst.vos_uuid && (
+                    <p className='text-xs text-gray-500 mt-2 font-mono'>
+                      UUID: {inst.vos_uuid}
+                    </p>
+                  )}
                   {inst.description && (
                     <p className='text-sm text-gray-500 mt-2'>{inst.description}</p>
                   )}

@@ -5,6 +5,7 @@ import Card from '../../components/ui/Card'
 
 interface VOSInstance {
   id: number
+  vos_uuid?: string
   name: string
   base_url: string
   description?: string
@@ -295,6 +296,11 @@ export default function SettingsPage() {
                   <div className='flex-1'>
                     <h3 className='text-lg font-semibold text-gray-900'>{inst.name}</h3>
                     <div className='mt-1 text-sm text-gray-600 break-all'>{inst.base_url}</div>
+                    {inst.vos_uuid && (
+                      <p className='mt-1 text-xs text-gray-500 font-mono break-all'>
+                        UUID: {inst.vos_uuid}
+                      </p>
+                    )}
                     {inst.description && (
                       <p className='mt-2 text-sm text-gray-500'>{inst.description}</p>
                     )}
