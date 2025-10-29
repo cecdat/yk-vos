@@ -74,6 +74,25 @@ check_project_dir() {
     fi
 }
 
+# 读取环境变量
+load_environment() {
+    log_info "读取环境配置..."
+    
+    if [[ -f ".env" ]]; then
+        # 加载环境变量
+        export $(grep -v '^#' .env | xargs)
+        log_success "环境变量加载完成"
+    else
+        log_warning "未找到.env文件，使用默认配置"
+        # 设置默认值
+        export POSTGRES_DB=${POSTGRES_DB:-"yk_vos"}
+        export POSTGRES_USER=${POSTGRES_USER:-"yk_vos_user"}
+        export POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-"password"}
+    fi
+    
+    log_info "数据库配置: $POSTGRES_USER@$POSTGRES_DB"
+}
+
 # 更新代码
 update_code() {
     log_header "更新代码..."
@@ -162,7 +181,7 @@ health_check() {
     
     # 检查数据库
     log_info "检查数据库连接..."
-    if docker compose exec postgres pg_isready -U yk_vos_user -d yk_vos > /dev/null 2>&1; then
+    if docker compose exec postgres pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB" > /dev/null 2>&1; then
         log_success "PostgreSQL数据库正常"
     else
         log_warning "PostgreSQL数据库异常"
@@ -221,8 +240,8 @@ backup_data() {
     
     # 备份PostgreSQL数据库
     log_info "备份PostgreSQL数据库..."
-    if docker compose exec postgres pg_isready -U yk_vos_user -d yk_vos > /dev/null 2>&1; then
-        docker compose exec -T postgres pg_dump -U yk_vos_user yk_vos > "$backup_path/postgres_backup.sql"
+    if docker compose exec postgres pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB" > /dev/null 2>&1; then
+        docker compose exec -T postgres pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB" > "$backup_path/postgres_backup.sql"
         log_success "PostgreSQL备份完成"
     else
         log_error "PostgreSQL数据库连接失败"
@@ -410,6 +429,7 @@ main() {
     fi
     
     check_project_dir
+    load_environment
     
     case $action in
         "update-code")

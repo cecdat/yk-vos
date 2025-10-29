@@ -80,6 +80,25 @@ check_existing_installation() {
     log_success "找到现有安装: $PROJECT_DIR"
 }
 
+# 读取环境变量
+load_environment() {
+    log_info "读取环境配置..."
+    
+    if [[ -f ".env" ]]; then
+        # 加载环境变量
+        export $(grep -v '^#' .env | xargs)
+        log_success "环境变量加载完成"
+    else
+        log_warning "未找到.env文件，使用默认配置"
+        # 设置默认值
+        export POSTGRES_DB=${POSTGRES_DB:-"yk_vos"}
+        export POSTGRES_USER=${POSTGRES_USER:-"yk_vos_user"}
+        export POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-"password"}
+    fi
+    
+    log_info "数据库配置: $POSTGRES_USER@$POSTGRES_DB"
+}
+
 # 备份现有数据
 backup_data() {
     log_info "备份现有数据..."
@@ -89,15 +108,32 @@ backup_data() {
     
     # 备份数据库
     log_info "备份PostgreSQL数据库..."
-    docker compose exec -T postgres pg_dump -U yk_vos_user yk_vos > "$BACKUP_DIR/postgres_backup.sql"
+    if docker compose exec postgres pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB" > /dev/null 2>&1; then
+        docker compose exec -T postgres pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB" > "$BACKUP_DIR/postgres_backup.sql"
+        log_success "PostgreSQL备份完成"
+    else
+        log_error "PostgreSQL数据库连接失败"
+        return 1
+    fi
     
     # 备份Redis数据
     log_info "备份Redis数据..."
-    docker compose exec -T redis redis-cli --rdb "$BACKUP_DIR/redis_backup.rdb"
+    if docker compose exec redis redis-cli ping > /dev/null 2>&1; then
+        docker compose exec -T redis redis-cli --rdb "$BACKUP_DIR/redis_backup.rdb"
+        log_success "Redis备份完成"
+    else
+        log_error "Redis数据库连接失败"
+        return 1
+    fi
     
     # 备份ClickHouse数据
     log_info "备份ClickHouse数据..."
-    docker compose exec -T clickhouse clickhouse-client --query "BACKUP DATABASE vos_cdrs TO Disk('backups', 'vos_cdrs_backup')"
+    if docker compose exec clickhouse clickhouse-client --query "SELECT 1" > /dev/null 2>&1; then
+        docker compose exec -T clickhouse clickhouse-client --query "BACKUP DATABASE vos_cdrs TO Disk('backups', 'vos_cdrs_backup')" || log_warning "ClickHouse备份失败，跳过"
+        log_success "ClickHouse备份完成"
+    else
+        log_warning "ClickHouse数据库连接失败，跳过备份"
+    fi
     
     # 备份配置文件
     log_info "备份配置文件..."
@@ -166,7 +202,7 @@ run_database_migration() {
     sleep 30
     
     # 检查数据库连接
-    if ! docker compose exec postgres pg_isready -U yk_vos_user -d yk_vos; then
+    if ! docker compose exec postgres pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"; then
         log_error "PostgreSQL数据库连接失败"
         exit 1
     fi
@@ -175,7 +211,7 @@ run_database_migration() {
     log_info "执行PostgreSQL迁移脚本..."
     
     # 检查数据库版本
-    DB_VERSION=$(docker compose exec -T postgres psql -U yk_vos_user -d yk_vos -t -c "SELECT version FROM db_versions ORDER BY applied_at DESC LIMIT 1;" 2>/dev/null || echo "0")
+    DB_VERSION=$(docker compose exec -T postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -t -c "SELECT version FROM db_versions ORDER BY applied_at DESC LIMIT 1;" 2>/dev/null || echo "0")
     
     log_info "当前数据库版本: $DB_VERSION"
     
@@ -353,6 +389,7 @@ main() {
     
     check_root
     check_existing_installation
+    load_environment
     backup_data
     stop_services
     update_code
