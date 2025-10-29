@@ -224,11 +224,14 @@ run_database_migration() {
         log_warning "数据库已经是v2.3版本，跳过升级"
     fi
     
-    # 执行ClickHouse升级
+    # 执行ClickHouse升级（可选，失败不影响升级）
     log_info "执行ClickHouse升级..."
     if [[ -f "clickhouse/init/02_upgrade_add_vos_uuid.sql" ]]; then
-        docker compose exec -T clickhouse clickhouse-client < clickhouse/init/02_upgrade_add_vos_uuid.sql
-        log_success "ClickHouse升级完成"
+        if docker compose exec -T clickhouse clickhouse-client < clickhouse/init/02_upgrade_add_vos_uuid.sql 2>/dev/null; then
+            log_success "ClickHouse升级完成"
+        else
+            log_warning "ClickHouse升级失败（可能表不存在），跳过"
+        fi
     else
         log_warning "未找到ClickHouse升级脚本"
     fi

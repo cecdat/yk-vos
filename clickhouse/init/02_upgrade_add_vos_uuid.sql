@@ -2,7 +2,14 @@
 -- 执行时间: 2025-01-XX
 -- 说明: 为 ClickHouse cdrs 表添加 vos_uuid 字段，支持 VOS 节点唯一标识
 
--- 1. 添加 vos_uuid 字段到 cdrs 表
+USE vos_cdrs;
+
+-- 1. 检查 cdrs 表是否存在，如果存在则添加 vos_uuid 字段
+-- ClickHouse 不支持 IF EXISTS，所以需要捕获错误
+SELECT 'ClickHouse 升级开始，检查 cdrs 表...' as status;
+
+-- 注意：由于 ClickHouse 不支持条件 ALTER，我们需要直接执行
+-- 如果表不存在，命令会失败，但不会影响 PostgreSQL 升级
 ALTER TABLE cdrs ADD COLUMN IF NOT EXISTS vos_uuid String COMMENT 'VOS节点唯一标识';
 
 -- 2. 添加索引提高查询性能

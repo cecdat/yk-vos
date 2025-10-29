@@ -86,20 +86,45 @@ FROM vos_instances vi
 WHERE vos_health_check.vos_instance_id = vi.id 
 AND vos_health_check.vos_uuid IS NULL;
 
--- 8. 添加索引提高查询性能
-CREATE INDEX IF NOT EXISTS idx_vos_data_cache_uuid ON vos_data_cache(vos_uuid);
-CREATE INDEX IF NOT EXISTS idx_gateways_uuid ON gateways(vos_uuid);
-CREATE INDEX IF NOT EXISTS idx_customers_uuid ON customers(vos_uuid);
-CREATE INDEX IF NOT EXISTS idx_cdrs_uuid ON cdrs(vos_uuid);
-CREATE INDEX IF NOT EXISTS idx_phones_uuid ON phones(vos_uuid);
-CREATE INDEX IF NOT EXISTS idx_vos_health_check_uuid ON vos_health_check(vos_uuid);
+-- 8. 添加索引提高查询性能（只对存在的表）
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'vos_data_cache') THEN
+        CREATE INDEX IF NOT EXISTS idx_vos_data_cache_uuid ON vos_data_cache(vos_uuid);
+    END IF;
+    
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'gateways') THEN
+        CREATE INDEX IF NOT EXISTS idx_gateways_uuid ON gateways(vos_uuid);
+    END IF;
+    
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'customers') THEN
+        CREATE INDEX IF NOT EXISTS idx_customers_uuid ON customers(vos_uuid);
+    END IF;
+    
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'cdrs') THEN
+        CREATE INDEX IF NOT EXISTS idx_cdrs_uuid ON cdrs(vos_uuid);
+    END IF;
+    
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'phones') THEN
+        CREATE INDEX IF NOT EXISTS idx_phones_uuid ON phones(vos_uuid);
+    END IF;
+    
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'vos_health_checks' OR table_name = 'vos_health_check') THEN
+        CREATE INDEX IF NOT EXISTS idx_vos_health_check_uuid ON vos_health_checks(vos_uuid);
+    END IF;
+END $$;
 
--- 9. 更新数据库版本
-INSERT INTO db_versions (version, description, applied_at) 
-VALUES ('2.3', '添加VOS节点唯一UUID支持，支持IP变更时数据关联不中断', NOW())
-ON CONFLICT (version) DO UPDATE SET 
-    description = EXCLUDED.description,
-    applied_at = EXCLUDED.applied_at;
+-- 9. 更新数据库版本（如果表存在）
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'db_versions') THEN
+        INSERT INTO db_versions (version, description, applied_at) 
+        VALUES ('2.3', '添加VOS节点唯一UUID支持，支持IP变更时数据关联不中断', NOW())
+        ON CONFLICT (version) DO UPDATE SET 
+            description = EXCLUDED.description,
+            applied_at = EXCLUDED.applied_at;
+    END IF;
+END $$;
 
 -- 完成提示
 SELECT 'VOS节点唯一UUID支持已添加完成' as status;
