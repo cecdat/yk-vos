@@ -236,6 +236,96 @@ run_database_migration() {
         log_warning "未找到ClickHouse升级脚本"
     fi
     
+    # 填充已有VOS节点的UUID
+    log_info "填充已有VOS节点的UUID..."
+    
+    # 检查是否还有未填充UUID的VOS节点
+    result=$(docker compose exec -T postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -t -c "SELECT COUNT(*) FROM vos_instances WHERE vos_uuid IS NULL;" 2>/dev/null)
+    missing_uuid_count=$(echo "$result" | tr -d ' \n')
+    
+    if [[ "$missing_uuid_count" -gt 0 ]]; then
+        log_info "发现 $missing_uuid_count 个未设置UUID的VOS节点"
+        
+        # 为未设置UUID的节点生成UUID
+        docker compose exec -T postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" <<EOF
+UPDATE vos_instances 
+SET vos_uuid = gen_random_uuid() 
+WHERE vos_uuid IS NULL;
+EOF
+        
+        # 填充相关数据
+        log_info "填充相关数据的UUID..."
+        
+        # vos_data_cache
+        docker compose exec -T postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" <<EOF
+UPDATE vos_data_cache 
+SET vos_uuid = vi.vos_uuid 
+FROM vos_instances vi 
+WHERE vos_data_cache.vos_instance_id = vi.id 
+AND vos_data_cache.vos_uuid IS NULL;
+EOF
+        
+        # gateways
+        docker compose exec -T postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" <<EOF
+UPDATE gateways 
+SET vos_uuid = vi.vos_uuid 
+FROM vos_instances vi 
+WHERE gateways.vos_instance_id = vi.id 
+AND gateways.vos_uuid IS NULL;
+EOF
+        
+        # customers
+        docker compose exec -T postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" <<EOF
+UPDATE customers 
+SET vos_uuid = vi.vos_uuid 
+FROM vos_instances vi 
+WHERE customers.vos_instance_id = vi.id 
+AND customers.vos_uuid IS NULL;
+EOF
+        
+        # cdrs
+        docker compose exec -T postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" <<EOF
+UPDATE cdrs 
+SET vos_uuid = vi.vos_uuid 
+FROM vos_instances vi 
+WHERE cdrs.vos_id = vi.id 
+AND cdrs.vos_uuid IS NULL;
+EOF
+        
+        # phones
+        docker compose exec -T postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" <<EOF
+UPDATE phones 
+SET vos_uuid = vi.vos_uuid 
+FROM vos_instances vi 
+WHERE phones.vos_id = vi.id 
+AND phones.vos_uuid IS NULL;
+EOF
+        
+        # vos_health_check (支持两种表名)
+        docker compose exec -T postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" <<EOF
+DO \$\$
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'vos_health_check') THEN
+        UPDATE vos_health_check 
+        SET vos_uuid = vi.vos_uuid 
+        FROM vos_instances vi 
+        WHERE vos_health_check.vos_instance_id = vi.id 
+        AND vos_health_check.vos_uuid IS NULL;
+    ELSIF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'vos_health_checks') THEN
+        UPDATE vos_health_checks 
+        SET vos_uuid = vi.vos_uuid 
+        FROM vos_instances vi 
+        WHERE vos_health_checks.vos_instance_id = vi.id 
+        AND vos_health_checks.vos_uuid IS NULL;
+    END IF;
+END \$\$;
+EOF
+        
+        log_success "VOS UUID填充完成"
+    else
+        log_info "所有VOS节点已有UUID，无需填充"
+    fi
+    
     log_success "数据库迁移完成"
 }
 
