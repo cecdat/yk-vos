@@ -2,6 +2,17 @@
 -- 执行时间: 2025-01-XX
 -- 说明: 为VOS节点添加唯一UUID字段，支持IP变更时数据关联不中断
 
+-- 检查是否已经执行过此升级
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'db_versions') THEN
+        IF EXISTS (SELECT 1 FROM db_versions WHERE version = '2.3') THEN
+            RAISE NOTICE '数据库已经是v2.3版本，跳过升级';
+            RETURN;
+        END IF;
+    END IF;
+END $$;
+
 -- 1. 添加vos_uuid字段到vos_instances表
 ALTER TABLE vos_instances 
 ADD COLUMN IF NOT EXISTS vos_uuid UUID;
@@ -15,9 +26,15 @@ WHERE vos_uuid IS NULL;
 ALTER TABLE vos_instances 
 ALTER COLUMN vos_uuid SET NOT NULL;
 
--- 4. 添加唯一约束
-ALTER TABLE vos_instances 
-ADD CONSTRAINT uq_vos_instances_uuid UNIQUE (vos_uuid);
+-- 4. 添加唯一约束（如果不存在）
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.table_constraints 
+                   WHERE constraint_name = 'uq_vos_instances_uuid' 
+                   AND table_name = 'vos_instances') THEN
+        ALTER TABLE vos_instances ADD CONSTRAINT uq_vos_instances_uuid UNIQUE (vos_uuid);
+    END IF;
+END $$;
 
 -- 5. 添加索引提高查询性能
 CREATE INDEX IF NOT EXISTS idx_vos_instances_uuid ON vos_instances(vos_uuid);
@@ -45,9 +62,15 @@ ADD COLUMN IF NOT EXISTS vos_uuid UUID;
 ALTER TABLE phones 
 ADD COLUMN IF NOT EXISTS vos_uuid UUID;
 
--- vos_health_check表
-ALTER TABLE vos_health_check 
-ADD COLUMN IF NOT EXISTS vos_uuid UUID;
+-- vos_health_check表（检查表名）
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'vos_health_check') THEN
+        ALTER TABLE vos_health_check ADD COLUMN IF NOT EXISTS vos_uuid UUID;
+    ELSIF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'vos_health_checks') THEN
+        ALTER TABLE vos_health_checks ADD COLUMN IF NOT EXISTS vos_uuid UUID;
+    END IF;
+END $$;
 
 -- 7. 为现有数据填充vos_uuid（基于vos_instance_id关联）
 UPDATE vos_data_cache 
@@ -80,11 +103,23 @@ FROM vos_instances vi
 WHERE phones.vos_id = vi.id 
 AND phones.vos_uuid IS NULL;
 
-UPDATE vos_health_check 
-SET vos_uuid = vi.vos_uuid 
-FROM vos_instances vi 
-WHERE vos_health_check.vos_instance_id = vi.id 
-AND vos_health_check.vos_uuid IS NULL;
+-- 更新vos_health_check表的vos_uuid（检查表名）
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'vos_health_check') THEN
+        UPDATE vos_health_check 
+        SET vos_uuid = vi.vos_uuid 
+        FROM vos_instances vi 
+        WHERE vos_health_check.vos_instance_id = vi.id 
+        AND vos_health_check.vos_uuid IS NULL;
+    ELSIF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'vos_health_checks') THEN
+        UPDATE vos_health_checks 
+        SET vos_uuid = vi.vos_uuid 
+        FROM vos_instances vi 
+        WHERE vos_health_checks.vos_instance_id = vi.id 
+        AND vos_health_checks.vos_uuid IS NULL;
+    END IF;
+END $$;
 
 -- 8. 添加索引提高查询性能（只对存在的表）
 DO $$
@@ -109,8 +144,10 @@ BEGIN
         CREATE INDEX IF NOT EXISTS idx_phones_uuid ON phones(vos_uuid);
     END IF;
     
-    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'vos_health_checks' OR table_name = 'vos_health_check') THEN
-        CREATE INDEX IF NOT EXISTS idx_vos_health_check_uuid ON vos_health_checks(vos_uuid);
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'vos_health_check') THEN
+        CREATE INDEX IF NOT EXISTS idx_vos_health_check_uuid ON vos_health_check(vos_uuid);
+    ELSIF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'vos_health_checks') THEN
+        CREATE INDEX IF NOT EXISTS idx_vos_health_checks_uuid ON vos_health_checks(vos_uuid);
     END IF;
 END $$;
 
