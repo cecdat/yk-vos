@@ -185,38 +185,6 @@ stop_services() {
     log_success "服务已停止"
 }
 
-# 更新代码
-update_code() {
-    log_info "更新代码..."
-    
-    # 检查是否有git仓库
-    if [[ -d ".git" ]]; then
-        log_info "从Git仓库更新代码..."
-        git fetch origin
-        git checkout main
-        git pull origin main
-    else
-        log_warning "未找到Git仓库，请手动更新代码"
-        log_info "请将新版本代码复制到 $PROJECT_DIR"
-        read -p "按回车键继续..."
-    fi
-    
-    log_success "代码更新完成"
-}
-
-# 更新Docker镜像
-update_images() {
-    log_info "更新Docker镜像..."
-    
-    # 拉取最新镜像
-    docker compose pull
-    
-    # 构建新镜像
-    docker compose build --no-cache
-    
-    log_success "Docker镜像更新完成"
-}
-
 # 执行数据库迁移
 run_database_migration() {
     log_info "执行数据库迁移..."
@@ -376,7 +344,9 @@ show_result() {
     echo "  数据备份: sudo ./scripts/daily_update.sh backup"
     echo "  健康检查: sudo ./scripts/daily_update.sh health-check"
     echo
-    echo "备份位置: $BACKUP_DIR"
+    if [[ -n "$BACKUP_DIR" ]] && [[ -d "$BACKUP_DIR" ]]; then
+        echo "备份位置: $BACKUP_DIR"
+    fi
     echo "=========================================="
 }
 
@@ -432,9 +402,13 @@ main() {
         log_info "已跳过数据备份步骤"
     fi
     
+    log_info "注意：请确保代码已更新到最新版本"
+    log_info "请手动执行以下操作后按回车继续："
+    echo "  1. git pull 或更新代码"
+    echo "  2. (可选) docker compose build 重新构建镜像"
+    read -p "按回车键继续..." || true
+    
     stop_services
-    update_code
-    update_images
     run_database_migration
     update_environment
     start_services
