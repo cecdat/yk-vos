@@ -1,218 +1,434 @@
-# 部署指南 - 支持内外网访问
+# YK-VOS 部署指南
 
-## 部署架构
+## 概述
 
-### 端口映射配置
+YK-VOS 是一个基于 FastAPI + Next.js 的 VOS3000 管理系统，支持 VOS 节点的统一管理、数据同步、话单查询等功能。
 
-系统通过路由器端口映射实现内外网访问：
+## 系统要求
 
-- **前端端口映射**: `3000 → 公网` (或自定义端口)
-- **后端端口映射**: `3001 → 公网` (或自定义端口)
+### 硬件要求
+- **CPU**: 2核心以上
+- **内存**: 4GB以上
+- **存储**: 50GB以上可用空间
+- **网络**: 稳定的网络连接
 
-### 工作原理
+### 软件要求
+- **操作系统**: Ubuntu 20.04+, CentOS 7+, Debian 10+
+- **Docker**: 20.10+
+- **Docker Compose**: 2.0+
 
-1. **前端 (Next.js)**: 
-   - 监听端口: `3000`（容器内）/ `3000`（宿主机）
-   - 通过 Next.js 的 `rewrites` 功能将 `/api/*` 请求代理到后端
-   - 客户端访问前端时，所有 API 请求都使用相对路径 `/api/v1/*`
+## 部署方式
 
-2. **后端 (FastAPI)**:
-   - 监听端口: `3001`（容器内）/ `3001`（宿主机）
-   - 前端通过 Docker 内部网络 `http://backend:3001/api/v1` 调用
+### 方式一：全新安装（推荐新服务器）
 
-3. **数据流转**:
-   ```
-   客户端 → 前端 (3000) → Next.js代理 → 后端 (3001) → 数据库
-   ```
+适用于没有现有数据的全新服务器部署。
 
-### 关键配置
-
-#### 1. 前端配置 (`frontend/lib/api.ts`)
-
-```typescript
-const getBaseURL = () => {
-  // 优先使用环境变量
-  if (process.env.NEXT_PUBLIC_API_BASE) {
-    return process.env.NEXT_PUBLIC_API_BASE;
-  }
-  
-  // 默认使用相对路径（通过Next.js代理）
-  return '/api/v1';
-};
+#### 1. 下载安装脚本
+```bash
+# 下载安装脚本
+wget https://raw.githubusercontent.com/your-repo/yk-vos/main/scripts/fresh_install.sh
+chmod +x fresh_install.sh
 ```
 
-#### 2. Next.js 代理配置 (`frontend/next.config.js`)
-
-```javascript
-async rewrites() {
-  const apiUrl = process.env.BACKEND_API_URL || 'http://backend:3001';
-  
-  return [
-    {
-      source: '/api/:path*',
-      destination: `${apiUrl}/api/:path*`,
-    },
-  ];
-}
+#### 2. 执行安装
+```bash
+# 执行安装脚本
+sudo ./fresh_install.sh
 ```
 
-## 部署步骤
+#### 3. 配置Git仓库（可选）
+如果需要从Git仓库自动下载代码：
+```bash
+export GIT_REPO="https://github.com/your-repo/yk-vos.git"
+sudo ./fresh_install.sh
+```
 
-### 1. 环境准备
+### 方式二：升级迁移（已有数据）
 
-确保服务器已安装 Docker 和 Docker Compose。
+适用于已有数据的服务器升级到新版本。
 
-### 2. 拉取代码
+#### 1. 下载升级脚本
+```bash
+# 下载升级脚本
+wget https://raw.githubusercontent.com/your-repo/yk-vos/main/scripts/upgrade_migration.sh
+chmod +x upgrade_migration.sh
+```
+
+#### 2. 执行升级
+```bash
+# 执行升级脚本
+sudo ./upgrade_migration.sh
+```
+
+### 方式三：手动部署
+
+#### 1. 安装Docker和Docker Compose
+```bash
+# Ubuntu/Debian
+curl -fsSL https://get.docker.com -o get-docker.sh
+sudo sh get-docker.sh
+sudo apt-get install docker-compose-plugin
+
+# CentOS/RHEL
+curl -fsSL https://get.docker.com -o get-docker.sh
+sudo sh get-docker.sh
+sudo yum install docker-compose-plugin
+```
+
+#### 2. 下载项目代码
+```bash
+# 创建项目目录
+sudo mkdir -p /opt/yk-vos
+cd /opt/yk-vos
+
+# 克隆代码
+git clone https://github.com/your-repo/yk-vos.git .
+
+# 或者下载压缩包
+wget https://github.com/your-repo/yk-vos/archive/main.zip
+unzip main.zip
+mv yk-vos-main/* .
+```
+
+#### 3. 配置环境变量
+```bash
+# 创建环境变量文件
+cat > .env << EOF
+# 数据库配置
+POSTGRES_DB=yk_vos
+POSTGRES_USER=yk_vos_user
+POSTGRES_PASSWORD=$(openssl rand -base64 32)
+
+# Redis配置
+REDIS_PASSWORD=$(openssl rand -base64 32)
+
+# JWT配置
+JWT_SECRET_KEY=$(openssl rand -base64 64)
+JWT_ALGORITHM=HS256
+JWT_ACCESS_TOKEN_EXPIRE_MINUTES=30
+
+# 应用配置
+BACKEND_HOST=0.0.0.0
+BACKEND_PORT=3001
+FRONTEND_PORT=3000
+
+# 时区
+TZ=Asia/Shanghai
+EOF
+```
+
+#### 4. 启动服务
+```bash
+# 构建并启动服务
+docker compose up -d --build
+
+# 等待服务启动
+sleep 60
+
+# 检查服务状态
+docker compose ps
+```
+
+#### 5. 初始化数据库
+```bash
+# 执行数据库初始化脚本
+docker compose exec -T postgres psql -U yk_vos_user -d yk_vos < sql/base.sql
+docker compose exec -T postgres psql -U yk_vos_user -d yk_vos < sql/insert_user_agents.sql
+
+# 初始化ClickHouse
+docker compose exec -T clickhouse clickhouse-client < clickhouse/init/01_create_tables.sql
+```
+
+## 配置说明
+
+### 环境变量配置
+
+| 变量名 | 说明 | 默认值 |
+|--------|------|--------|
+| `POSTGRES_DB` | PostgreSQL数据库名 | `yk_vos` |
+| `POSTGRES_USER` | PostgreSQL用户名 | `yk_vos_user` |
+| `POSTGRES_PASSWORD` | PostgreSQL密码 | 随机生成 |
+| `REDIS_PASSWORD` | Redis密码 | 随机生成 |
+| `JWT_SECRET_KEY` | JWT密钥 | 随机生成 |
+| `JWT_ALGORITHM` | JWT算法 | `HS256` |
+| `JWT_ACCESS_TOKEN_EXPIRE_MINUTES` | JWT过期时间(分钟) | `30` |
+| `BACKEND_PORT` | 后端端口 | `3001` |
+| `FRONTEND_PORT` | 前端端口 | `3000` |
+
+### 端口配置
+
+| 服务 | 端口 | 说明 |
+|------|------|------|
+| 前端 | 3000 | Web界面 |
+| 后端 | 3001 | API服务 |
+| PostgreSQL | 5432 | 数据库 |
+| Redis | 6379 | 缓存 |
+| ClickHouse | 8123 | 话单数据库 |
+
+### 防火墙配置
 
 ```bash
-git clone <repository-url>
-cd yk-vos
+# Ubuntu/Debian (UFW)
+sudo ufw allow 3000/tcp
+sudo ufw allow 3001/tcp
+
+# CentOS/RHEL (firewalld)
+sudo firewall-cmd --permanent --add-port=3000/tcp
+sudo firewall-cmd --permanent --add-port=3001/tcp
+sudo firewall-cmd --reload
 ```
 
-### 3. 配置端口映射（路由器）
+## 服务管理
 
-在路由器管理界面设置：
+### 系统服务管理
 
-- **外网端口**: `3000` → **内网IP:3000** (前端)
-- **外网端口**: `3001` → **内网IP:3001** (后端，可选，用于API测试)
-
-### 4. 环境变量配置（可选）
-
-如果需要自定义配置，创建 `.env` 文件：
+安装脚本会自动创建系统服务，可以使用以下命令管理：
 
 ```bash
-# .env
-POSTGRES_USER=vosadmin
-POSTGRES_PASSWORD=YourPassword
-CLICKHOUSE_USER=vosadmin
-CLICKHOUSE_PASSWORD=YourPassword
-SECRET_KEY=YourSecretKey
+# 启动服务
+sudo systemctl start yk-vos
+
+# 停止服务
+sudo systemctl stop yk-vos
+
+# 重启服务
+sudo systemctl restart yk-vos
+
+# 查看状态
+sudo systemctl status yk-vos
+
+# 开机自启
+sudo systemctl enable yk-vos
 ```
 
-### 5. 构建和启动
+### Docker Compose管理
 
 ```bash
-# 使用基础镜像构建脚本
-docker-compose -f docker-compose.base.yaml build
+# 查看服务状态
+docker compose ps
+
+# 查看日志
+docker compose logs -f
+
+# 重启服务
+docker compose restart
+
+# 停止服务
+docker compose down
 
 # 启动服务
-docker-compose up -d
+docker compose up -d
+
+# 重新构建
+docker compose up -d --build
 ```
 
-### 6. 检查服务状态
+## 数据备份与恢复
+
+### 数据备份
 
 ```bash
-docker-compose ps
-docker-compose logs -f
+# 备份PostgreSQL数据库
+docker compose exec -T postgres pg_dump -U yk_vos_user yk_vos > backup_$(date +%Y%m%d).sql
+
+# 备份Redis数据
+docker compose exec -T redis redis-cli --rdb backup_$(date +%Y%m%d).rdb
+
+# 备份ClickHouse数据
+docker compose exec -T clickhouse clickhouse-client --query "BACKUP DATABASE vos_cdrs TO Disk('backups', 'vos_cdrs_backup_$(date +%Y%m%d)')"
 ```
 
-## 访问方式
+### 数据恢复
 
-### 内网访问
-
-- **前端**: `http://192.168.2.101:3000`
-- **后端API**: `http://192.168.2.101:3001/api/v1`
-- **默认账号**: `admin` / `admin123` (修改前)
-
-### 外网访问
-
-- **前端**: `http://your-domain.com:3000` 或 `http://your-ip:3000`
-- **后端API**: `http://your-domain.com:3001/api/v1` (如果需要)
-- 前端会自动将 API 请求代理到后端，无需直接访问后端端口
-
-## 优势
-
-### 1. 统一入口
-
-- 客户端只需访问前端地址，API 自动通过 Next.js 代理转发
-- 减少暴露端口数量
-
-### 2. 内外网一致性
-
-- 内网访问：`http://192.168.2.101:3000`
-- 外网访问：`http://public-ip:3000`
-- 两套环境的 API 调用行为一致，都使用相对路径
-
-### 3. 易于维护
-
-- 修改前端 API 地址只需更新 Docker Compose 环境变量
-- 无需修改代码即可切换环境
-
-## 常见问题
-
-### Q1: 前端无法连接到后端？
-
-**检查项**:
-1. 确认后端服务已启动：`docker-compose ps`
-2. 查看后端日志：`docker-compose logs backend`
-3. 检查网络连通性：`docker exec -it yk_vos_frontend ping backend`
-
-### Q2: 外网访问时前端显示但不能登录？
-
-**可能原因**:
-1. 后端未正确映射到公网
-2. 检查前端浏览器控制台的错误信息
-3. 查看网络请求是否正确使用相对路径 `/api/v1`
-
-### Q3: 如何修改端口？
-
-**方法1**: 修改 `docker-compose.yaml`
-```yaml
-frontend:
-  ports:
-    - "新端口:3000"
-
-backend:
-  ports:
-    - "新端口:3001"
-```
-
-**方法2**: 使用环境变量
 ```bash
-export FRONTEND_PORT=新端口
-export BACKEND_PORT=新端口
-docker-compose up -d
+# 恢复PostgreSQL数据库
+docker compose exec -T postgres psql -U yk_vos_user -d yk_vos < backup_20240101.sql
+
+# 恢复Redis数据
+docker compose exec -T redis redis-cli --rdb backup_20240101.rdb
+
+# 恢复ClickHouse数据
+docker compose exec -T clickhouse clickhouse-client --query "RESTORE DATABASE vos_cdrs FROM Disk('backups', 'vos_cdrs_backup_20240101')"
 ```
 
-### Q4: 生产环境如何部署？
+## 故障排除
 
-1. **使用 HTTPS**: 配置 Nginx 反向代理
-2. **域名绑定**: 配置域名解析
-3. **防火墙**: 只开放必要端口（80, 443）
-4. **监控**: 配置日志收集和监控
+### 常见问题
 
-示例 Nginx 配置：
-```nginx
-server {
-    listen 80;
-    server_name your-domain.com;
-    
-    location / {
-        proxy_pass http://localhost:3000;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection 'upgrade';
-        proxy_set_header Host $host;
-        proxy_cache_bypass $http_upgrade;
-    }
-}
+#### 1. 服务启动失败
+```bash
+# 查看详细日志
+docker compose logs
+
+# 检查端口占用
+netstat -tlnp | grep :3000
+netstat -tlnp | grep :3001
+
+# 检查磁盘空间
+df -h
 ```
 
-## 技术栈
+#### 2. 数据库连接失败
+```bash
+# 检查PostgreSQL状态
+docker compose exec postgres pg_isready -U yk_vos_user -d yk_vos
 
-- **前端**: Next.js 14 + React 18
-- **后端**: FastAPI + Python 3
-- **数据库**: PostgreSQL + ClickHouse
-- **任务队列**: Celery + Redis
-- **部署**: Docker + Docker Compose
+# 检查Redis状态
+docker compose exec redis redis-cli ping
 
-## 更新日志
+# 检查ClickHouse状态
+docker compose exec clickhouse clickhouse-client --query "SELECT 1"
+```
 
-- **2025-01-XX**: 优化 API 配置，支持内外网访问
-- **2025-01-XX**: 修改后端端口从 8000 到 3001
-- **2025-01-XX**: 删除登录页面默认账号提示
+#### 3. 前端无法访问
+```bash
+# 检查前端服务
+curl http://localhost:3000
 
-## 支持
+# 检查后端API
+curl http://localhost:3001/health
 
-如有问题，请提交 Issue 或联系技术支持。
+# 检查防火墙
+sudo ufw status
+```
 
+### 日志查看
+
+```bash
+# 查看所有服务日志
+docker compose logs -f
+
+# 查看特定服务日志
+docker compose logs -f backend
+docker compose logs -f frontend
+docker compose logs -f postgres
+```
+
+### 性能监控
+
+```bash
+# 查看资源使用情况
+docker stats
+
+# 查看磁盘使用
+docker system df
+
+# 清理无用数据
+docker system prune -a
+```
+
+## 升级指南
+
+### 自动升级
+
+使用升级脚本进行自动升级：
+
+```bash
+sudo ./upgrade_migration.sh
+```
+
+### 手动升级
+
+1. **备份数据**
+```bash
+# 执行数据备份
+./scripts/backup_data.sh
+```
+
+2. **停止服务**
+```bash
+docker compose down
+```
+
+3. **更新代码**
+```bash
+git pull origin main
+```
+
+4. **更新镜像**
+```bash
+docker compose pull
+docker compose build --no-cache
+```
+
+5. **执行数据库迁移**
+```bash
+# 执行升级脚本
+docker compose exec -T postgres psql -U yk_vos_user -d yk_vos < sql/upgrade_db_v2.3.sql
+```
+
+6. **启动服务**
+```bash
+docker compose up -d
+```
+
+## 安全配置
+
+### 1. 修改默认密码
+```bash
+# 登录系统后立即修改默认密码
+# 默认账号: admin / admin123
+```
+
+### 2. 配置HTTPS（可选）
+```bash
+# 使用Nginx反向代理配置SSL
+# 参考: nginx/ssl.conf
+```
+
+### 3. 限制访问
+```bash
+# 配置防火墙只允许特定IP访问
+sudo ufw allow from 192.168.1.0/24 to any port 3000
+sudo ufw allow from 192.168.1.0/24 to any port 3001
+```
+
+## 监控与维护
+
+### 1. 健康检查
+```bash
+# 检查服务健康状态
+curl http://localhost:3001/health
+
+# 检查数据库连接
+docker compose exec postgres pg_isready -U yk_vos_user -d yk_vos
+```
+
+### 2. 定期维护
+```bash
+# 清理过期日志
+docker system prune -f
+
+# 更新系统包
+sudo apt update && sudo apt upgrade -y
+
+# 重启服务
+sudo systemctl restart yk-vos
+```
+
+### 3. 性能优化
+```bash
+# 调整PostgreSQL配置
+# 参考: postgresql/postgresql.conf
+
+# 调整Redis配置
+# 参考: redis/redis.conf
+
+# 调整ClickHouse配置
+# 参考: clickhouse/config.xml
+```
+
+## 联系支持
+
+如遇到问题，请提供以下信息：
+
+1. 操作系统版本
+2. Docker版本
+3. 错误日志
+4. 服务状态
+5. 网络配置
+
+联系方式：
+- 邮箱: support@example.com
+- 文档: https://docs.example.com
+- 问题反馈: https://github.com/your-repo/yk-vos/issues
