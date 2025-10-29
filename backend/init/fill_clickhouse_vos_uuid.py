@@ -130,7 +130,7 @@ def fill_clickhouse_vos_uuid():
                 logger.info(f"  ✅ VOS ID {vos_id}: UUID已设置为 {vos_uuid}，当前匹配 {updated_count} 条记录")
                 total_updated += empty_count
                 
-析 except Exception as e:
+            except Exception as e:
                 logger.error(f"  ❌ VOS ID {vos_id}: 更新失败: {e}")
                 import traceback
                 traceback.print_exc()
