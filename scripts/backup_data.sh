@@ -1,6 +1,6 @@
 #!/bin/bash
-# 数据备份脚本
-# 用于备份YK-VOS的所有数据
+# 数据库备份恢复脚本
+# 支持数据备份、恢复、管理等功能
 
 set -e
 
@@ -32,6 +32,25 @@ log_error() {
 PROJECT_DIR="/opt/yk-vos"
 BACKUP_BASE_DIR="/opt/yk-vos-backups"
 BACKUP_DIR="$BACKUP_BASE_DIR/backup-$(date +%Y%m%d-%H%M%S)"
+
+# 显示使用说明
+show_usage() {
+    echo "用法: $0 [选项] [参数]"
+    echo
+    echo "选项:"
+    echo "  backup           数据备份"
+    echo "  restore <file>   数据恢复"
+    echo "  list             列出备份文件"
+    echo "  cleanup          清理旧备份"
+    echo "  info <file>      查看备份信息"
+    echo
+    echo "示例:"
+    echo "  $0 backup                    # 备份数据"
+    echo "  $0 restore backup-20240101.tar.gz  # 恢复数据"
+    echo "  $0 list                      # 列出备份文件"
+    echo "  $0 cleanup                   # 清理旧备份"
+    echo "  $0 info backup-20240101.tar.gz    # 查看备份信息"
+}
 
 # 创建备份目录
 create_backup_dir() {
@@ -161,6 +180,182 @@ cleanup_old_backups() {
     log_success "旧备份文件清理完成"
 }
 
+# 数据恢复功能
+restore_data() {
+    local backup_file="$1"
+    
+    if [[ -z "$backup_file" ]]; then
+        log_error "请指定备份文件"
+        show_usage
+        exit 1
+    fi
+    
+    if [[ ! -f "$backup_file" ]]; then
+        log_error "备份文件不存在: $backup_file"
+        exit 1
+    fi
+    
+    log_info "开始数据恢复..."
+    
+    # 检查项目目录
+    if [[ ! -d "$PROJECT_DIR" ]]; then
+        log_error "项目目录不存在: $PROJECT_DIR"
+        exit 1
+    fi
+    
+    cd "$PROJECT_DIR"
+    
+    # 停止服务
+    log_info "停止服务..."
+    docker compose down
+    sleep 10
+    
+    # 解压备份文件
+    local restore_dir="/tmp/yk-vos-restore"
+    rm -rf "$restore_dir"
+    mkdir -p "$restore_dir"
+    
+    log_info "解压备份文件..."
+    tar -xzf "$backup_file" -C "$restore_dir"
+    
+    local restore_data_dir=$(find "$restore_dir" -type d -name "backup-*" | head -n 1)
+    
+    if [[ -z "$restore_data_dir" ]]; then
+        log_error "未找到备份数据目录"
+        exit 1
+    fi
+    
+    # 恢复PostgreSQL数据库
+    log_info "恢复PostgreSQL数据库..."
+    docker compose up -d postgres
+    sleep 30
+    
+    if docker compose exec postgres pg_isready -U yk_vos_user -d yk_vos > /dev/null 2>&1; then
+        docker compose exec -T postgres psql -U yk_vos_user -d yk_vos < "$restore_data_dir/postgres_backup.sql"
+        log_success "PostgreSQL数据库恢复完成"
+    else
+        log_error "PostgreSQL数据库连接失败"
+        exit 1
+    fi
+    
+    # 恢复Redis数据
+    log_info "恢复Redis数据..."
+    docker compose up -d redis
+    sleep 10
+    
+    if docker compose exec redis redis-cli ping > /dev/null 2>&1; then
+        docker compose stop redis
+        docker compose run --rm -v "$(pwd)/redis_data:/data" redis cp "$restore_data_dir/redis_backup.rdb" /data/dump.rdb
+        docker compose up -d redis
+        log_success "Redis数据恢复完成"
+    else
+        log_error "Redis数据库连接失败"
+        exit 1
+    fi
+    
+    # 恢复配置文件
+    log_info "恢复配置文件..."
+    cp "$restore_data_dir/.env" "$PROJECT_DIR/" 2>/dev/null || log_warning "未找到.env文件"
+    cp "$restore_data_dir/docker-compose.yaml" "$PROJECT_DIR/" 2>/dev/null || log_warning "未找到docker-compose.yaml文件"
+    cp "$restore_data_dir/user_agents.json" "$PROJECT_DIR/" 2>/dev/null || log_warning "未找到user_agents.json文件"
+    
+    # 启动服务
+    log_info "启动服务..."
+    docker compose up -d
+    sleep 60
+    
+    # 验证恢复结果
+    if docker compose ps | grep -q "Up"; then
+        log_success "服务启动成功"
+    else
+        log_error "服务启动失败"
+        docker compose logs
+        exit 1
+    fi
+    
+    # 清理临时文件
+    rm -rf "$restore_dir"
+    
+    log_success "数据恢复完成！"
+}
+
+# 列出备份文件
+list_backups() {
+    log_info "备份文件列表:"
+    echo
+    echo "=========================================="
+    echo "  备份文件列表"
+    echo "=========================================="
+    
+    if [[ -d "$BACKUP_BASE_DIR" ]]; then
+        ls -lh "$BACKUP_BASE_DIR"/*.tar.gz 2>/dev/null || echo "  无备份文件"
+        echo
+        echo "备份目录: $BACKUP_BASE_DIR"
+        echo "总大小: $(du -sh "$BACKUP_BASE_DIR" 2>/dev/null | cut -f1)"
+    else
+        echo "  备份目录不存在"
+    fi
+    
+    echo "=========================================="
+}
+
+# 清理旧备份
+cleanup_backups() {
+    log_info "清理旧备份文件..."
+    
+    if [[ -d "$BACKUP_BASE_DIR" ]]; then
+        # 保留最近7天的备份
+        find "$BACKUP_BASE_DIR" -name "backup-*.tar.gz" -mtime +7 -delete
+        log_success "旧备份文件清理完成"
+    else
+        log_warning "备份目录不存在"
+    fi
+}
+
+# 查看备份信息
+show_backup_info() {
+    local backup_file="$1"
+    
+    if [[ -z "$backup_file" ]]; then
+        log_error "请指定备份文件"
+        show_usage
+        exit 1
+    fi
+    
+    if [[ ! -f "$backup_file" ]]; then
+        log_error "备份文件不存在: $backup_file"
+        exit 1
+    fi
+    
+    log_info "备份文件信息: $backup_file"
+    echo
+    echo "=========================================="
+    echo "  备份文件信息"
+    echo "=========================================="
+    echo "文件名: $(basename "$backup_file")"
+    echo "大小: $(ls -lh "$backup_file" | awk '{print $5}')"
+    echo "修改时间: $(ls -l "$backup_file" | awk '{print $6, $7, $8}')"
+    echo
+    
+    # 解压并查看备份信息
+    local temp_dir="/tmp/yk-vos-backup-info"
+    rm -rf "$temp_dir"
+    mkdir -p "$temp_dir"
+    
+    tar -xzf "$backup_file" -C "$temp_dir" --wildcards "*/backup_info.txt" 2>/dev/null || true
+    
+    local info_file=$(find "$temp_dir" -name "backup_info.txt" | head -n 1)
+    if [[ -f "$info_file" ]]; then
+        echo "备份信息:"
+        cat "$info_file"
+    else
+        echo "未找到备份信息文件"
+    fi
+    
+    rm -rf "$temp_dir"
+    echo "=========================================="
+}
+
 # 显示备份结果
 show_backup_result() {
     log_success "备份完成！"
@@ -177,40 +372,76 @@ show_backup_result() {
     echo "备份大小:"
     du -sh "$BACKUP_BASE_DIR" 2>/dev/null || echo "  无法计算"
     echo
-    echo "恢复命令:"
-    echo "  ./scripts/restore_data.sh <备份文件>"
+    echo "管理命令:"
+    echo "  恢复数据: $0 restore <备份文件>"
+    echo "  列出备份: $0 list"
+    echo "  清理备份: $0 cleanup"
+    echo "  查看信息: $0 info <备份文件>"
     echo "=========================================="
 }
 
 # 主函数
 main() {
-    log_info "开始数据备份..."
+    local action="${1:-backup}"
     
-    # 检查项目目录
-    if [[ ! -d "$PROJECT_DIR" ]]; then
-        log_error "项目目录不存在: $PROJECT_DIR"
+    # 检查root权限
+    if [[ $EUID -ne 0 ]]; then
+        log_error "此脚本需要root权限运行"
+        log_info "请使用: sudo $0 [选项]"
         exit 1
     fi
     
-    cd "$PROJECT_DIR"
-    
-    # 检查Docker服务
-    if ! docker compose ps > /dev/null 2>&1; then
-        log_error "Docker Compose服务未运行"
-        exit 1
-    fi
-    
-    create_backup_dir
-    backup_postgres
-    backup_redis
-    backup_clickhouse
-    backup_config
-    create_backup_info
-    compress_backup
-    cleanup_old_backups
-    show_backup_result
-    
-    log_success "数据备份完成！"
+    case $action in
+        "backup")
+            log_info "开始数据备份..."
+            
+            # 检查项目目录
+            if [[ ! -d "$PROJECT_DIR" ]]; then
+                log_error "项目目录不存在: $PROJECT_DIR"
+                exit 1
+            fi
+            
+            cd "$PROJECT_DIR"
+            
+            # 检查Docker服务
+            if ! docker compose ps > /dev/null 2>&1; then
+                log_error "Docker Compose服务未运行"
+                exit 1
+            fi
+            
+            create_backup_dir
+            backup_postgres
+            backup_redis
+            backup_clickhouse
+            backup_config
+            create_backup_info
+            compress_backup
+            cleanup_old_backups
+            show_backup_result
+            
+            log_success "数据备份完成！"
+            ;;
+        "restore")
+            restore_data "$2"
+            ;;
+        "list")
+            list_backups
+            ;;
+        "cleanup")
+            cleanup_backups
+            ;;
+        "info")
+            show_backup_info "$2"
+            ;;
+        "help"|"-h"|"--help")
+            show_usage
+            ;;
+        *)
+            log_error "未知操作: $action"
+            show_usage
+            exit 1
+            ;;
+    esac
 }
 
 # 执行主函数

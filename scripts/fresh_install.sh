@@ -1,6 +1,6 @@
 #!/bin/bash
-# 全新服务器初始化安装脚本
-# 适用于没有现有数据的全新部署
+# 全新部署脚本 - 适用于新服务器初始化安装
+# 支持自动检测环境、安装依赖、配置服务
 
 set -e
 
@@ -306,7 +306,7 @@ show_result() {
     log_success "安装完成！"
     echo
     echo "=========================================="
-    echo "  YK-VOS 安装信息"
+    echo "  YK-VOS 全新部署完成"
     echo "=========================================="
     echo "项目目录: $PROJECT_DIR"
     echo "前端地址: http://$(hostname -I | awk '{print $1}'):3000"
@@ -318,6 +318,11 @@ show_result() {
     echo "  查看状态: systemctl status yk-vos"
     echo "  查看日志: docker compose logs -f"
     echo
+    echo "日常维护:"
+    echo "  日常更新: sudo ./scripts/daily_update.sh"
+    echo "  数据备份: sudo ./scripts/daily_update.sh backup"
+    echo "  健康检查: sudo ./scripts/daily_update.sh health-check"
+    echo
     echo "数据库信息:"
     echo "  PostgreSQL: localhost:5432"
     echo "  Redis: localhost:6379"
@@ -327,6 +332,12 @@ show_result() {
     echo "  用户名: admin"
     echo "  密码: admin123"
     echo "  (首次登录后请立即修改密码)"
+    echo
+    echo "新功能特性:"
+    echo "  ✓ VOS节点唯一UUID支持"
+    echo "  ✓ IP变更时数据关联连续性"
+    echo "  ✓ 增强的网关同步功能"
+    echo "  ✓ 改进的健康检查机制"
     echo "=========================================="
 }
 

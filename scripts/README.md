@@ -4,33 +4,23 @@
 
 | 脚本名称 | 功能 | 适用场景 |
 |----------|------|----------|
-| `one_click_deploy.sh` | 一键部署脚本 | 自动检测环境，选择部署方式 |
-| `fresh_install.sh` | 全新安装脚本 | 新服务器，无现有数据 |
+| `daily_update.sh` | 日常更新脚本 | 日常维护、更新、健康检查 |
+| `fresh_install.sh` | 全新部署脚本 | 新服务器，无现有数据 |
 | `upgrade_migration.sh` | 升级迁移脚本 | 已有数据，需要升级 |
-| `backup_data.sh` | 数据备份脚本 | 定期备份数据 |
-| `restore_data.sh` | 数据恢复脚本 | 从备份恢复数据 |
+| `backup_data.sh` | 数据库备份恢复脚本 | 数据备份、恢复、管理 |
 
 ## 使用方法
 
-### 1. 一键部署（推荐）
+### 1. 全新部署
 
 ```bash
-# 下载并执行一键部署脚本
-wget https://raw.githubusercontent.com/your-repo/yk-vos/main/scripts/one_click_deploy.sh
-chmod +x one_click_deploy.sh
-sudo ./one_click_deploy.sh
-```
-
-### 2. 全新安装
-
-```bash
-# 下载并执行全新安装脚本
+# 下载并执行全新部署脚本
 wget https://raw.githubusercontent.com/your-repo/yk-vos/main/scripts/fresh_install.sh
 chmod +x fresh_install.sh
 sudo ./fresh_install.sh
 ```
 
-### 3. 升级迁移
+### 2. 升级迁移
 
 ```bash
 # 下载并执行升级脚本
@@ -39,38 +29,62 @@ chmod +x upgrade_migration.sh
 sudo ./upgrade_migration.sh
 ```
 
-### 4. 数据备份
+### 3. 日常维护
 
 ```bash
-# 执行数据备份
+# 执行所有日常维护操作
 cd /opt/yk-vos
-sudo ./scripts/backup_data.sh
+sudo ./scripts/daily_update.sh
+
+# 或者执行特定操作
+sudo ./scripts/daily_update.sh update-code    # 更新代码
+sudo ./scripts/daily_update.sh restart        # 重启服务
+sudo ./scripts/daily_update.sh health-check   # 健康检查
+sudo ./scripts/daily_update.sh backup         # 数据备份
+sudo ./scripts/daily_update.sh logs           # 查看日志
+sudo ./scripts/daily_update.sh status         # 查看状态
+sudo ./scripts/daily_update.sh cleanup        # 清理系统
 ```
 
-### 5. 数据恢复
+### 4. 数据备份恢复
 
 ```bash
-# 从备份恢复数据
+# 数据备份
 cd /opt/yk-vos
-sudo ./scripts/restore_data.sh /opt/yk-vos-backups/backup-20240101-120000.tar.gz
+sudo ./scripts/backup_data.sh backup
+
+# 数据恢复
+sudo ./scripts/backup_data.sh restore /opt/yk-vos-backups/backup-20240101-120000.tar.gz
+
+# 列出备份文件
+sudo ./scripts/backup_data.sh list
+
+# 清理旧备份
+sudo ./scripts/backup_data.sh cleanup
+
+# 查看备份信息
+sudo ./scripts/backup_data.sh info backup-20240101-120000.tar.gz
 ```
 
 ## 脚本功能详解
 
-### one_click_deploy.sh
-- **自动检测**：检测现有安装、Docker环境、系统要求
-- **智能选择**：自动选择全新安装或升级迁移
-- **完整部署**：包含所有必要的安装和配置步骤
-- **验证检查**：部署完成后自动验证服务状态
+### daily_update.sh - 日常更新脚本
+- **代码更新**：从Git仓库更新代码
+- **服务重启**：安全重启所有服务
+- **健康检查**：检查服务状态、数据库连接、资源使用
+- **数据备份**：自动备份所有数据
+- **日志查看**：查看各种服务日志
+- **状态监控**：查看服务状态和资源使用
+- **系统清理**：清理Docker无用数据、日志文件
 
-### fresh_install.sh
+### fresh_install.sh - 全新部署脚本
 - **系统检查**：检查操作系统、内存、磁盘空间
 - **Docker安装**：自动安装Docker和Docker Compose
 - **项目部署**：下载代码、配置环境、启动服务
 - **数据库初始化**：创建表结构、插入初始数据
 - **服务管理**：创建系统服务、配置防火墙
 
-### upgrade_migration.sh
+### upgrade_migration.sh - 升级迁移脚本
 - **数据备份**：自动备份现有数据
 - **服务停止**：安全停止现有服务
 - **代码更新**：从Git仓库更新代码
@@ -78,17 +92,13 @@ sudo ./scripts/restore_data.sh /opt/yk-vos-backups/backup-20240101-120000.tar.gz
 - **服务启动**：启动升级后的服务
 - **验证检查**：验证升级结果
 
-### backup_data.sh
-- **全量备份**：备份PostgreSQL、Redis、ClickHouse数据
+### backup_data.sh - 数据库备份恢复脚本
+- **数据备份**：备份PostgreSQL、Redis、ClickHouse数据
+- **数据恢复**：从备份文件恢复所有数据
+- **备份管理**：列出、清理、查看备份文件
 - **配置备份**：备份环境变量、配置文件
 - **压缩存储**：自动压缩备份文件
 - **定期清理**：自动清理旧备份文件
-
-### restore_data.sh
-- **数据恢复**：从备份文件恢复所有数据
-- **服务重启**：安全重启所有服务
-- **验证检查**：验证恢复结果
-- **错误处理**：完善的错误处理和回滚机制
 
 ## 环境要求
 

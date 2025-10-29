@@ -268,22 +268,28 @@ show_result() {
     log_success "升级完成！"
     echo
     echo "=========================================="
-    echo "  YK-VOS 升级信息"
+    echo "  YK-VOS 升级迁移完成"
     echo "=========================================="
     echo "项目目录: $PROJECT_DIR"
     echo "前端地址: http://$(hostname -I | awk '{print $1}'):3000"
     echo "后端地址: http://$(hostname -I | awk '{print $1}'):3001"
     echo
-    echo "新功能:"
+    echo "升级内容:"
     echo "  ✓ VOS节点唯一UUID支持"
     echo "  ✓ IP变更时数据关联连续性"
     echo "  ✓ 增强的网关同步功能"
     echo "  ✓ 改进的健康检查机制"
+    echo "  ✓ 数据库结构优化"
     echo
     echo "管理命令:"
     echo "  查看状态: docker compose ps"
     echo "  查看日志: docker compose logs -f"
     echo "  重启服务: docker compose restart"
+    echo
+    echo "日常维护:"
+    echo "  日常更新: sudo ./scripts/daily_update.sh"
+    echo "  数据备份: sudo ./scripts/daily_update.sh backup"
+    echo "  健康检查: sudo ./scripts/daily_update.sh health-check"
     echo
     echo "备份位置: $BACKUP_DIR"
     echo "=========================================="
