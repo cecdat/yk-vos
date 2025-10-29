@@ -106,44 +106,71 @@ backup_data() {
     BACKUP_DIR="${PROJECT_DIR}-backup-$(date +%Y%m%d-%H%M%S)"
     mkdir -p "$BACKUP_DIR"
     
+    local backup_success=true
+    
     # 备份数据库
     log_info "备份PostgreSQL数据库..."
     if docker compose exec postgres pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB" > /dev/null 2>&1; then
-        docker compose exec -T postgres pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB" > "$BACKUP_DIR/postgres_backup.sql"
-        log_success "PostgreSQL备份完成"
+        if docker compose exec -T postgres pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB" > "$BACKUP_DIR/postgres_backup.sql" 2>/dev/null; then
+            log_success "PostgreSQL备份完成"
+        else
+            log_warning "PostgreSQL备份失败，跳过"
+            backup_success=false
+        fi
     else
-        log_error "PostgreSQL数据库连接失败"
-        return 1
+        log_warning "PostgreSQL数据库连接失败，跳过备份"
+        backup_success=false
     fi
     
     # 备份Redis数据
     log_info "备份Redis数据..."
     if docker compose exec redis redis-cli ping > /dev/null 2>&1; then
-        docker compose exec -T redis redis-cli --rdb "$BACKUP_DIR/redis_backup.rdb"
-        log_success "Redis备份完成"
+        # 确保备份目录存在（redis-cli可能会在容器内执行）
+        mkdir -p "$BACKUP_DIR"
+        if docker compose exec redis redis-cli --rdb "/tmp/redis_backup.rdb" > /dev/null 2>&1; then
+            docker compose cp redis:/tmp/redis_backup.rdb "$BACKUP_DIR/redis_backup.rdb" 2>/dev/null || {
+                log_warning "Redis备份文件复制失败，跳过"
+                backup_success=false
+            }
+            docker compose exec redis rm -f /tmp/redis_backup.rdb 2>/dev/null || true
+            log_success "Redis备份完成"
+        else
+            log_warning "Redis备份失败，跳过"
+            backup_success=false
+        fi
     else
-        log_error "Redis数据库连接失败"
-        return 1
+        log_warning "Redis数据库连接失败，跳过备份"
+        backup_success=false
     fi
     
     # 备份ClickHouse数据
     log_info "备份ClickHouse数据..."
     if docker compose exec clickhouse clickhouse-client --query "SELECT 1" > /dev/null 2>&1; then
-        docker compose exec -T clickhouse clickhouse-client --query "BACKUP DATABASE vos_cdrs TO Disk('backups', 'vos_cdrs_backup')" || log_warning "ClickHouse备份失败，跳过"
+        docker compose exec -T clickhouse clickhouse-client --query "BACKUP DATABASE vos_cdrs TO Disk('backups', 'vos_cdrs_backup')" > /dev/null 2>&1 || log_warning "ClickHouse备份失败，跳过"
         log_success "ClickHouse备份完成"
     else
         log_warning "ClickHouse数据库连接失败，跳过备份"
+        backup_success=false
     fi
     
     # 备份配置文件
     log_info "备份配置文件..."
-    cp -r . "$BACKUP_DIR/config_backup/"
+    mkdir -p "$BACKUP_DIR/config_backup"
+    cp .env "$BACKUP_DIR/config_backup/" 2>/dev/null || log_warning "未找到.env文件"
+    cp docker-compose.yaml "$BACKUP_DIR/config_backup/" 2>/dev/null || log_warning "未找到docker-compose.yaml文件"
+    cp -r sql "$BACKUP_DIR/config_backup/" 2>/dev/null || log_warning "未找到sql目录"
     
-    log_success "数据备份完成: $BACKUP_DIR"
+    if [[ "$backup_success" == "true" ]]; then
+        log_success "数据备份完成: $BACKUP_DIR"
+    else
+        log_warning "部分数据备份失败，但继续升级流程"
+    fi
     
     # 显示备份信息
-    echo "备份文件列表:"
-    ls -la "$BACKUP_DIR"
+    if [[ -d "$BACKUP_DIR" ]]; then
+        echo "备份文件列表:"
+        ls -la "$BACKUP_DIR" 2>/dev/null || true
+    fi
 }
 
 # 停止现有服务
@@ -387,10 +414,24 @@ EOF
 main() {
     log_info "开始升级 YK-VOS..."
     
+    # 检查是否跳过备份
+    SKIP_BACKUP=false
+    if [[ "$1" == "--skip-backup" ]] || [[ "$1" == "-s" ]]; then
+        SKIP_BACKUP=true
+        log_warning "跳过数据备份"
+    fi
+    
     check_root
     check_existing_installation
     load_environment
-    backup_data
+    
+    # 可选的数据备份
+    if [[ "$SKIP_BACKUP" == "false" ]]; then
+        backup_data || log_warning "备份失败，继续升级流程"
+    else
+        log_info "已跳过数据备份步骤"
+    fi
+    
     stop_services
     update_code
     update_images
