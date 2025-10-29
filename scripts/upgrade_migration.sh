@@ -40,11 +40,33 @@ check_root() {
 check_existing_installation() {
     log_info "检查现有安装..."
     
-    PROJECT_DIR="/opt/yk-vos"
+    # 自动检测项目目录
+    local possible_dirs=("/opt/yk-vos" "/data/yk-vos" "/home/yk-vos" "/usr/local/yk-vos")
+    PROJECT_DIR=""
     
-    if [[ ! -d "$PROJECT_DIR" ]]; then
-        log_error "未找到现有安装目录: $PROJECT_DIR"
-        log_info "请使用 fresh_install.sh 进行全新安装"
+    for dir in "${possible_dirs[@]}"; do
+        if [[ -d "$dir" && -f "$dir/docker-compose.yaml" ]]; then
+            PROJECT_DIR="$dir"
+            break
+        fi
+    done
+    
+    # 如果还是没找到，尝试从当前目录向上查找
+    if [[ -z "$PROJECT_DIR" ]]; then
+        local current_dir="$(pwd)"
+        while [[ "$current_dir" != "/" ]]; do
+            if [[ -f "$current_dir/docker-compose.yaml" ]]; then
+                PROJECT_DIR="$current_dir"
+                break
+            fi
+            current_dir="$(dirname "$current_dir")"
+        done
+    fi
+    
+    if [[ -z "$PROJECT_DIR" ]]; then
+        log_error "未找到YK-VOS安装目录"
+        log_info "请确保在正确的项目目录中运行此脚本，或使用 fresh_install.sh 进行全新安装"
+        log_info "支持的目录: ${possible_dirs[*]}"
         exit 1
     fi
     
@@ -62,7 +84,7 @@ check_existing_installation() {
 backup_data() {
     log_info "备份现有数据..."
     
-    BACKUP_DIR="/opt/yk-vos-backup-$(date +%Y%m%d-%H%M%S)"
+    BACKUP_DIR="${PROJECT_DIR}-backup-$(date +%Y%m%d-%H%M%S)"
     mkdir -p "$BACKUP_DIR"
     
     # 备份数据库

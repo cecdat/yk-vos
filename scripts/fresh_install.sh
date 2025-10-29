@@ -108,7 +108,7 @@ install_docker() {
 create_project_dir() {
     log_info "创建项目目录..."
     
-    PROJECT_DIR="/opt/yk-vos"
+    PROJECT_DIR="/data/yk-vos"
     
     if [[ -d "$PROJECT_DIR" ]]; then
         log_warning "项目目录已存在: $PROJECT_DIR"

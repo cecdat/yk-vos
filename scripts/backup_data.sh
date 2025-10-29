@@ -29,8 +29,8 @@ log_error() {
 }
 
 # 配置
-PROJECT_DIR="/opt/yk-vos"
-BACKUP_BASE_DIR="/opt/yk-vos-backups"
+PROJECT_DIR="/data/yk-vos"
+BACKUP_BASE_DIR="/data/yk-vos-backups"
 BACKUP_DIR="$BACKUP_BASE_DIR/backup-$(date +%Y%m%d-%H%M%S)"
 
 # 显示使用说明

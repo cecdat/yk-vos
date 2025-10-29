@@ -34,8 +34,8 @@ log_header() {
 }
 
 # 配置
-PROJECT_DIR="/opt/yk-vos"
-BACKUP_DIR="/opt/yk-vos-backups"
+PROJECT_DIR="/data/yk-vos"
+BACKUP_DIR="/data/yk-vos-backups"
 
 # 显示使用说明
 show_usage() {
