@@ -30,7 +30,7 @@ def sync_all_instances_online_phones():
         
         for inst in instances:
             client = VOSClient(inst.base_url)
-            res = client.post('/external/server/GetPhoneOnline', payload={})
+            res = client.post('/external/server/GetAllPhoneOnline', payload={})
             phones = res.get('infoPhoneOnlines') or res.get('phones') or []
             if not isinstance(phones, list):
                 for v in res.values():

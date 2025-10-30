@@ -206,22 +206,26 @@ run_database_migration() {
     log_info "执行PostgreSQL迁移脚本..."
     
     # 检查数据库版本
-    DB_VERSION=$(docker compose exec -T postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -t -c "SELECT version FROM db_versions ORDER BY applied_at DESC LIMIT 1;" 2>/dev/null || echo "0")
+    DB_VERSION=$(docker compose exec -T postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -t -c "SELECT version FROM db_versions ORDER BY applied_at DESC LIMIT 1;" 2>/dev/null | xargs || echo "0")
     
     log_info "当前数据库版本: $DB_VERSION"
     
     # 执行v2.3升级脚本
-    if [[ "$DB_VERSION" != "2.3" ]]; then
-        log_info "执行v2.3升级脚本..."
-        if [[ -f "sql/upgrade_db_v2.3.sql" ]]; then
-            docker compose exec -T postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" < sql/upgrade_db_v2.3.sql
-            log_success "PostgreSQL v2.3升级完成"
-        else
-            log_error "未找到升级脚本: sql/upgrade_db_v2.3.sql"
-            exit 1
-        fi
+    log_info "检查v2.3升级脚本..."
+    if [[ -f "sql/upgrade_db_v2.3.sql" ]]; then
+        docker compose exec -T postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" < sql/upgrade_db_v2.3.sql
+        log_success "PostgreSQL v2.3升级检查完成"
     else
-        log_warning "数据库已经是v2.3版本，跳过升级"
+        log_warning "未找到升级脚本: sql/upgrade_db_v2.3.sql"
+    fi
+    
+    # 执行v2.4升级脚本
+    log_info "检查v2.4升级脚本..."
+    if [[ -f "sql/upgrade_db_v2.4.sql" ]]; then
+        docker compose exec -T postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" < sql/upgrade_db_v2.4.sql
+        log_success "PostgreSQL v2.4升级检查完成"
+    else
+        log_warning "未找到升级脚本: sql/upgrade_db_v2.4.sql"
     fi
     
     # 执行ClickHouse升级（可选，失败不影响升级）

@@ -94,9 +94,9 @@ async def get_instance_online_phones(
     if not instance:
         raise HTTPException(status_code=404, detail='Instance not found')
     
-    # 调用 VOS API 获取在线话机
+    # 调用 VOS API 获取在线话机（使用 GetAllPhoneOnline，无需参数）
     client = VOSClient(instance.base_url)
-    res = client.post('/external/server/GetPhoneOnline', payload={})
+    res = client.post('/external/server/GetAllPhoneOnline', payload={})
     
     # 检查 API 调用是否成功
     if not client.is_success(res):
