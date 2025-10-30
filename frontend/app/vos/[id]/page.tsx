@@ -32,6 +32,9 @@ export default function VosDetail({ params }: any) {
   const [gatewayStats, setGatewayStats] = useState<GatewayStatistics[]>([])
   const [loading, setLoading] = useState(false)
   const [instanceName, setInstanceName] = useState('')
+  const [statMsg, setStatMsg] = useState<string | null>(null);
+  const [statError, setStatError] = useState<string | null>(null);
+  const [statPending, setStatPending] = useState<boolean>(false);
 
   useEffect(() => {
     if (id) {
@@ -91,14 +94,19 @@ export default function VosDetail({ params }: any) {
   }
 
   async function triggerStatisticsCalculation() {
+    setStatPending(true);
+    setStatMsg(null);
+    setStatError(null);
     try {
       await api.post(`/vos/instances/${id}/statistics/calculate`, null, {
         params: { period_types: periodType }
-      })
-      alert('统计任务已触发，请稍后刷新查看结果')
-      setTimeout(() => fetchStatistics(), 3000)
+      });
+      setStatMsg('统计任务已提交，请稍后刷新查看结果');
+      setTimeout(() => fetchStatistics(), 3000);
     } catch (e: any) {
-      alert('触发统计失败: ' + (e.response?.data?.detail || e.message))
+      setStatError('触发统计失败: ' + (e.response?.data?.detail || e.message));
+    } finally {
+      setStatPending(false);
     }
   }
 
@@ -134,6 +142,7 @@ export default function VosDetail({ params }: any) {
     <div className='max-w-7xl'>
       <div className='flex justify-between items-center mb-6'>
         <h1 className='text-3xl font-bold text-gray-800'>VOS 节点详情 - {instanceName}</h1>
+        {/* 统计周期、手动重算按钮 */}
         <div className='flex gap-2'>
           <select
             value={periodType}
@@ -147,12 +156,15 @@ export default function VosDetail({ params }: any) {
           </select>
           <button
             onClick={triggerStatisticsCalculation}
-            className='px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700'
+            className={`px-4 py-2 rounded-lg text-white ${statPending ? 'bg-gray-300' : 'bg-blue-600 hover:bg-blue-700'}`}
+            disabled={statPending}
           >
-            重新计算统计
+            {statPending ? '计算中...' : '重新计算统计'}
           </button>
         </div>
-    </div>
+        {statMsg && <div className="mt-2 text-green-600">{statMsg}</div>}
+        {statError && <div className="mt-2 text-red-600">{statError}</div>}
+      </div>
 
       {/* 概览卡片 */}
       <div className='grid grid-cols-1 md:grid-cols-4 gap-4 mb-6'>

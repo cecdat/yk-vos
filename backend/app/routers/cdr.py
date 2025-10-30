@@ -56,7 +56,7 @@ async def get_cdr_history(
     if vos_id:
         query = query.filter(CDR.vos_id == vos_id)
     
-    cdrs = query.order_by(desc(CDR.start_time)).limit(limit).all()
+    cdrs = query.order_by(desc(CDR.start)).limit(limit).all()
     
     query_time = time.time() - start_time
     
@@ -65,15 +65,15 @@ async def get_cdr_history(
         {
             'id': cdr.id,
             'vos_id': cdr.vos_id,
-            'caller': cdr.caller,
-            'callee': cdr.callee,
-            'caller_gateway': cdr.caller_gateway,
-            'callee_gateway': cdr.callee_gateway,
-            'start_time': cdr.start_time.isoformat() if cdr.start_time else None,
-            'end_time': cdr.end_time.isoformat() if cdr.end_time else None,
-            'duration': cdr.duration,
-            'cost': float(cdr.cost) if cdr.cost else 0,
-            'disposition': cdr.disposition,
+            'caller': getattr(cdr, 'caller_e164', None),
+            'callee': getattr(cdr, 'callee_access_e164', None),
+            'caller_gateway': getattr(cdr, 'caller_gateway', None),
+            'callee_gateway': getattr(cdr, 'callee_gateway', None),
+            'start_time': cdr.start.isoformat() if cdr.start else None,
+            'end_time': cdr.stop.isoformat() if cdr.stop else None,
+            'duration': getattr(cdr, 'hold_time', None),
+            'cost': float(cdr.fee) if cdr.fee else 0,
+            'disposition': getattr(cdr, 'end_reason', None),
         }
         for cdr in cdrs
         ],
