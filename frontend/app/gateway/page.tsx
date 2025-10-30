@@ -38,19 +38,23 @@ export default function GatewayPage() {
     
     setMappingLoading(true)
     try {
+      // 后端 query_vos_api 会自动处理空数组参数，发送空对象 {} 到 VOS API
       const res = await api.post(`/vos-api/instances/${currentVOS.id}/GetGatewayMapping`, {
-        names: []  // 空数组表示查询所有网关
+        names: []
       })
       
-      // 检查响应格式
+      // 后端返回格式：{ success, data, error, data_source, synced_at, instance_name }
       if (res.data.success === false) {
         throw new Error(res.data.error || '获取对接网关失败')
       }
       
-      // 从 data 字段中获取网关列表
-      const data = res.data.data || res.data
-      const gateways = data.gatewayMappings || data.infoGatewayMappings || []
+      // res.data.data 是 VOS API 的原始响应
+      const vosApiResponse = res.data.data || {}
+      const gateways = vosApiResponse.gatewayMappings || 
+                      vosApiResponse.infoGatewayMappings || 
+                      []
       
+      console.log(`加载对接网关成功: ${gateways.length}个 (来源: ${res.data.data_source})`)
       setMappingGateways(gateways)
     } catch (e: any) {
       console.error('加载对接网关失败:', e)
@@ -69,19 +73,23 @@ export default function GatewayPage() {
     
     setRoutingLoading(true)
     try {
+      // 后端 query_vos_api 会自动处理空数组参数，发送空对象 {} 到 VOS API
       const res = await api.post(`/vos-api/instances/${currentVOS.id}/GetGatewayRouting`, {
-        names: []  // 空数组表示查询所有网关
+        names: []
       })
       
-      // 检查响应格式
+      // 后端返回格式：{ success, data, error, data_source, synced_at, instance_name }
       if (res.data.success === false) {
         throw new Error(res.data.error || '获取落地网关失败')
       }
       
-      // 从 data 字段中获取网关列表
-      const data = res.data.data || res.data
-      const gateways = data.gatewayRoutings || data.infoGatewayRoutings || []
+      // res.data.data 是 VOS API 的原始响应
+      const vosApiResponse = res.data.data || {}
+      const gateways = vosApiResponse.gatewayRoutings || 
+                      vosApiResponse.infoGatewayRoutings || 
+                      []
       
+      console.log(`加载落地网关成功: ${gateways.length}个 (来源: ${res.data.data_source})`)
       setRoutingGateways(gateways)
     } catch (e: any) {
       console.error('加载落地网关失败:', e)
