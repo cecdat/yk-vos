@@ -18,15 +18,15 @@ celery.conf.beat_schedule = {
     },
     
     # 增强版同步任务（专门表 + 通用缓存双写）
-    'sync-all-instances-enhanced-every-2min': {
+    'sync-all-instances-enhanced-every-4hours': {
         'task': 'app.tasks.sync_tasks.sync_all_instances_enhanced',
-        'schedule': 120.0,  # 每2分钟同步一次（话机、网关、费率、套餐）
+        'schedule': 14400.0,  # 每4小时同步一次（话机、网关、费率、套餐）
     },
     
-    # 网关专用同步任务（更频繁同步以获取实时状态）
-    'sync-all-gateways-every-1min': {
+    # 网关专用同步任务
+    'sync-all-gateways-every-4hours': {
         'task': 'app.tasks.sync_tasks.sync_all_instances_gateways',
-        'schedule': 60.0,  # 每分钟同步一次网关（对接+落地）
+        'schedule': 14400.0,  # 每4小时同步一次网关（对接+落地）
     },
     
     # 清理过期缓存（每天凌晨2点）
