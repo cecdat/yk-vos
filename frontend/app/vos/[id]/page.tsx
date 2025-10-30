@@ -2,8 +2,8 @@
 import React, { useEffect, useState } from 'react'
 import api from '../../../lib/api'
 import Card from '../../../components/ui/Card'
-import Table from '../../../components/ui/Table'
 import SimpleLine from '../../../components/charts/LineChart'
+import SimplePie from '../../../components/charts/PieChart'
 
 interface Statistics {
   date: string
@@ -24,8 +24,6 @@ interface GatewayStatistics extends Statistics {
 
 export default function VosDetail({ params }: any) {
   const id = params?.id
-  const [online, setOnline] = useState<any[]>([])
-  const [cdrs, setCdrs] = useState<any[]>([])
   const [periodType, setPeriodType] = useState<'day' | 'month' | 'quarter' | 'year'>('day')
   const [vosStats, setVosStats] = useState<Statistics[]>([])
   const [accountStats, setAccountStats] = useState<AccountStatistics[]>([])
@@ -38,8 +36,6 @@ export default function VosDetail({ params }: any) {
 
   useEffect(() => {
     if (id) {
-      fetchOnline()
-      fetchCdrs()
       fetchStatistics()
       fetchInstanceInfo()
     }
@@ -49,26 +45,6 @@ export default function VosDetail({ params }: any) {
     try {
       const res = await api.get(`/vos/instances/${id}`)
       setInstanceName(res.data?.name || `节点 ${id}`)
-    } catch (e) {
-      console.error(e)
-    }
-  }
-
-  async function fetchOnline() {
-    try {
-      const res = await api.get(`/vos/instances/${id}/phones/online`)
-      const data = res.data || {}
-      const list = data.infoPhoneOnlines || data || []
-      setOnline(list)
-    } catch (e) {
-      console.error(e)
-    }
-  }
-
-  async function fetchCdrs() {
-    try {
-      const res = await api.get(`/cdr/history?vos_id=${id}&limit=50`)
-      setCdrs(res.data || [])
     } catch (e) {
       console.error(e)
     }
@@ -132,11 +108,37 @@ export default function VosDetail({ params }: any) {
     year: '年'
   }
 
-  // 生成图表数据（费用趋势）
+  // 生成图表数据（消费金额趋势）
   const feeChartData = vosStats.slice(0, 30).reverse().map(stat => ({
     name: stat.date.substring(5), // 显示 MM-DD
     value: stat.total_fee
   }))
+
+  // 生成账户统计饼图数据（按账户聚合总费用，取前10）
+  const accountPieData = React.useMemo(() => {
+    const accountMap = new Map<string, number>()
+    accountStats.forEach(stat => {
+      const current = accountMap.get(stat.account_name) || 0
+      accountMap.set(stat.account_name, current + stat.total_fee)
+    })
+    return Array.from(accountMap.entries())
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 10)
+  }, [accountStats])
+
+  // 生成网关统计饼图数据（按网关聚合总费用，取前10）
+  const gatewayPieData = React.useMemo(() => {
+    const gatewayMap = new Map<string, number>()
+    gatewayStats.forEach(stat => {
+      const current = gatewayMap.get(stat.gateway_name) || 0
+      gatewayMap.set(stat.gateway_name, current + stat.total_fee)
+    })
+    return Array.from(gatewayMap.entries())
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 10)
+  }, [gatewayStats])
 
   return (
     <div className='max-w-7xl'>
@@ -164,14 +166,10 @@ export default function VosDetail({ params }: any) {
         </div>
         {statMsg && <div className="mt-2 text-green-600">{statMsg}</div>}
         {statError && <div className="mt-2 text-red-600">{statError}</div>}
-      </div>
+    </div>
 
       {/* 概览卡片 */}
-      <div className='grid grid-cols-1 md:grid-cols-4 gap-4 mb-6'>
-        <Card>
-          <h3 className='text-sm text-gray-600 mb-1'>在线话机</h3>
-          <p className='text-2xl font-bold'>{online.length}</p>
-        </Card>
+      <div className='grid grid-cols-1 md:grid-cols-3 gap-4 mb-6'>
         <Card>
           <h3 className='text-sm text-gray-600 mb-1'>总费用 ({periodLabels[periodType]})</h3>
           <p className='text-2xl font-bold text-green-600'>
@@ -194,12 +192,28 @@ export default function VosDetail({ params }: any) {
         </Card>
       </div>
 
-      {/* 费用趋势图 */}
+      {/* 消费金额趋势图 */}
       {feeChartData.length > 0 && (
         <Card className='mb-6'>
-          <h2 className='text-xl font-bold mb-4'>费用趋势</h2>
+          <h2 className='text-xl font-bold mb-4'>消费金额趋势</h2>
           <SimpleLine data={feeChartData} />
         </Card>
+      )}
+
+      {/* 账户和网关统计饼图 */}
+      {(accountPieData.length > 0 || gatewayPieData.length > 0) && (
+        <div className='grid grid-cols-1 md:grid-cols-2 gap-4 mb-6'>
+          {accountPieData.length > 0 && (
+            <Card>
+              <SimplePie data={accountPieData} title='账户消费分布（Top 10）' />
+            </Card>
+          )}
+          {gatewayPieData.length > 0 && (
+            <Card>
+              <SimplePie data={gatewayPieData} title='网关消费分布（Top 10）' />
+            </Card>
+          )}
+        </div>
       )}
 
       {/* VOS节点统计表格 */}
@@ -320,31 +334,15 @@ export default function VosDetail({ params }: any) {
                 ))}
               </tbody>
             </table>
-          </div>
+      </div>
           {gatewayStats.length > 50 && (
             <div className='mt-4 text-sm text-gray-500 text-center'>
               显示前50条，共 {gatewayStats.length} 条记录
-            </div>
+    </div>
           )}
         </Card>
       )}
 
-      {/* 原始数据（在线话机、最近话单） */}
-      <div className='mt-6 grid grid-cols-1 md:grid-cols-2 gap-4'>
-        <Card>
-          <h2 className='text-lg mb-2'>在线话机</h2>
-          <Table columns={['详情']} rows={online.slice(0, 10)} />
-          {online.length > 10 && (
-            <div className='mt-2 text-sm text-gray-500 text-center'>
-              显示前10条，共 {online.length} 条
-            </div>
-          )}
-        </Card>
-        <Card>
-          <h2 className='text-lg mb-2'>最近话单（最近50）</h2>
-          <Table columns={['开始时间', '呼叫方', '被叫方', '时长(s)', 'cost']} rows={cdrs} />
-        </Card>
-      </div>
     </div>
   )
 }
