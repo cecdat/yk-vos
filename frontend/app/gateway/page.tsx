@@ -38,13 +38,20 @@ export default function GatewayPage() {
     
     setMappingLoading(true)
     try {
-      const res = await api.post(`/vos-api/instances/${currentVOS.id}/GetGatewayMapping`, {})
+      const res = await api.post(`/vos-api/instances/${currentVOS.id}/GetGatewayMapping`, {
+        names: []  // 空数组表示查询所有网关
+      })
       
-      if (res.data.retCode === 0 && res.data.gatewayMappings) {
-        setMappingGateways(res.data.gatewayMappings)
-      } else {
-        throw new Error(res.data.exception || '获取对接网关失败')
+      // 检查响应格式
+      if (res.data.success === false) {
+        throw new Error(res.data.error || '获取对接网关失败')
       }
+      
+      // 从 data 字段中获取网关列表
+      const data = res.data.data || res.data
+      const gateways = data.gatewayMappings || data.infoGatewayMappings || []
+      
+      setMappingGateways(gateways)
     } catch (e: any) {
       console.error('加载对接网关失败:', e)
       alert(e.response?.data?.detail || e.message || '加载对接网关失败')
@@ -62,13 +69,20 @@ export default function GatewayPage() {
     
     setRoutingLoading(true)
     try {
-      const res = await api.post(`/vos-api/instances/${currentVOS.id}/GetGatewayRouting`, {})
+      const res = await api.post(`/vos-api/instances/${currentVOS.id}/GetGatewayRouting`, {
+        names: []  // 空数组表示查询所有网关
+      })
       
-      if (res.data.retCode === 0 && res.data.gatewayRoutings) {
-        setRoutingGateways(res.data.gatewayRoutings)
-      } else {
-        throw new Error(res.data.exception || '获取落地网关失败')
+      // 检查响应格式
+      if (res.data.success === false) {
+        throw new Error(res.data.error || '获取落地网关失败')
       }
+      
+      // 从 data 字段中获取网关列表
+      const data = res.data.data || res.data
+      const gateways = data.gatewayRoutings || data.infoGatewayRoutings || []
+      
+      setRoutingGateways(gateways)
     } catch (e: any) {
       console.error('加载落地网关失败:', e)
       alert(e.response?.data?.detail || e.message || '加载落地网关失败')
