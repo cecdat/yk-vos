@@ -40,9 +40,16 @@ celery.conf.beat_schedule = {
         'task': 'app.tasks.sync_tasks.check_vos_instances_health',
         'schedule': 300.0,  # 每5分钟检查一次
     },
+    
+    # 话单费用统计（每天凌晨2点30分执行）
+    'calculate-cdr-statistics-daily': {
+        'task': 'app.tasks.cdr_statistics_tasks.calculate_all_instances_statistics',
+        'schedule': crontab(minute=30, hour=2),  # 每天凌晨2点30分
+    },
 }
 
 # 导入任务模块以注册任务
 from app.tasks import sync_tasks  # noqa: E402, F401
 from app.tasks import initial_sync_tasks  # noqa: E402, F401
 from app.tasks import manual_sync_tasks  # noqa: E402, F401
+from app.tasks import cdr_statistics_tasks  # noqa: E402, F401

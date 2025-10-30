@@ -13,6 +13,9 @@ from app.models.vos_instance import VOSInstance
 from app.models.phone import Phone
 from app.models.customer import Customer
 from app.models.vos_health import VOSHealthCheck
+from app.models.cdr_statistics import VOSCdrStatistics, AccountCdrStatistics, GatewayCdrStatistics
+from datetime import date, datetime
+from sqlalchemy import and_, func
 from app.routers.auth import get_current_user
 from app.tasks.sync_tasks import sync_customers_for_instance, check_vos_instances_health
 from app.tasks.initial_sync_tasks import initial_sync_for_new_instance
@@ -557,5 +560,165 @@ async def trigger_health_check(
     return {
         'message': 'VOS实例健康检查已触发',
         'status': 'triggered'
+    }
+
+
+@router.get('/instances/{instance_id}/statistics')
+async def get_instance_statistics(
+    instance_id: int,
+    period_type: str = Query('day', regex='^(day|month|quarter|year)$'),
+    start_date: Optional[str] = Query(None, description='开始日期 YYYY-MM-DD'),
+    end_date: Optional[str] = Query(None, description='结束日期 YYYY-MM-DD'),
+    current_user: Annotated[User, Depends(get_current_user)] = None,
+    db: Session = Depends(get_db)
+):
+    """
+    获取VOS实例的统计数据
+    
+    Args:
+        instance_id: VOS实例ID
+        period_type: 统计周期类型（day, month, quarter, year）
+        start_date: 开始日期（可选）
+        end_date: 结束日期（可选）
+    """
+    instance = db.query(VOSInstance).filter(VOSInstance.id == instance_id).first()
+    if not instance:
+        raise HTTPException(status_code=404, detail='Instance not found')
+    
+    if not instance.vos_uuid:
+        raise HTTPException(status_code=400, detail='Instance has no UUID')
+    
+    vos_uuid = instance.vos_uuid
+    
+    # 构建查询条件
+    query = db.query(VOSCdrStatistics).filter(
+        VOSCdrStatistics.vos_id == instance_id,
+        VOSCdrStatistics.vos_uuid == vos_uuid,
+        VOSCdrStatistics.period_type == period_type
+    )
+    
+    if start_date:
+        try:
+            start_dt = datetime.strptime(start_date, '%Y-%m-%d').date()
+            query = query.filter(VOSCdrStatistics.statistic_date >= start_dt)
+        except ValueError:
+            raise HTTPException(status_code=400, detail='Invalid start_date format, should be YYYY-MM-DD')
+    
+    if end_date:
+        try:
+            end_dt = datetime.strptime(end_date, '%Y-%m-%d').date()
+            query = query.filter(VOSCdrStatistics.statistic_date <= end_dt)
+        except ValueError:
+            raise HTTPException(status_code=400, detail='Invalid end_date format, should be YYYY-MM-DD')
+    
+    vos_stats = query.order_by(VOSCdrStatistics.statistic_date.desc()).limit(365).all()
+    
+    # 获取账户统计
+    account_query = db.query(AccountCdrStatistics).filter(
+        AccountCdrStatistics.vos_id == instance_id,
+        AccountCdrStatistics.vos_uuid == vos_uuid,
+        AccountCdrStatistics.period_type == period_type
+    )
+    
+    if start_date:
+        account_query = account_query.filter(AccountCdrStatistics.statistic_date >= start_dt)
+    if end_date:
+        account_query = account_query.filter(AccountCdrStatistics.statistic_date <= end_dt)
+    
+    account_stats = account_query.order_by(
+        AccountCdrStatistics.statistic_date.desc(),
+        AccountCdrStatistics.total_fee.desc()
+    ).limit(1000).all()
+    
+    # 获取网关统计
+    gateway_query = db.query(GatewayCdrStatistics).filter(
+        GatewayCdrStatistics.vos_id == instance_id,
+        GatewayCdrStatistics.vos_uuid == vos_uuid,
+        GatewayCdrStatistics.period_type == period_type
+    )
+    
+    if start_date:
+        gateway_query = gateway_query.filter(GatewayCdrStatistics.statistic_date >= start_dt)
+    if end_date:
+        gateway_query = gateway_query.filter(GatewayCdrStatistics.statistic_date <= end_dt)
+    
+    gateway_stats = gateway_query.order_by(
+        GatewayCdrStatistics.statistic_date.desc(),
+        GatewayCdrStatistics.total_fee.desc()
+    ).limit(1000).all()
+    
+    return {
+        'instance_id': instance_id,
+        'instance_name': instance.name,
+        'period_type': period_type,
+        'vos_statistics': [
+            {
+                'date': str(stat.statistic_date),
+                'total_fee': float(stat.total_fee),
+                'total_duration': stat.total_duration,
+                'total_calls': stat.total_calls,
+                'connected_calls': stat.connected_calls,
+                'connection_rate': float(stat.connection_rate)
+            }
+            for stat in vos_stats
+        ],
+        'account_statistics': [
+            {
+                'account_name': stat.account_name,
+                'date': str(stat.statistic_date),
+                'total_fee': float(stat.total_fee),
+                'total_duration': stat.total_duration,
+                'total_calls': stat.total_calls,
+                'connected_calls': stat.connected_calls,
+                'connection_rate': float(stat.connection_rate)
+            }
+            for stat in account_stats
+        ],
+        'gateway_statistics': [
+            {
+                'gateway_name': stat.callee_gateway,
+                'date': str(stat.statistic_date),
+                'total_fee': float(stat.total_fee),
+                'total_duration': stat.total_duration,
+                'total_calls': stat.total_calls,
+                'connected_calls': stat.connected_calls,
+                'connection_rate': float(stat.connection_rate)
+            }
+            for stat in gateway_stats
+        ]
+    }
+
+
+@router.post('/instances/{instance_id}/statistics/calculate')
+async def trigger_statistics_calculation(
+    instance_id: int,
+    statistic_date: Optional[str] = Query(None, description='统计日期 YYYY-MM-DD，默认昨天'),
+    period_types: Optional[str] = Query('day', description='统计周期类型，逗号分隔：day,month,quarter,year'),
+    current_user: Annotated[User, Depends(get_current_user)] = None,
+    db: Session = Depends(get_db)
+):
+    """手动触发统计计算"""
+    from app.tasks.cdr_statistics_tasks import calculate_cdr_statistics
+    
+    instance = db.query(VOSInstance).filter(VOSInstance.id == instance_id).first()
+    if not instance:
+        raise HTTPException(status_code=404, detail='Instance not found')
+    
+    stat_date = None
+    if statistic_date:
+        try:
+            stat_date = datetime.strptime(statistic_date, '%Y-%m-%d').date()
+        except ValueError:
+            raise HTTPException(status_code=400, detail='Invalid date format, should be YYYY-MM-DD')
+    
+    period_types_list = [p.strip() for p in period_types.split(',') if p.strip() in ['day', 'month', 'quarter', 'year']]
+    
+    result = calculate_cdr_statistics.delay(instance_id, stat_date, period_types_list)
+    
+    return {
+        'message': '统计任务已触发',
+        'task_id': result.id,
+        'instance_id': instance_id,
+        'instance_name': instance.name
     }
 
