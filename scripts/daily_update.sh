@@ -1,5 +1,5 @@
 #!/bin/bash
-# 日常更新脚本 - 用于日常维护和更新
+# 日常更新部署脚本 - 用于代码更新和服务部署
 # 支持代码更新、服务重启、健康检查等功能
 
 set -e
@@ -35,7 +35,6 @@ log_header() {
 
 # 配置
 PROJECT_DIR="/data/yk-vos"
-BACKUP_DIR="/data/yk-vos-backups"
 
 # 显示使用说明
 show_usage() {
@@ -45,18 +44,16 @@ show_usage() {
     echo "  update-code     更新代码"
     echo "  restart         重启服务"
     echo "  health-check    健康检查"
-    echo "  backup          数据备份"
     echo "  logs            查看日志"
     echo "  status          查看状态"
     echo "  cleanup         清理系统"
-    echo "  all             执行所有操作"
+    echo "  deploy          完整部署（更新代码+重启服务+健康检查）"
     echo
     echo "示例:"
     echo "  $0 update-code    # 更新代码"
     echo "  $0 restart        # 重启服务"
     echo "  $0 health-check   # 健康检查"
-    echo "  $0 backup         # 数据备份"
-    echo "  $0 all            # 执行所有操作"
+    echo "  $0 deploy         # 完整部署"
 }
 
 # 检查项目目录
@@ -229,75 +226,6 @@ health_check() {
     fi
 }
 
-# 数据备份
-backup_data() {
-    log_header "数据备份..."
-    
-    # 创建备份目录
-    local backup_date=$(date +%Y%m%d-%H%M%S)
-    local backup_path="$BACKUP_DIR/backup-$backup_date"
-    mkdir -p "$backup_path"
-    
-    # 备份PostgreSQL数据库
-    log_info "备份PostgreSQL数据库..."
-    if docker compose exec postgres pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB" > /dev/null 2>&1; then
-        docker compose exec -T postgres pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB" > "$backup_path/postgres_backup.sql"
-        log_success "PostgreSQL备份完成"
-    else
-        log_error "PostgreSQL数据库连接失败"
-        return 1
-    fi
-    
-    # 备份Redis数据
-    log_info "备份Redis数据..."
-    if docker compose exec redis redis-cli ping > /dev/null 2>&1; then
-        docker compose exec -T redis redis-cli --rdb "$backup_path/redis_backup.rdb"
-        log_success "Redis备份完成"
-    else
-        log_error "Redis数据库连接失败"
-        return 1
-    fi
-    
-    # 备份配置文件
-    log_info "备份配置文件..."
-    cp .env "$backup_path/" 2>/dev/null || log_warning "未找到.env文件"
-    cp docker-compose.yaml "$backup_path/" 2>/dev/null || log_warning "未找到docker-compose.yaml文件"
-    cp user_agents.json "$backup_path/" 2>/dev/null || log_warning "未找到user_agents.json文件"
-    
-    # 创建备份信息
-    cat > "$backup_path/backup_info.txt" << EOF
-YK-VOS 日常备份信息
-==================
-
-备份时间: $(date)
-备份目录: $backup_path
-项目目录: $PROJECT_DIR
-
-服务版本信息:
-$(docker compose version)
-
-Docker镜像信息:
-$(docker images --format "table {{.Repository}}\t{{.Tag}}\t{{.ID}}\t{{.CreatedAt}}" | grep yk-vos)
-
-系统信息:
-$(uname -a)
-$(cat /etc/os-release | head -n 3)
-EOF
-    
-    # 压缩备份文件
-    log_info "压缩备份文件..."
-    cd "$BACKUP_DIR"
-    tar -czf "backup-$backup_date.tar.gz" "backup-$backup_date"
-    rm -rf "backup-$backup_date"
-    
-    log_success "数据备份完成: backup-$backup_date.tar.gz"
-    
-    # 清理旧备份（保留最近7天）
-    log_info "清理旧备份文件..."
-    find "$BACKUP_DIR" -name "backup-*.tar.gz" -mtime +7 -delete
-    log_success "旧备份文件清理完成"
-}
-
 # 查看日志
 view_logs() {
     log_header "查看日志..."
@@ -406,20 +334,35 @@ cleanup_system() {
     log_success "系统清理完成"
 }
 
-# 执行所有操作
-run_all() {
-    log_header "执行所有日常维护操作..."
+# 完整部署流程
+deploy_all() {
+    log_header "开始完整部署流程..."
     
-    backup_data
+    # 1. 更新代码
+    if update_code; then
+        log_success "代码更新完成"
+    else
+        log_error "代码更新失败，停止部署"
+        return 1
+    fi
+    
+    # 2. 重启服务
+    if restart_services; then
+        log_success "服务重启完成"
+    else
+        log_error "服务重启失败"
+        return 1
+    fi
+    
+    # 3. 健康检查
     health_check
-    cleanup_system
     
-    log_success "日常维护完成"
+    log_success "完整部署流程完成"
 }
 
-# 主函数
+    # 主函数
 main() {
-    local action="${1:-all}"
+    local action="${1:-deploy}"
     
     # 检查root权限
     if [[ $EUID -ne 0 ]]; then
@@ -441,9 +384,6 @@ main() {
         "health-check")
             health_check
             ;;
-        "backup")
-            backup_data
-            ;;
         "logs")
             view_logs
             ;;
@@ -453,8 +393,8 @@ main() {
         "cleanup")
             cleanup_system
             ;;
-        "all")
-            run_all
+        "deploy")
+            deploy_all
             ;;
         "help"|"-h"|"--help")
             show_usage
