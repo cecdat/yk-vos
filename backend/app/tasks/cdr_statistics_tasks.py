@@ -354,7 +354,10 @@ def save_gateway_statistics(db, vos_id: int, vos_uuid: str, gateway_name: str, s
 
 @celery.task
 def calculate_all_instances_statistics():
-    """为所有启用的VOS实例计算统计（每天凌晨2点执行）"""
+    """
+    为所有启用的VOS实例计算统计（每天凌晨2点30分执行）
+    统计前一天的所有周期类型数据（日/月/季度/年）
+    """
     db = SessionLocal()
     try:
         instances = db.query(VOSInstance).filter(VOSInstance.enabled == True).all()
@@ -363,26 +366,51 @@ def calculate_all_instances_statistics():
             return {'success': True, 'message': '没有VOS实例需要统计', 'instances_count': 0}
         
         yesterday = date.today() - timedelta(days=1)
+        logger.info(f"开始为所有VOS实例计算统计，日期={yesterday}")
+        
         results = []
         
         for inst in instances:
-            if inst.vos_uuid:
-                # 统计昨天的日级别数据
-                result = calculate_cdr_statistics.delay(inst.id, yesterday, ['day'])
+            if not inst.vos_uuid:
+                logger.warning(f"VOS实例 {inst.name} (ID={inst.id}) 没有UUID，跳过统计")
+                continue
+            
+            try:
+                # 统计前一天的所有周期类型数据（日/月/季度/年）
+                # 这样可以确保月度、季度、年度统计也会自动更新
+                period_types = ['day', 'month', 'quarter', 'year']
+                
+                result = calculate_cdr_statistics.delay(inst.id, yesterday, period_types)
                 results.append({
                     'instance_id': inst.id,
                     'instance_name': inst.name,
-                    'task_id': result.id
+                    'task_id': result.id,
+                    'statistic_date': str(yesterday),
+                    'period_types': period_types
                 })
-                logger.info(f"已创建统计任务: {inst.name} (ID={inst.id})")
+                logger.info(f"✅ 已创建统计任务: {inst.name} (ID={inst.id}), 日期={yesterday}, 周期={period_types}")
+            except Exception as e:
+                logger.error(f"❌ 为实例 {inst.name} (ID={inst.id}) 创建统计任务失败: {e}", exc_info=True)
+                results.append({
+                    'instance_id': inst.id,
+                    'instance_name': inst.name,
+                    'success': False,
+                    'error': str(e)
+                })
+        
+        success_count = sum(1 for r in results if 'task_id' in r)
+        logger.info(f"✅ 统计任务创建完成: 成功 {success_count}/{len(instances)} 个实例")
         
         return {
             'success': True,
             'instances_count': len(instances),
+            'success_count': success_count,
+            'failed_count': len(instances) - success_count,
+            'statistic_date': str(yesterday),
             'results': results
         }
     except Exception as e:
-        logger.error(f"创建统计任务失败: {e}", exc_info=True)
+        logger.error(f"❌ 创建统计任务失败: {e}", exc_info=True)
         return {'success': False, 'error': str(e)}
     finally:
         db.close()
