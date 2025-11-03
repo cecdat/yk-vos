@@ -325,42 +325,88 @@ configure_firewall() {
 
 # 显示安装结果
 show_result() {
+    # 读取环境变量
+    if [[ -f ".env" ]]; then
+        source .env
+    fi
+    
+    # 获取服务器IP
+    SERVER_IP=$(hostname -I | awk '{print $1}')
+    if [[ -z "$SERVER_IP" ]]; then
+        SERVER_IP="localhost"
+    fi
+    
+    # 获取数据库配置（从.env文件或使用默认值）
+    PG_USER=${POSTGRES_USER:-"vos_user"}
+    PG_DB=${POSTGRES_DB:-"vosadmin"}
+    PG_PASSWORD=${POSTGRES_PASSWORD:-"Ykxx@2025"}
+    CH_USER=${CLICKHOUSE_USER:-"vosadmin"}
+    CH_PASSWORD=${CLICKHOUSE_PASSWORD:-"Ykxx@2025"}
+    CH_DB=${CLICKHOUSE_DB:-"vos_cdrs"}
+    
     log_success "安装完成！"
     echo
     echo "=========================================="
     echo "  YK-VOS 全新部署完成"
     echo "=========================================="
-    echo "项目目录: $PROJECT_DIR"
-    echo "前端地址: http://$(hostname -I | awk '{print $1}'):3000"
-    echo "后端地址: http://$(hostname -I | awk '{print $1}'):3001"
     echo
-    echo "管理命令:"
+    echo "📍 访问地址:"
+    echo "  前端界面: http://$SERVER_IP:3000"
+    echo "  后端API:  http://$SERVER_IP:3001"
+    echo "  API文档:  http://$SERVER_IP:3001/docs"
+    echo
+    echo "🔐 登录信息:"
+    echo "  用户名: admin"
+    echo "  密码:   admin123"
+    echo "  ⚠️  首次登录后请立即修改密码！"
+    echo
+    echo "🗄️  数据库信息:"
+    echo "  PostgreSQL:"
+    echo "    地址:   $SERVER_IP:5430 (容器内: postgres:5432)"
+    echo "    数据库: $PG_DB"
+    echo "    用户名: $PG_USER"
+    echo "    密码:   $PG_PASSWORD"
+    echo
+    echo "  ClickHouse:"
+    echo "    HTTP端口:  $SERVER_IP:8123"
+    echo "    Native端口: $SERVER_IP:9000"
+    echo "    数据库:   $CH_DB"
+    echo "    用户名:   $CH_USER"
+    echo "    密码:     $CH_PASSWORD"
+    echo
+    echo "  Redis:"
+    echo "    地址:   $SERVER_IP:6379 (容器内: redis:6379)"
+    echo
+    echo "💻 管理命令:"
     echo "  启动服务: systemctl start yk-vos"
     echo "  停止服务: systemctl stop yk-vos"
     echo "  查看状态: systemctl status yk-vos"
     echo "  查看日志: docker compose logs -f"
     echo
-    echo "日常维护:"
-    echo "  日常更新: sudo ./scripts/daily_update.sh"
-    echo "  数据备份: sudo ./scripts/daily_update.sh backup"
-    echo "  健康检查: sudo ./scripts/daily_update.sh health-check"
+    echo "🔧 日常维护:"
+    echo "  日常更新: bash scripts/daily_update.sh"
+    echo "  数据备份: bash scripts/backup_data.sh"
+    echo "  健康检查: bash scripts/daily_update.sh health-check"
     echo
-    echo "数据库信息:"
-    echo "  PostgreSQL: localhost:5432"
-    echo "  Redis: localhost:6379"
-    echo "  ClickHouse: localhost:8123"
+    echo "📝 项目目录: $PROJECT_DIR"
+    echo "   配置文件: $PROJECT_DIR/.env"
+    echo "   数据目录: $PROJECT_DIR/data/"
     echo
-    echo "默认管理员账号:"
-    echo "  用户名: admin"
-    echo "  密码: admin123"
-    echo "  (首次登录后请立即修改密码)"
-    echo
-    echo "新功能特性:"
+    echo "✨ 新功能特性:"
     echo "  ✓ VOS节点唯一UUID支持"
     echo "  ✓ IP变更时数据关联连续性"
+    echo "  ✓ 统一统计表设计（VOS/账户/网关）"
     echo "  ✓ 增强的网关同步功能"
     echo "  ✓ 改进的健康检查机制"
     echo "=========================================="
+    echo
+    log_warning "请妥善保管数据库密码信息！"
+    log_info "下一步："
+    echo "  1. 访问前端界面登录系统"
+    echo "  2. 修改管理员密码"
+    echo "  3. 添加VOS实例配置"
+    echo "  4. 开始使用系统"
+    echo
 }
 
 # 主函数
