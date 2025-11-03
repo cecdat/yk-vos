@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS cdrs
     -- 基础字段
     id UInt64 COMMENT '唯一标识（根据flowNo生成）',
     vos_id UInt32 COMMENT 'VOS实例ID',
+    vos_uuid String COMMENT 'VOS节点唯一标识',
     flow_no String COMMENT '话单流水号（VOS原始ID）',
     
     -- 账户信息
@@ -51,7 +52,7 @@ CREATE TABLE IF NOT EXISTS cdrs
 )
 ENGINE = ReplacingMergeTree(updated_at)
 PARTITION BY toYYYYMM(start)
-ORDER BY (vos_id, start, flow_no)
+ORDER BY (vos_id, vos_uuid, start, flow_no)
 SETTINGS index_granularity = 8192
 COMMENT '话单记录表 - 按月分区，自动去重';
 
@@ -60,15 +61,17 @@ ALTER TABLE cdrs ADD INDEX IF NOT EXISTS idx_account account TYPE minmax GRANULA
 ALTER TABLE cdrs ADD INDEX IF NOT EXISTS idx_caller caller_e164 TYPE minmax GRANULARITY 4;
 ALTER TABLE cdrs ADD INDEX IF NOT EXISTS idx_callee callee_access_e164 TYPE minmax GRANULARITY 4;
 ALTER TABLE cdrs ADD INDEX IF NOT EXISTS idx_gateway callee_gateway TYPE minmax GRANULARITY 4;
+ALTER TABLE cdrs ADD INDEX IF NOT EXISTS idx_vos_uuid vos_uuid TYPE minmax GRANULARITY 4;
 
--- 创建物化视图 - 按天统计
+-- 创建物化视图 - 按天统计（包含 vos_uuid）
 CREATE MATERIALIZED VIEW IF NOT EXISTS cdrs_daily_stats
 ENGINE = SummingMergeTree()
 PARTITION BY toYYYYMM(call_date)
-ORDER BY (vos_id, call_date, account)
+ORDER BY (vos_id, vos_uuid, call_date, account)
 POPULATE
 AS SELECT
     vos_id,
+    vos_uuid,
     toDate(start) AS call_date,
     account,
     count() AS call_count,
@@ -76,36 +79,38 @@ AS SELECT
     sum(fee) AS total_fee,
     max(start) AS last_call_time
 FROM cdrs
-GROUP BY vos_id, call_date, account;
+GROUP BY vos_id, vos_uuid, call_date, account;
 
--- 创建物化视图 - 按账户实时统计
+-- 创建物化视图 - 按账户实时统计（包含 vos_uuid）
 CREATE MATERIALIZED VIEW IF NOT EXISTS cdrs_account_stats
 ENGINE = SummingMergeTree()
-ORDER BY (vos_id, account)
+ORDER BY (vos_id, vos_uuid, account)
 POPULATE
 AS SELECT
     vos_id,
+    vos_uuid,
     account,
     count() AS call_count,
     sum(hold_time) AS total_duration,
     sum(fee) AS total_fee,
     max(start) AS last_call_time
 FROM cdrs
-GROUP BY vos_id, account;
+GROUP BY vos_id, vos_uuid, account;
 
--- 创建物化视图 - 网关统计
+-- 创建物化视图 - 网关统计（包含 vos_uuid）
 CREATE MATERIALIZED VIEW IF NOT EXISTS cdrs_gateway_stats
 ENGINE = SummingMergeTree()
 PARTITION BY toYYYYMM(call_date)
-ORDER BY (vos_id, call_date, callee_gateway)
+ORDER BY (vos_id, vos_uuid, call_date, callee_gateway)
 POPULATE
 AS SELECT
     vos_id,
+    vos_uuid,
     toDate(start) AS call_date,
     callee_gateway,
     count() AS call_count,
     sum(hold_time) AS total_duration,
     sum(fee) AS total_fee
 FROM cdrs
-GROUP BY vos_id, call_date, callee_gateway;
+GROUP BY vos_id, vos_uuid, call_date, callee_gateway;
 
