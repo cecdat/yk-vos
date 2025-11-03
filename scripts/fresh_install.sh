@@ -106,31 +106,42 @@ install_docker() {
 
 # 创建项目目录
 create_project_dir() {
-    log_info "创建项目目录..."
+    log_info "检查项目目录..."
     
     PROJECT_DIR="/data/yk-vos"
     
+    # 如果项目目录已存在，检查是否有必要的文件
     if [[ -d "$PROJECT_DIR" ]]; then
         log_warning "项目目录已存在: $PROJECT_DIR"
-        read -p "是否删除现有目录并重新创建? (y/N): " -n 1 -r
-        echo
-        if [[ $REPLY =~ ^[Yy]$ ]]; then
-            rm -rf "$PROJECT_DIR"
+        
+        # 检查是否有docker-compose.yaml，如果有说明代码已经存在
+        if [[ -f "$PROJECT_DIR/docker-compose.yaml" ]]; then
+            log_success "检测到项目代码已存在，跳过代码下载步骤"
+            cd "$PROJECT_DIR"
+            return
         else
-            log_error "安装取消"
-            exit 1
+            log_warning "项目目录存在但未检测到完整代码，将使用现有目录"
         fi
+    else
+        # 如果目录不存在，创建它
+        mkdir -p "$PROJECT_DIR"
     fi
     
-    mkdir -p "$PROJECT_DIR"
     cd "$PROJECT_DIR"
-    
-    log_success "项目目录创建完成: $PROJECT_DIR"
+    log_success "项目目录检查完成: $PROJECT_DIR"
 }
 
 # 下载项目代码
 download_project() {
-    log_info "下载项目代码..."
+    log_info "检查项目代码..."
+    
+    # 检查是否已有docker-compose.yaml文件
+    if [[ -f "docker-compose.yaml" ]]; then
+        log_success "项目代码已存在，跳过下载步骤"
+        return
+    fi
+    
+    log_info "项目代码不存在，开始下载..."
     
     # 检查git是否安装
     if ! command -v git &> /dev/null; then
@@ -146,23 +157,54 @@ download_project() {
     if [[ -n "$GIT_REPO" ]]; then
         git clone "$GIT_REPO" .
     else
-        log_warning "未指定Git仓库，请手动上传项目代码到 $PROJECT_DIR"
-        log_info "或者设置环境变量 GIT_REPO 指定Git仓库地址"
-        read -p "按回车键继续..."
+        log_warning "未指定Git仓库，请确保项目代码已在 $PROJECT_DIR 目录中"
+        log_info "提示：可以设置环境变量 GIT_REPO 指定Git仓库地址"
+        
+        # 再次检查是否有必要文件
+        if [[ ! -f "docker-compose.yaml" ]]; then
+            log_error "未找到 docker-compose.yaml，请确保项目代码已上传"
+            exit 1
+        fi
     fi
     
     log_success "项目代码准备完成"
+}
+
+# 创建数据目录
+create_data_dirs() {
+    log_info "创建数据目录..."
+    
+    # 创建必要的数据目录
+    mkdir -p data/postgres
+    mkdir -p data/clickhouse
+    mkdir -p data/redis
+    
+    # 设置正确的权限
+    chmod -R 755 data
+    
+    log_success "数据目录创建完成"
 }
 
 # 配置环境变量
 setup_environment() {
     log_info "配置环境变量..."
     
+    # 如果.env文件已存在，询问是否覆盖
+    if [[ -f ".env" ]]; then
+        log_warning "环境变量文件已存在: .env"
+        read -p "是否覆盖现有环境变量文件? (y/N): " -n 1 -r
+        echo
+        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+            log_info "保留现有环境变量文件"
+            return
+        fi
+    fi
+    
     # 创建环境变量文件
     cat > .env << EOF
 # 数据库配置
-POSTGRES_DB=yk_vos
-POSTGRES_USER=yk_vos_user
+POSTGRES_DB=vosadmin
+POSTGRES_USER=vos_user
 POSTGRES_PASSWORD=$(openssl rand -base64 32)
 
 # Redis配置
@@ -231,9 +273,18 @@ init_database() {
     # 执行数据库初始化脚本
     log_info "执行数据库初始化脚本..."
     
+    # 读取环境变量
+    if [[ -f ".env" ]]; then
+        source .env
+    fi
+    
+    # 使用环境变量或默认值
+    PG_USER=${POSTGRES_USER:-"vos_user"}
+    PG_DB=${POSTGRES_DB:-"vosadmin"}
+    
     # PostgreSQL基础初始化（统一统计表、版本管理表）
     if [[ -f "sql/init_database.sql" ]]; then
-        docker compose exec -T postgres psql -U vos_user -d vosadmin < sql/init_database.sql
+        docker compose exec -T postgres psql -U "$PG_USER" -d "$PG_DB" < sql/init_database.sql
         log_success "PostgreSQL基础表结构创建完成"
     else
         log_warning "未找到 sql/init_database.sql，跳过"
@@ -418,6 +469,7 @@ main() {
     install_docker
     create_project_dir
     download_project
+    create_data_dirs
     setup_environment
     init_database
     start_application
