@@ -43,11 +43,12 @@ show_usage() {
     echo "选项:"
     echo "  update-code     更新代码"
     echo "  restart         重启服务"
-    echo "  health-check    健康检查"
+    echo "  health-check    健康检查（完成后显示系统信息）"
     echo "  logs            查看日志"
-    echo "  status          查看状态"
+    echo "  status          查看状态（显示系统信息）"
     echo "  cleanup         清理系统"
-    echo "  deploy          完整部署（更新代码+重启服务+健康检查）"
+    echo "  deploy          完整部署（更新代码+重启服务+健康检查+系统信息）"
+    echo "  info            显示系统信息（数据库信息、登录信息等）"
     echo
     echo "示例:"
     echo "  $0 update-code    # 更新代码"
@@ -334,6 +335,78 @@ cleanup_system() {
     log_success "系统清理完成"
 }
 
+# 显示系统信息
+show_system_info() {
+    # 读取环境变量
+    if [[ -f ".env" ]]; then
+        source .env
+    fi
+    
+    # 获取服务器IP
+    SERVER_IP=$(hostname -I | awk '{print $1}')
+    if [[ -z "$SERVER_IP" ]]; then
+        SERVER_IP="localhost"
+    fi
+    
+    # 获取数据库配置（从.env文件或使用默认值）
+    PG_USER=${POSTGRES_USER:-"vos_user"}
+    PG_DB=${POSTGRES_DB:-"vosadmin"}
+    PG_PASSWORD=${POSTGRES_PASSWORD:-"Ykxx@2025"}
+    CH_USER=${CLICKHOUSE_USER:-"vosadmin"}
+    CH_PASSWORD=${CLICKHOUSE_PASSWORD:-"Ykxx@2025"}
+    CH_DB=${CLICKHOUSE_DB:-"vos_cdrs"}
+    
+    echo
+    echo "=========================================="
+    echo "  YK-VOS 系统信息"
+    echo "=========================================="
+    echo
+    echo "📍 访问地址:"
+    echo "  前端界面: http://$SERVER_IP:3000"
+    echo "  后端API:  http://$SERVER_IP:3001"
+    echo "  API文档:  http://$SERVER_IP:3001/docs"
+    echo
+    echo "🔐 登录信息:"
+    echo "  用户名: admin"
+    echo "  密码:   admin123"
+    echo "  ⚠️  首次登录后请立即修改密码！"
+    echo
+    echo "🗄️  数据库信息:"
+    echo "  PostgreSQL:"
+    echo "    地址:   $SERVER_IP:5430 (容器内: postgres:5432)"
+    echo "    数据库: $PG_DB"
+    echo "    用户名: $PG_USER"
+    echo "    密码:   $PG_PASSWORD"
+    echo
+    echo "  ClickHouse:"
+    echo "    HTTP端口:  $SERVER_IP:8123"
+    echo "    Native端口: $SERVER_IP:9000"
+    echo "    数据库:   $CH_DB"
+    echo "    用户名:   $CH_USER"
+    echo "    密码:     $CH_PASSWORD"
+    echo
+    echo "  Redis:"
+    echo "    地址:   $SERVER_IP:6379 (容器内: redis:6379)"
+    echo
+    echo "💻 管理命令:"
+    echo "  启动服务: systemctl start yk-vos"
+    echo "  停止服务: systemctl stop yk-vos"
+    echo "  查看状态: systemctl status yk-vos"
+    echo "  查看日志: docker compose logs -f"
+    echo
+    echo "🔧 日常维护:"
+    echo "  日常更新: bash scripts/daily_update.sh"
+    echo "  数据备份: bash scripts/backup_data.sh"
+    echo "  健康检查: bash scripts/daily_update.sh health-check"
+    echo
+    echo "📝 项目目录: $PROJECT_DIR"
+    echo "   配置文件: $PROJECT_DIR/.env"
+    echo "   数据目录: $PROJECT_DIR/data/"
+    echo
+    echo "=========================================="
+    echo
+}
+
 # 完整部署流程
 deploy_all() {
     log_header "开始完整部署流程..."
@@ -358,6 +431,9 @@ deploy_all() {
     health_check
     
     log_success "完整部署流程完成"
+    
+    # 4. 显示系统信息
+    show_system_info
 }
 
     # 主函数
@@ -383,18 +459,23 @@ main() {
             ;;
         "health-check")
             health_check
+            show_system_info
             ;;
         "logs")
             view_logs
             ;;
         "status")
             view_status
+            show_system_info
             ;;
         "cleanup")
             cleanup_system
             ;;
         "deploy")
             deploy_all
+            ;;
+        "info")
+            show_system_info
             ;;
         "help"|"-h"|"--help")
             show_usage
