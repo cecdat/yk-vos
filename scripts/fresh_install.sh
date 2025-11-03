@@ -196,33 +196,55 @@ init_database() {
     log_info "等待数据库启动..."
     sleep 30
     
-    # 检查数据库连接
-    if docker compose exec postgres pg_isready -U yk_vos_user -d yk_vos; then
-        log_success "PostgreSQL数据库启动成功"
-    else
-        log_error "PostgreSQL数据库启动失败"
-        exit 1
-    fi
+    # 等待PostgreSQL完全启动
+    log_info "等待PostgreSQL数据库完全启动..."
+    max_wait=60
+    waited=0
+    while ! docker compose exec -T postgres pg_isready -U vos_user -d vosadmin > /dev/null 2>&1; do
+        if [ $waited -ge $max_wait ]; then
+            log_error "PostgreSQL数据库启动超时"
+            exit 1
+        fi
+        sleep 2
+        waited=$((waited + 2))
+        echo -n "."
+    done
+    echo ""
+    log_success "PostgreSQL数据库启动成功"
+    
+    # 等待ClickHouse完全启动
+    log_info "等待ClickHouse数据库完全启动..."
+    max_wait=60
+    waited=0
+    while ! docker compose exec -T clickhouse clickhouse-client --query "SELECT 1" > /dev/null 2>&1; do
+        if [ $waited -ge $max_wait ]; then
+            log_warning "ClickHouse数据库启动超时，继续执行..."
+            break
+        fi
+        sleep 2
+        waited=$((waited + 2))
+        echo -n "."
+    done
+    echo ""
+    log_success "ClickHouse数据库启动成功"
     
     # 执行数据库初始化脚本
     log_info "执行数据库初始化脚本..."
     
-    # 基础表结构
-    if [[ -f "sql/base.sql" ]]; then
-        docker compose exec -T postgres psql -U yk_vos_user -d yk_vos < sql/base.sql
-        log_success "基础表结构创建完成"
-    fi
-    
-    # 初始化数据
-    if [[ -f "sql/insert_user_agents.sql" ]]; then
-        docker compose exec -T postgres psql -U yk_vos_user -d yk_vos < sql/insert_user_agents.sql
-        log_success "初始数据插入完成"
+    # PostgreSQL基础初始化（统一统计表、版本管理表）
+    if [[ -f "sql/init_database.sql" ]]; then
+        docker compose exec -T postgres psql -U vos_user -d vosadmin < sql/init_database.sql
+        log_success "PostgreSQL基础表结构创建完成"
+    else
+        log_warning "未找到 sql/init_database.sql，跳过"
     fi
     
     # ClickHouse初始化
     if [[ -f "clickhouse/init/01_create_tables.sql" ]]; then
         docker compose exec -T clickhouse clickhouse-client < clickhouse/init/01_create_tables.sql
         log_success "ClickHouse表结构创建完成"
+    else
+        log_warning "未找到 clickhouse/init/01_create_tables.sql，跳过"
     fi
     
     log_success "数据库初始化完成"
