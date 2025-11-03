@@ -530,9 +530,6 @@ Celery Beat 定时任务自动启动，包括：
 # 日常更新部署
 bash scripts/daily_update.sh
 
-# 数据库升级迁移
-bash scripts/upgrade_migration.sh
-
 # 数据备份
 bash scripts/backup_data.sh
 ```
@@ -594,9 +591,8 @@ yk-vos/
 │
 ├── scripts/                     # 部署脚本
 │   ├── fresh_install.sh        # 全新安装脚本
-│   ├── upgrade_migration.sh    # 升级迁移脚本
 │   ├── daily_update.sh         # 日常更新脚本
-│   └── backup_data.sh          # 备份脚本
+│   └── backup_data.sh          # 数据备份脚本
 │
 ├── data/                        # 数据目录
 │   ├── postgres/               # PostgreSQL数据
