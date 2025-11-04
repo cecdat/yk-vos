@@ -527,7 +527,7 @@ export default function VosApiPage() {
                 <pre className='text-xs font-mono text-gray-800'>
                   {resultData.length > 0 
                     ? JSON.stringify(paginatedData, null, 2)
-                    : JSON.stringify(result.data || result, null, 2)
+                    : JSON.stringify(result.data?.data || result.data || result, null, 2)
                   }
                 </pre>
               </div>
