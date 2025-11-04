@@ -8,6 +8,7 @@ import uuid
 
 from app.core.db import get_db
 from app.core.vos_client import VOSClient
+from app.core.vos_cache_service import VosCacheService
 from app.models.user import User
 from app.models.vos_instance import VOSInstance
 from app.models.phone import Phone
@@ -278,12 +279,19 @@ async def get_all_customers_summary(
                 Customer.vos_instance_id == instance.id
             ).count()
             
+            # 统计欠费客户数量
+            debt_count = db.query(Customer).filter(
+                Customer.vos_instance_id == instance.id,
+                Customer.is_in_debt == True
+            ).count()
+            
             total_customers += count
             
             instance_summaries.append({
                 'instance_id': instance.id,
                 'instance_name': instance.name,
-                'customer_count': count
+                'customer_count': count,
+                'debt_customer_count': debt_count
             })
         
         return {
@@ -296,6 +304,149 @@ async def get_all_customers_summary(
         logger.error(f'获取客户统计失败: {e}')
         return {
             'total_customers': 0,
+            'instances': [],
+            'instance_count': 0,
+            'from_cache': True,
+            'error': str(e)
+        }
+
+
+@router.get('/gateways/summary')
+async def get_all_gateways_summary(
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Session = Depends(get_db)
+):
+    """
+    获取所有启用的 VOS 实例的网关统计数据
+    返回：对接网关总数、落地网关总数、在线网关数
+    """
+    try:
+        instances = db.query(VOSInstance).filter(VOSInstance.enabled == True).all()
+        cache_service = VosCacheService(db)
+        
+        total_mapping_gateways = 0
+        total_routing_gateways = 0
+        total_online_gateways = 0
+        instance_summaries = []
+        
+        for instance in instances:
+            try:
+                # 获取对接网关数据
+                mapping_data, mapping_source = cache_service.get_cached_data(
+                    vos_instance_id=instance.id,
+                    api_path='/external/server/GetGatewayMapping',
+                    params={},
+                    force_refresh=False
+                )
+                
+                # 获取落地网关数据
+                routing_data, routing_source = cache_service.get_cached_data(
+                    vos_instance_id=instance.id,
+                    api_path='/external/server/GetGatewayRouting',
+                    params={},
+                    force_refresh=False
+                )
+                
+                # 获取在线网关数据
+                mapping_online_data, _ = cache_service.get_cached_data(
+                    vos_instance_id=instance.id,
+                    api_path='/external/server/GetGatewayMappingOnline',
+                    params={},
+                    force_refresh=False
+                )
+                
+                routing_online_data, _ = cache_service.get_cached_data(
+                    vos_instance_id=instance.id,
+                    api_path='/external/server/GetGatewayRoutingOnline',
+                    params={},
+                    force_refresh=False
+                )
+                
+                # 提取网关数据
+                mapping_gateways = []
+                if mapping_data and mapping_data.get('retCode') == 0:
+                    mapping_gateways = (
+                        mapping_data.get('gatewayMappings') or 
+                        mapping_data.get('infoGatewayMappings') or 
+                        []
+                    )
+                
+                routing_gateways = []
+                if routing_data and routing_data.get('retCode') == 0:
+                    routing_gateways = (
+                        routing_data.get('gatewayRoutings') or 
+                        routing_data.get('infoGatewayRoutings') or 
+                        []
+                    )
+                
+                # 提取在线网关数据（用于计算在线数量）
+                mapping_online_gateways = []
+                if mapping_online_data and mapping_online_data.get('retCode') == 0:
+                    mapping_online_gateways = (
+                        mapping_online_data.get('gatewayMappings') or 
+                        mapping_online_data.get('infoGatewayMappings') or 
+                        []
+                    )
+                
+                routing_online_gateways = []
+                if routing_online_data and routing_online_data.get('retCode') == 0:
+                    routing_online_gateways = (
+                        routing_online_data.get('gatewayRoutings') or 
+                        routing_online_data.get('infoGatewayRoutings') or 
+                        []
+                    )
+                
+                # 计算在线网关数量（合并对接和落地）
+                online_count = len([
+                    gw for gw in mapping_online_gateways 
+                    if gw.get('isOnline') or gw.get('online')
+                ]) + len([
+                    gw for gw in routing_online_gateways 
+                    if gw.get('isOnline') or gw.get('online')
+                ])
+                
+                mapping_count = len(mapping_gateways)
+                routing_count = len(routing_gateways)
+                
+                total_mapping_gateways += mapping_count
+                total_routing_gateways += routing_count
+                total_online_gateways += online_count
+                
+                instance_summaries.append({
+                    'instance_id': instance.id,
+                    'instance_name': instance.name,
+                    'mapping_gateway_count': mapping_count,
+                    'routing_gateway_count': routing_count,
+                    'online_gateway_count': online_count,
+                    'error': None
+                })
+                
+            except Exception as e:
+                logger.error(f'获取实例 {instance.name} 的网关统计失败: {e}')
+                instance_summaries.append({
+                    'instance_id': instance.id,
+                    'instance_name': instance.name,
+                    'mapping_gateway_count': 0,
+                    'routing_gateway_count': 0,
+                    'online_gateway_count': 0,
+                    'error': str(e)
+                })
+        
+        return {
+            'total_mapping_gateways': total_mapping_gateways,
+            'total_routing_gateways': total_routing_gateways,
+            'total_online_gateways': total_online_gateways,
+            'instances': instance_summaries,
+            'instance_count': len(instances),
+            'from_cache': True
+        }
+        
+    except Exception as e:
+        logger.error(f'获取网关统计失败: {e}')
+        return {
+            'total_mapping_gateways': 0,
+            'total_routing_gateways': 0,
+            'total_online_gateways': 0,
             'instances': [],
             'instance_count': 0,
             'from_cache': True,

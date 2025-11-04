@@ -53,6 +53,7 @@ export default function Page(){
   const [instances, setInstances] = useState<any[]>([])
   const [customerSummary, setCustomerSummary] = useState<CustomerSummary | null>(null)
   const [debtCustomers, setDebtCustomers] = useState(0)
+  const [gatewaySummary, setGatewaySummary] = useState<any>(null)
   const [cdrSyncStatus, setCdrSyncStatus] = useState<CDRSyncStatus | null>(null)
   const [cdrSyncProgress, setCdrSyncProgress] = useState<CDRSyncProgress | null>(null)
   const [loading, setLoading] = useState(true)
@@ -76,9 +77,25 @@ export default function Page(){
       fetchInstances(),
       fetchCustomerSummary(),
       fetchDebtCustomers(),
+      fetchGatewaySummary(),
       fetchCDRSyncStatus()
     ])
     setLoading(false)
+  }
+  
+  async function fetchGatewaySummary() {
+    try {
+      const res = await api.get('/vos/gateways/summary')
+      setGatewaySummary(res.data)
+    } catch (e) {
+      console.error('获取网关统计失败:', e)
+      setGatewaySummary({
+        total_mapping_gateways: 0,
+        total_routing_gateways: 0,
+        total_online_gateways: 0,
+        instances: []
+      })
+    }
   }
 
   async function fetchInstances() {
@@ -190,7 +207,7 @@ export default function Page(){
       </div>
 
       {/* 统计卡片 */}
-      <div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8'>
+      <div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 mb-8'>
         <div className='bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl p-5 text-white shadow-lg'>
           <div className='flex items-center justify-between'>
             <div>
@@ -262,6 +279,49 @@ export default function Page(){
             </div>
           </div>
         </div>
+        
+        {/* 新增网关统计卡片 */}
+        <div className='bg-gradient-to-br from-indigo-500 to-indigo-600 rounded-xl p-5 text-white shadow-lg'>
+          <div className='flex items-center justify-between'>
+            <div>
+              <p className='text-indigo-100 text-xs mb-1'>对接网关总数</p>
+              <p className='text-2xl font-bold'>{gatewaySummary?.total_mapping_gateways || 0}</p>
+            </div>
+            <div className='w-10 h-10 bg-white bg-opacity-20 rounded-lg flex items-center justify-center'>
+              <svg className='w-5 h-5' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
+                <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M13 7l5 5m0 0l-5 5m5-5H6' />
+              </svg>
+            </div>
+          </div>
+        </div>
+
+        <div className='bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl p-5 text-white shadow-lg'>
+          <div className='flex items-center justify-between'>
+            <div>
+              <p className='text-purple-100 text-xs mb-1'>落地网关总数</p>
+              <p className='text-2xl font-bold'>{gatewaySummary?.total_routing_gateways || 0}</p>
+            </div>
+            <div className='w-10 h-10 bg-white bg-opacity-20 rounded-lg flex items-center justify-center'>
+              <svg className='w-5 h-5' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
+                <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M11 17l-5-5m0 0l5-5m-5 5h12' />
+              </svg>
+            </div>
+          </div>
+        </div>
+
+        <div className='bg-gradient-to-br from-emerald-500 to-emerald-600 rounded-xl p-5 text-white shadow-lg'>
+          <div className='flex items-center justify-between'>
+            <div>
+              <p className='text-emerald-100 text-xs mb-1'>在线网关数</p>
+              <p className='text-2xl font-bold'>{gatewaySummary?.total_online_gateways || 0}</p>
+            </div>
+            <div className='w-10 h-10 bg-white bg-opacity-20 rounded-lg flex items-center justify-center'>
+              <svg className='w-5 h-5' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
+                <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z' />
+              </svg>
+            </div>
+          </div>
+        </div>
       </div>
 
 
@@ -326,6 +386,15 @@ export default function Page(){
           <div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4'>
             {customerSummary.instances.map((inst) => {
               const isCurrentVOS = currentVOS?.id === inst.instance_id
+              // 获取该实例的网关统计数据
+              const gatewayStats = gatewaySummary?.instances?.find(
+                (g: any) => g.instance_id === inst.instance_id
+              ) || {
+                mapping_gateway_count: 0,
+                routing_gateway_count: 0,
+                online_gateway_count: 0
+              }
+              
               return (
                 <div 
                   key={inst.instance_id} 
@@ -335,7 +404,7 @@ export default function Page(){
                       : 'bg-white bg-opacity-90 backdrop-filter backdrop-blur-lg border-white border-opacity-30'
                   }`}
                 >
-                  <div className='flex items-center justify-between mb-3'>
+                  <div className='flex items-center justify-between mb-4'>
                     <div className='flex items-center gap-2'>
                       <h3 className='font-semibold text-gray-800'>{inst.instance_name}</h3>
                       {isCurrentVOS && (
@@ -344,10 +413,66 @@ export default function Page(){
                         </span>
                       )}
                     </div>
-                    <span className='px-3 py-1 bg-gradient-to-r from-green-100 to-green-200 text-green-800 rounded-full text-sm font-medium'>
-                      {inst.customer_count} 户
-                    </span>
                   </div>
+                  
+                  {/* 统计信息图标 */}
+                  <div className='grid grid-cols-5 gap-3 mb-3'>
+                    {/* 全部用户数 */}
+                    <div 
+                      className='flex flex-col items-center justify-center p-2 bg-gray-50 rounded-lg hover:bg-gray-100 transition cursor-help'
+                      title='全部用户数'
+                    >
+                      <svg className='w-5 h-5 text-gray-600 mb-1' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
+                        <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z' />
+                      </svg>
+                      <span className='text-xs font-bold text-gray-700'>{inst.customer_count || 0}</span>
+                    </div>
+                    
+                    {/* 欠费用户数 */}
+                    <div 
+                      className='flex flex-col items-center justify-center p-2 bg-red-50 rounded-lg hover:bg-red-100 transition cursor-help'
+                      title='欠费用户数'
+                    >
+                      <svg className='w-5 h-5 text-red-600 mb-1' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
+                        <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z' />
+                      </svg>
+                      <span className='text-xs font-bold text-red-700'>{inst.debt_customer_count || 0}</span>
+                    </div>
+                    
+                    {/* 落地网关数 */}
+                    <div 
+                      className='flex flex-col items-center justify-center p-2 bg-purple-50 rounded-lg hover:bg-purple-100 transition cursor-help'
+                      title='落地网关数'
+                    >
+                      <svg className='w-5 h-5 text-purple-600 mb-1' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
+                        <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M11 17l-5-5m0 0l5-5m-5 5h12' />
+                      </svg>
+                      <span className='text-xs font-bold text-purple-700'>{gatewayStats.routing_gateway_count || 0}</span>
+                    </div>
+                    
+                    {/* 对接网关数 */}
+                    <div 
+                      className='flex flex-col items-center justify-center p-2 bg-blue-50 rounded-lg hover:bg-blue-100 transition cursor-help'
+                      title='对接网关数'
+                    >
+                      <svg className='w-5 h-5 text-blue-600 mb-1' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
+                        <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M13 7l5 5m0 0l-5 5m5-5H6' />
+                      </svg>
+                      <span className='text-xs font-bold text-blue-700'>{gatewayStats.mapping_gateway_count || 0}</span>
+                    </div>
+                    
+                    {/* 在线网关数 */}
+                    <div 
+                      className='flex flex-col items-center justify-center p-2 bg-green-50 rounded-lg hover:bg-green-100 transition cursor-help'
+                      title='在线网关数'
+                    >
+                      <svg className='w-5 h-5 text-green-600 mb-1' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
+                        <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z' />
+                      </svg>
+                      <span className='text-xs font-bold text-green-700'>{gatewayStats.online_gateway_count || 0}</span>
+                    </div>
+                  </div>
+                  
                   {inst.error && (
                     <p className='text-xs text-red-600 mt-2'>⚠️ {inst.error}</p>
                   )}

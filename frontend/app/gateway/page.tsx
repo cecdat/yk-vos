@@ -115,16 +115,25 @@ export default function GatewayPage() {
     }
   }
 
-  // 自动加载当前激活的网关数据
+  // 自动加载当前激活的网关数据（进入页面时同时加载两个类型的数据）
   useEffect(() => {
     if (currentVOS) {
-      if (activeTab === 'mapping') {
+      // 同时加载对接网关和落地网关数据，以便在标签页显示数量
+      loadMappingGateways()
+      loadRoutingGateways()
+    }
+  }, [currentVOS])
+  
+  // 切换标签页时，如果当前标签页数据未加载，则加载
+  useEffect(() => {
+    if (currentVOS) {
+      if (activeTab === 'mapping' && mappingGateways.length === 0 && !mappingLoading) {
         loadMappingGateways()
-      } else {
+      } else if (activeTab === 'routing' && routingGateways.length === 0 && !routingLoading) {
         loadRoutingGateways()
       }
     }
-  }, [currentVOS, activeTab])
+  }, [activeTab])
 
   // 刷新当前标签页数据
   function handleRefresh() {
@@ -357,11 +366,9 @@ export default function GatewayPage() {
                   <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M13 7l5 5m0 0l-5 5m5-5H6' />
                 </svg>
                 <span>对接网关</span>
-                {mappingGateways.length > 0 && (
-                  <span className='ml-2 bg-blue-100 text-blue-600 px-2 py-0.5 rounded-full text-xs font-semibold'>
-                    {mappingGateways.length}
-                  </span>
-                )}
+                <span className='ml-2 bg-blue-100 text-blue-600 px-2 py-0.5 rounded-full text-xs font-semibold'>
+                  {mappingLoading ? '...' : mappingGateways.length}
+                </span>
               </div>
             </button>
             <button
@@ -377,11 +384,9 @@ export default function GatewayPage() {
                   <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M11 17l-5-5m0 0l5-5m-5 5h12' />
                 </svg>
                 <span>落地网关</span>
-                {routingGateways.length > 0 && (
-                  <span className='ml-2 bg-purple-100 text-purple-600 px-2 py-0.5 rounded-full text-xs font-semibold'>
-                    {routingGateways.length}
-                  </span>
-                )}
+                <span className='ml-2 bg-purple-100 text-purple-600 px-2 py-0.5 rounded-full text-xs font-semibold'>
+                  {routingLoading ? '...' : routingGateways.length}
+                </span>
               </div>
             </button>
           </nav>
@@ -393,54 +398,6 @@ export default function GatewayPage() {
         </div>
       </div>
 
-      {/* 统计信息 */}
-      {(mappingGateways.length > 0 || routingGateways.length > 0) && (
-        <div className='grid grid-cols-1 md:grid-cols-3 gap-4'>
-          <div className='bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl p-5 text-white shadow-lg'>
-            <div className='flex items-center justify-between'>
-              <div>
-                <p className='text-blue-100 text-xs mb-1'>对接网关总数</p>
-                <p className='text-2xl font-bold'>{mappingGateways.length}</p>
-              </div>
-              <div className='w-10 h-10 bg-white bg-opacity-20 rounded-lg flex items-center justify-center'>
-                <svg className='w-5 h-5' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
-                  <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M13 7l5 5m0 0l-5 5m5-5H6' />
-                </svg>
-              </div>
-            </div>
-          </div>
-
-          <div className='bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl p-5 text-white shadow-lg'>
-            <div className='flex items-center justify-between'>
-              <div>
-                <p className='text-purple-100 text-xs mb-1'>落地网关总数</p>
-                <p className='text-2xl font-bold'>{routingGateways.length}</p>
-              </div>
-              <div className='w-10 h-10 bg-white bg-opacity-20 rounded-lg flex items-center justify-center'>
-                <svg className='w-5 h-5' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
-                  <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M11 17l-5-5m0 0l5-5m-5 5h12' />
-                </svg>
-              </div>
-            </div>
-          </div>
-
-          <div className='bg-gradient-to-br from-green-500 to-green-600 rounded-xl p-5 text-white shadow-lg'>
-            <div className='flex items-center justify-between'>
-              <div>
-                <p className='text-green-100 text-xs mb-1'>在线网关数</p>
-                <p className='text-2xl font-bold'>
-                  {[...mappingGateways, ...routingGateways].filter(gw => gw.isOnline || gw.online).length}
-                </p>
-              </div>
-              <div className='w-10 h-10 bg-white bg-opacity-20 rounded-lg flex items-center justify-center'>
-                <svg className='w-5 h-5' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
-                  <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z' />
-                </svg>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }
