@@ -37,94 +37,51 @@ interface InstanceStatistics {
 
 export default function StatisticsPage() {
   const { currentVOS } = useVOS()
-  const [instances, setInstances] = useState<any[]>([])
-  const [instanceStats, setInstanceStats] = useState<Map<number, InstanceStatistics>>(new Map())
+  const [instanceStats, setInstanceStats] = useState<InstanceStatistics | null>(null)
   const [loading, setLoading] = useState(true)
   const [periodType, setPeriodType] = useState<'day' | 'month' | 'quarter' | 'year'>('day')
-  const [expandedInstances, setExpandedInstances] = useState<Set<number>>(new Set())
 
   useEffect(() => {
-    fetchInstances()
-  }, [])
-
-  useEffect(() => {
-    if (instances.length > 0) {
-      // 并行加载所有实例的统计数据（使用Promise.all）
-      const enabledInstances = instances.filter(inst => inst.enabled && inst.vos_uuid)
-      if (enabledInstances.length > 0) {
-        Promise.all(
-          enabledInstances.map(inst => fetchInstanceStatistics(inst.id))
-        ).catch(err => {
-          console.error('批量加载统计数据失败:', err)
-        })
-      }
-    }
-  }, [instances, periodType])
-
-  async function fetchInstances() {
-    setLoading(true)
-    try {
-      const res = await api.get('/vos/instances')
-      setInstances(res.data || [])
-      // 默认展开所有实例
-      setExpandedInstances(new Set(res.data?.map((i: any) => i.id) || []))
-    } catch (e) {
-      console.error('获取实例失败:', e)
-    } finally {
+    if (currentVOS && currentVOS.vos_uuid) {
+      fetchInstanceStatistics(currentVOS.id)
+    } else {
+      setInstanceStats(null)
       setLoading(false)
     }
-  }
+  }, [currentVOS, periodType])
 
   async function fetchInstanceStatistics(instanceId: number) {
-    setInstanceStats(prev => {
-      const newMap = new Map(prev)
-      const existing = newMap.get(instanceId)
-      newMap.set(instanceId, { ...existing, loading: true, error: undefined } as InstanceStatistics)
-      return newMap
-    })
+    setLoading(true)
+    setInstanceStats(prev => ({ ...prev, loading: true, error: undefined } as InstanceStatistics | null))
 
     try {
       const res = await api.get(`/vos/instances/${instanceId}/statistics`, {
         params: { period_type: periodType }
       })
-      setInstanceStats(prev => {
-        const newMap = new Map(prev)
-        newMap.set(instanceId, {
-          instance_id: instanceId,
-          instance_name: res.data?.instance_name || '',
-          period_type: periodType,
-          vos_statistics: res.data?.vos_statistics || [],
-          account_statistics: res.data?.account_statistics || [],
-          gateway_statistics: res.data?.gateway_statistics || [],
-          loading: false
-        })
-        return newMap
+      setInstanceStats({
+        instance_id: instanceId,
+        instance_name: res.data?.instance_name || '',
+        period_type: periodType,
+        vos_statistics: res.data?.vos_statistics || [],
+        account_statistics: res.data?.account_statistics || [],
+        gateway_statistics: res.data?.gateway_statistics || [],
+        loading: false
       })
     } catch (e: any) {
       console.error(`获取实例 ${instanceId} 统计数据失败:`, e)
-      setInstanceStats(prev => {
-        const newMap = new Map(prev)
-        const existing = newMap.get(instanceId)
-        newMap.set(instanceId, {
-          ...existing,
-          loading: false,
-          error: e.response?.data?.detail || e.message || '获取统计数据失败'
-        } as InstanceStatistics)
-        return newMap
+      setInstanceStats({
+        instance_id: instanceId,
+        instance_name: currentVOS?.name || '',
+        period_type: periodType,
+        vos_statistics: [],
+        account_statistics: [],
+        gateway_statistics: [],
+        loading: false,
+        error: e.response?.data?.detail || e.message || '获取统计数据失败'
       })
+    } finally {
+      setLoading(false)
     }
-  }
-
-  function toggleInstance(instanceId: number) {
-    setExpandedInstances(prev => {
-      const newSet = new Set(prev)
-      if (newSet.has(instanceId)) {
-        newSet.delete(instanceId)
-      } else {
-        newSet.add(instanceId)
-      }
-      return newSet
-    })
   }
 
   // 格式化时长（秒转小时分钟）
@@ -411,13 +368,12 @@ export default function StatisticsPage() {
                             <p className='mt-2 text-sm text-gray-500 text-center'>显示前20条，共 {vosStats.length} 条记录</p>
                           )}
                         </div>
-                      </>
-                    )}
-                  </div>
-                )}
+                    </>
+                  )}
+                </div>
               </Card>
             )
-          })}
+          })()}
         </div>
       )}
     </div>

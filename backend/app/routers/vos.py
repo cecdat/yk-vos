@@ -217,6 +217,11 @@ async def update_instance(
     db.commit()
     db.refresh(instance)
     
+    # 清除Redis缓存，确保下次查询获取最新数据
+    from app.core.redis_cache import RedisCache
+    RedisCache.delete('vos_instances_list')
+    RedisCache.delete(f'vos_instance_{instance_id}_customers')
+    
     return {
         'id': instance.id,
         'name': instance.name,

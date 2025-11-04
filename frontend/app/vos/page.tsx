@@ -79,6 +79,19 @@ export default function VosList(){
     }
   }
 
+  async function handleToggleEnabled(id: number, enabled: boolean) {
+    try {
+      setLoading(true)
+      await api.put(`/vos/instances/${id}`, { enabled })
+      setMessage(enabled ? '节点已启用' : '节点已禁用')
+      fetchInstances()
+    } catch (e: any) {
+      setMessage(e.response?.data?.detail || '操作失败')
+    } finally {
+      setLoading(false)
+    }
+  }
+
   async function handleDelete(id: number, name: string) {
     if (!confirm(`确定要删除节点 "${name}" 吗？这将同时删除该节点下的所有电话记录。`)) {
       return
@@ -131,9 +144,26 @@ export default function VosList(){
                     <p className='mt-2 text-sm text-gray-500'>{inst.description}</p>
                   )}
                 </div>
-                <span className={`ml-2 px-2 py-1 text-xs rounded-full ${inst.enabled ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>
-                  {inst.enabled ? '启用' : '禁用'}
-                </span>
+                <div className='ml-2 flex items-center gap-2'>
+                  {/* 启用/禁用开关按钮 */}
+                  <button
+                    onClick={() => handleToggleEnabled(inst.id, !inst.enabled)}
+                    disabled={loading}
+                    className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
+                      inst.enabled ? 'bg-blue-600' : 'bg-gray-200'
+                    } ${loading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    title={inst.enabled ? '点击禁用' : '点击启用'}
+                  >
+                    <span
+                      className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                        inst.enabled ? 'translate-x-5' : 'translate-x-0'
+                      }`}
+                    />
+                  </button>
+                  <span className={`px-2 py-1 text-xs rounded-full ${inst.enabled ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>
+                    {inst.enabled ? '启用' : '禁用'}
+                  </span>
+                </div>
               </div>
               <div className='flex gap-2 mt-4 pt-3 border-t'>
                 <a
