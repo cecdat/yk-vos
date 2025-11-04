@@ -255,21 +255,35 @@ export default function VosApiPage() {
 
   // 获取结果数据数组（用于分页）
   const getResultData = () => {
-    if (!result || !result.data) return []
+    if (!result) return []
     
-    // 查找数据数组
-    const data = result.data
-    if (Array.isArray(data)) return data
+    // 后端返回格式：{ success, data, error, ... }
+    // result.data 是包装后的响应，result.data.data 是VOS原始响应
+    const vosData = result.data?.data || result.data || result
     
-    // 尝试常见的数据字段
-    for (const key of ['items', 'list', 'records', 'data', 'infos', 'results']) {
-      if (data[key] && Array.isArray(data[key])) {
-        return data[key]
+    // 如果vosData是数组，直接返回
+    if (Array.isArray(vosData)) return vosData
+    
+    // 尝试常见的数据字段（从VOS原始响应中提取）
+    const commonKeys = [
+      'gatewayMappings', 'infoGatewayMappings',  // 对接网关
+      'gatewayRoutings', 'infoGatewayRoutings',  // 落地网关
+      'customers', 'infoCustomers',              // 客户
+      'phones', 'infoPhones', 'infoPhoneOnlines', // 话机
+      'cdrs', 'infoCdrs',                       // 话单
+      'feeRateGroups', 'infoFeeRateGroups',     // 费率组
+      'suites', 'infoSuites',                   // 套餐
+      'items', 'list', 'records', 'data', 'infos', 'results'  // 通用字段
+    ]
+    
+    for (const key of commonKeys) {
+      if (vosData[key] && Array.isArray(vosData[key])) {
+        return vosData[key]
       }
     }
     
     // 如果找不到数组，返回单个对象作为数组
-    return [data]
+    return [vosData]
   }
 
   const resultData = getResultData()
