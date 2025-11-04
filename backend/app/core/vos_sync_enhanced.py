@@ -12,6 +12,7 @@ from sqlalchemy import and_
 from app.models.phone_enhanced import PhoneEnhanced
 from app.models.gateway import Gateway, FeeRateGroup, Suite
 from app.models.customer import Customer
+from app.models.vos_instance import VOSInstance
 from app.core.vos_client import VOSClient
 from app.core.vos_cache_service import VosCacheService
 
@@ -26,6 +27,8 @@ class VosSyncEnhanced:
         self.vos_instance_id = vos_instance_id
         self.client = VOSClient(base_url)
         self.cache_service = VosCacheService(db)
+        # 获取VOS实例信息（用于获取vos_uuid）
+        self.vos_instance = db.query(VOSInstance).filter(VOSInstance.id == vos_instance_id).first()
     
     # ==================== 话机同步（增强版）====================
     
@@ -132,25 +135,263 @@ class VosSyncEnhanced:
         logger.info(f"开始同步网关 (instance={self.vos_instance_id}, type={gateway_type})")
         
         results = {'mapping': None, 'routing': None}
+        has_error = False
+        error_messages = []
         
         try:
             # 同步对接网关
             if gateway_type in ['mapping', 'both']:
-                results['mapping'] = self._sync_gateway_type('mapping')
+                logger.info(f"同步对接网关 (instance={self.vos_instance_id})")
+                mapping_result = self._sync_gateway_type('mapping')
+                results['mapping'] = mapping_result
+                if not mapping_result.get('success', False):
+                    has_error = True
+                    error_msg = mapping_result.get('error', '未知错误')
+                    error_messages.append(f"对接网关同步失败: {error_msg}")
+                    logger.error(f"对接网关同步失败 (instance={self.vos_instance_id}): {error_msg}")
+                else:
+                    logger.info(f"对接网关同步成功 (instance={self.vos_instance_id}): {mapping_result.get('count', 0)} 个")
             
             # 同步落地网关
             if gateway_type in ['routing', 'both']:
-                results['routing'] = self._sync_gateway_type('routing')
+                logger.info(f"同步落地网关 (instance={self.vos_instance_id})")
+                routing_result = self._sync_gateway_type('routing')
+                results['routing'] = routing_result
+                if not routing_result.get('success', False):
+                    has_error = True
+                    error_msg = routing_result.get('error', '未知错误')
+                    error_messages.append(f"落地网关同步失败: {error_msg}")
+                    logger.error(f"落地网关同步失败 (instance={self.vos_instance_id}): {error_msg}")
+                else:
+                    logger.info(f"落地网关同步成功 (instance={self.vos_instance_id}): {routing_result.get('count', 0)} 个")
             
-            return {
-                'success': True,
-                'results': results
-            }
+            # 汇总结果
+            total_count = 0
+            if results['mapping'] and results['mapping'].get('success'):
+                total_count += results['mapping'].get('count', 0)
+            if results['routing'] and results['routing'].get('success'):
+                total_count += results['routing'].get('count', 0)
+            
+            if has_error:
+                logger.warning(f"网关同步部分失败 (instance={self.vos_instance_id}): {'; '.join(error_messages)}")
+                return {
+                    'success': False,
+                    'error': '; '.join(error_messages),
+                    'results': results,
+                    'total_count': total_count
+                }
+            else:
+                logger.info(f"网关同步完成 (instance={self.vos_instance_id}): 共 {total_count} 个网关")
+                return {
+                    'success': True,
+                    'results': results,
+                    'total_count': total_count
+                }
             
         except Exception as e:
             logger.exception(f"同步网关失败: {e}")
             self.db.rollback()
-            return {'success': False, 'error': str(e)}
+            return {'success': False, 'error': str(e), 'results': results}
+    
+    def _map_gateway_fields(self, gw_data: Dict[str, Any], online_info: Dict[str, Any], is_online: bool, gw_type: str) -> Dict[str, Any]:
+        """
+        将VOS API返回的字段映射到Gateway模型的字段
+        """
+        # 字段映射表：{VOS API字段名: Gateway模型字段名}
+        field_mapping = {
+            # 基础配置
+            'lockType': ('lock_type', int),
+            'callLevel': ('call_level', int),
+            'capacity': ('capacity', int),
+            'priority': ('priority', int),
+            'gatewayGroups': ('gateway_groups', str),
+            'routingGatewayGroupsAllow': ('routing_gateway_groups_allow', bool),
+            'routingGatewayGroups': ('routing_gateway_groups', str),
+            'registerType': ('register_type', int),
+            'remoteIps': ('remote_ips', str),
+            
+            # 号码检查配置
+            'callerE164CheckEnable': ('caller_e164_check_enable', bool),
+            'callerE164CheckCity': ('caller_e164_check_city', bool),
+            'callerE164CheckMobile': ('caller_e164_check_mobile', bool),
+            'callerE164CheckOther': ('caller_e164_check_other', bool),
+            'calleeE164CheckEnable': ('callee_e164_check_enable', bool),
+            'calleeE164CheckCity': ('callee_e164_check_city', bool),
+            'calleeE164CheckMobile': ('callee_e164_check_mobile', bool),
+            'calleeE164CheckOther': ('callee_e164_check_other', bool),
+            'calleeE164Restrict': ('callee_e164_restrict', int),
+            
+            # RTP和媒体配置
+            'rtpForwardType': ('rtp_forward_type', int),
+            'mediaCheckDirection': ('media_check_direction', int),
+            'maxCallDurationLower': ('max_call_duration_lower', int),
+            'maxCallDurationUpper': ('max_call_duration_upper', int),
+            
+            # 计费配置
+            'allowPhoneBilling': ('allow_phone_billing', bool),
+            'allowBindedE164Billing': ('allow_binded_e164_billing', bool),
+            'enablePhoneSetting': ('enable_phone_setting', bool),
+            
+            # 限制配置
+            'denySameCityCodesAllow': ('deny_same_city_codes_allow', bool),
+            'denySameCityCodes': ('deny_same_city_codes', str),
+            'checkMobileAreaAllow': ('check_mobile_area_allow', bool),
+            'checkMobileArea': ('check_mobile_area', str),
+            'calloutCalleePrefixesAllow': ('callout_callee_prefixes_allow', bool),
+            'calloutCalleePrefixes': ('callout_callee_prefixes', str),
+            'calloutCallerPrefixesAllow': ('callout_caller_prefixes_allow', bool),
+            'calloutCallerPrefixes': ('callout_caller_prefixes', str),
+            
+            # 重写规则
+            'rewriteRulesOutCallee': ('rewrite_rules_out_callee', str),
+            'rewriteRulesOutCaller': ('rewrite_rules_out_caller', str),
+            'rewriteRulesInMobileAreaAllow': ('rewrite_rules_in_mobile_area_allow', bool),
+            'rewriteRulesInMobileArea': ('rewrite_rules_in_mobile_area', str),
+            
+            # 超时和SIP配置
+            'timeoutCallProceeding': ('timeout_call_proceeding', int),
+            'sipResponseAddressMethod': ('sip_response_address_method', int),
+            'sipRequestAddressMethod': ('sip_request_address_method', int),
+            
+            # DTMF配置
+            'dtmfSendMethodH323': ('dtmf_send_method_h323', int),
+            'dtmfSendMethodSip': ('dtmf_send_method_sip', int),
+            'dtmfReceiveMethod': ('dtmf_receive_method', int),
+            'dtmfSendPayloadTypeH323': ('dtmf_send_payload_type_h323', int),
+            'dtmfSendPayloadTypeSip': ('dtmf_send_payload_type_sip', int),
+            'dtmfReceivePayloadType': ('dtmf_receive_payload_type', int),
+            
+            # Q.931配置
+            'q931ProgressIndicator': ('q931_progress_indicator', int),
+            
+            # 账户信息
+            'account': ('account', str),
+            'accountName': ('account_name', str),
+            'password': ('password', str),
+            'customerPassword': ('customer_password', str),
+            
+            # 呼叫失败配置
+            'callFailedQ931CauseValue': ('call_failed_q931_cause_value', str),
+            'callFailedSipCode': ('call_failed_sip_code', str),
+            
+            # SIP域配置
+            'sipRemoteRingSignal': ('sip_remote_ring_signal', int),
+            'sipCalleeE164Domain': ('sip_callee_e164_domain', int),
+            'sipCallerE164Domain': ('sip_caller_e164_domain', int),
+            'h323CalleeE164Domain': ('h323_callee_e164_domain', int),
+            'h323CallerE164Domain': ('h323_caller_e164_domain', int),
+            
+            # 备注
+            'memo': ('memo', str),
+            
+            # SIP认证
+            'sipAuthenticationMethod': ('sip_authentication_method', int),
+            
+            # H.323配置
+            'h323FastStart': ('h323_fast_start', bool),
+            'h323H245Tunneling': ('h323_h245_tunneling', bool),
+            'h323H245InSetup': ('h323_h245_in_setup', bool),
+            'h323AutoCallProceeding': ('h323_auto_call_proceeding', bool),
+            'h323CallProceedingFromSipTrying': ('h323_call_proceeding_from_sip_trying', bool),
+            'h323AlertingFromSip183Sdp': ('h323_alerting_from_sip183_sdp', bool),
+            'h323T38': ('h323_t38', bool),
+            
+            # SIP高级配置
+            'sipTimer': ('sip_timer', bool),
+            'sip100Rel': ('sip_100_rel', bool),
+            'sipT38': ('sip_t38', bool),
+            'sipDisplay': ('sip_display', bool),
+            'sipRemotePartyId': ('sip_remote_party_id', bool),
+            'sipPrivacySupport': ('sip_privacy_support', bool),
+            
+            # 其他配置
+            'groupE164Change': ('group_e164_change', bool),
+            'callerAllowLength': ('caller_allow_length', int),
+            'calleeAllowLength': ('callee_allow_length', int),
+            'callerLimitE164GroupsAllow': ('caller_limit_e164_groups_allow', bool),
+            'callerLimitE164Groups': ('caller_limit_e164_groups', str),
+            'calleeLimitE164GroupsAllow': ('callee_limit_e164_groups_allow', bool),
+            'calleeLimitE164Groups': ('callee_limit_e164_groups', str),
+            
+            # 利润和费率配置
+            'minProfitPercentEnable': ('min_profit_percent_enable', bool),
+            'minProfitPercent': ('min_profit_percent', float),
+            'maxSecondRatesEnable': ('max_second_rates_enable', bool),
+            'maxSecondRates': ('max_second_rates', float),
+            
+            # 路由策略
+            'firstRoutePolicy': ('first_route_policy', int),
+            'secondRoutePolicy': ('second_route_policy', int),
+            
+            # 编解码配置
+            'h323G729SendMode': ('h323_g729_send_mode', int),
+            'sipG729SendMode': ('sip_g729_send_mode', int),
+            'sipG729Annexb': ('sip_g729_annexb', int),
+            'sipG723Annexa': ('sip_g723_annexa', int),
+            'h323CodecAssign': ('h323_codec_assign', bool),
+            'sipCodecAssign': ('sip_codec_assign', bool),
+            
+            # RTP和音频配置
+            'audioCodecTranscodingEnable': ('audio_codec_transcoding_enable', bool),
+            'rtpIncludeDtmfInband': ('rtp_include_dtmf_inband', bool),
+            'rtpNeedDtmfInband': ('rtp_need_dtmf_inband', bool),
+            
+            # 其他高级配置
+            'softswitchName': ('softswitch_name', str),
+            'forwardSignalRewriteE164GroupEnable': ('forward_signal_rewrite_e164_group_enable', bool),
+            'forwardSignalRewriteE164Group': ('forward_signal_rewrite_e164_group', str),
+            'lrnEnable': ('lrn_enable', bool),
+            'lrnEatPrefixLength': ('lrn_eat_prefix_length', int),
+            'lrnFailureAction': ('lrn_failure_action', int),
+            'lrnInterstateBillingPrefix': ('lrn_interstate_billing_prefix', str),
+            'lrnUndeterminedBillingPrefix': ('lrn_undetermined_billing_prefix', str),
+            'language': ('language', str),
+            'dynamicBlackListInStandalone': ('dynamic_black_list_in_standalone', bool),
+            'mediaRecord': ('media_record', bool),
+        }
+        
+        result = {
+            # 基础字段
+            'gateway_name': gw_data.get('name', ''),
+            'gateway_type': gw_type,
+            'is_online': is_online,
+            'ip_address': gw_data.get('ipAddress') or gw_data.get('ip'),
+            'port': gw_data.get('port'),
+            'protocol': gw_data.get('protocol'),
+            'asr': online_info.get('asr', 0.0),
+            'acd': online_info.get('acd', 0.0),
+            'concurrent_calls': online_info.get('concurrentCalls', 0),
+        }
+        
+        # 映射所有字段
+        for vos_key, (model_key, data_type) in field_mapping.items():
+            value = gw_data.get(vos_key)
+            if value is not None:
+                try:
+                    # 类型转换
+                    if data_type == int:
+                        result[model_key] = int(value) if value != '' else 0
+                    elif data_type == float:
+                        result[model_key] = float(value) if value != '' else 0.0
+                    elif data_type == bool:
+                        result[model_key] = bool(value) if isinstance(value, bool) else (value == 'true' or value == True)
+                    elif data_type == str:
+                        result[model_key] = str(value) if value is not None else ''
+                    else:
+                        result[model_key] = value
+                except (ValueError, TypeError) as e:
+                    logger.warning(f"字段映射失败 {vos_key} -> {model_key}: {e}, 值={value}")
+                    # 使用默认值
+                    if data_type == int:
+                        result[model_key] = 0
+                    elif data_type == float:
+                        result[model_key] = 0.0
+                    elif data_type == bool:
+                        result[model_key] = False
+                    elif data_type == str:
+                        result[model_key] = ''
+        
+        return result
     
     def _sync_gateway_type(self, gw_type: str) -> Dict[str, Any]:
         """同步特定类型的网关"""
@@ -174,7 +415,17 @@ class VosSyncEnhanced:
         
         # 3. 更新到专门表
         gateways_list = config_result.get('infoGatewayMappings' if gw_type == 'mapping' else 'infoGatewayRoutings', [])
+        if not isinstance(gateways_list, list):
+            logger.warning(f"网关列表格式异常 (type={gw_type}, instance={self.vos_instance_id}): {type(gateways_list)}")
+            gateways_list = []
+        
+        logger.info(f"获取到 {len(gateways_list)} 个{gw_type}网关配置 (instance={self.vos_instance_id})")
         synced_count = 0
+        
+        if len(gateways_list) == 0:
+            logger.info(f"VOS实例 {self.vos_instance_id} 没有配置{gw_type}网关，跳过同步")
+            # 即使没有网关，也返回成功（这是正常情况）
+            return {'success': True, 'count': 0, 'message': f'没有配置{gw_type}网关'}
         
         for gw_data in gateways_list:
             gateway_name = gw_data.get('name')
@@ -203,40 +454,37 @@ class VosSyncEnhanced:
                 )
             ).first()
             
+            # 将VOS API字段映射到Gateway模型字段
+            gateway_fields = self._map_gateway_fields(gw_data, online_info, is_online, gw_type)
+            
             if gateway:
                 # 更新现有记录
-                gateway.gateway_type = gw_type
-                gateway.is_online = is_online
-                gateway.ip_address = gw_data.get('ipAddress') or gw_data.get('ip')
-                gateway.port = gw_data.get('port')
-                gateway.protocol = gw_data.get('protocol')
-                gateway.asr = online_info.get('asr', 0.0)
-                gateway.acd = online_info.get('acd', 0.0)
-                gateway.concurrent_calls = online_info.get('concurrentCalls', 0)
+                for key, value in gateway_fields.items():
+                    if hasattr(gateway, key):
+                        setattr(gateway, key, value)
+                # 更新vos_uuid（如果VOS实例存在）
+                if self.vos_instance and self.vos_instance.vos_uuid:
+                    gateway.vos_uuid = self.vos_instance.vos_uuid
                 # 保存完整数据
                 gateway.raw_data = merged_data
                 gateway.synced_at = datetime.utcnow()
             else:
                 # 创建新记录
-                gateway = Gateway(
-                    vos_instance_id=self.vos_instance_id,
-                    gateway_name=gateway_name,
-                    gateway_type=gw_type,
-                    is_online=is_online,
-                    ip_address=gw_data.get('ipAddress') or gw_data.get('ip'),
-                    port=gw_data.get('port'),
-                    protocol=gw_data.get('protocol'),
-                    asr=online_info.get('asr', 0.0),
-                    acd=online_info.get('acd', 0.0),
-                    concurrent_calls=online_info.get('concurrentCalls', 0),
-                    # 保存完整数据
-                    raw_data=merged_data
-                )
+                gateway_fields['vos_instance_id'] = self.vos_instance_id
+                gateway_fields['vos_uuid'] = self.vos_instance.vos_uuid if self.vos_instance and self.vos_instance.vos_uuid else None
+                gateway_fields['raw_data'] = merged_data
+                gateway = Gateway(**gateway_fields)
                 self.db.add(gateway)
             
             synced_count += 1
         
-        self.db.commit()
+        try:
+            self.db.commit()
+            logger.debug(f"{gw_type} 网关数据已提交到数据库 (instance={self.vos_instance_id}, count={synced_count})")
+        except Exception as e:
+            logger.error(f"提交网关数据到数据库失败 (type={gw_type}, instance={self.vos_instance_id}): {e}")
+            self.db.rollback()
+            raise
         
         # 4. 同时更新通用缓存
         self.cache_service._save_to_cache(
