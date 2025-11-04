@@ -161,16 +161,20 @@ export default function CdrPage() {
     
     setLoading(true)
     try {
-      // 获取最近7天的日期范围
-      const endDate = new Date()
-      const startDate = new Date()
-      startDate.setDate(startDate.getDate() - 7)
+      // 默认查询前一天的数据
+      const yesterday = new Date()
+      yesterday.setDate(yesterday.getDate() - 1)
+      const yesterdayStr = formatDate(yesterday)
+      
+      // 更新日期输入框显示
+      setBeginTime(yesterdayStr)
+      setEndTime(yesterdayStr)
       
       const payload = {
-        begin_time: formatDate(startDate),
-        end_time: formatDate(endDate),
+        begin_time: yesterdayStr,
+        end_time: yesterdayStr,
         page: 1,
-        page_size: 20
+        page_size: pageSize  // 使用当前的pageSize，而不是固定的20
       }
 
       const res = await api.post(
@@ -211,9 +215,9 @@ export default function CdrPage() {
 
   // 查询页码改变时重新查询
   useEffect(() => {
-    // 只有当页码>1且有查询条件时才重新查询（避免初始化时重复查询）
-    // 移除cdrs.length > 0的条件，允许翻页查询空结果集
-    if (queryPage > 1 && beginTime && endTime && currentVOS) {
+    // 只有当页码改变且有查询条件时才重新查询（避免初始化时重复查询）
+    // 使用当前的查询条件（包括时间范围、pageSize等）进行翻页
+    if (queryPage > 0 && beginTime && endTime && currentVOS) {
       handleQuery()
     }
   }, [queryPage])
