@@ -395,21 +395,52 @@ export default function Page(){
                 online_gateway_count: 0
               }
               
+              // 获取该实例的完整信息（包括健康状态和启用状态）
+              const instanceInfo = instances.find((i: any) => i.id === inst.instance_id)
+              const healthStatus = instanceInfo?.health_status || 'unknown'
+              const isEnabled = instanceInfo?.enabled !== false // 默认为true
+              
+              // 健康状态图标：健康/可达=绿色灯泡，异常=红色灯泡
+              const healthIcon = healthStatus === 'healthy' ? (
+                <svg className='w-5 h-5 text-green-500' fill='currentColor' viewBox='0 0 20 20' title='健康'>
+                  <path d='M11 3a1 1 0 10-2 0v1a1 1 0 002 0V3zM15.657 5.757a1 1 0 00-1.414-1.414l-.707.707a1 1 0 001.414 1.414l.707-.707zM18 10a1 1 0 01-1 1h-1a1 1 0 110-2h1a1 1 0 011 1zM5.05 6.464A1 1 0 106.464 5.05l-.707-.707a1 1 0 00-1.414 1.414l.707.707zM5 10a1 1 0 01-1 1H3a1 1 0 110-2h1a1 1 0 011 1zM8 16v-1h4v1a2 2 0 11-4 0zM12 14c.015-.34.208-.646.477-.859a4 4 0 10-4.954 0c.27.213.462.519.477.859h4z' />
+                </svg>
+              ) : (
+                <svg className='w-5 h-5 text-red-500' fill='currentColor' viewBox='0 0 20 20' title='异常'>
+                  <path d='M11 3a1 1 0 10-2 0v1a1 1 0 002 0V3zM15.657 5.757a1 1 0 00-1.414-1.414l-.707.707a1 1 0 001.414 1.414l.707-.707zM18 10a1 1 0 01-1 1h-1a1 1 0 110-2h1a1 1 0 011 1zM5.05 6.464A1 1 0 106.464 5.05l-.707-.707a1 1 0 00-1.414 1.414l.707.707zM5 10a1 1 0 01-1 1H3a1 1 0 110-2h1a1 1 0 011 1zM8 16v-1h4v1a2 2 0 11-4 0zM12 14c.015-.34.208-.646.477-.859a4 4 0 10-4.954 0c.27.213.462.519.477.859h4z' />
+                </svg>
+              )
+              
               return (
                 <div 
                   key={inst.instance_id} 
                   className={`p-5 rounded-xl shadow-lg border transition-all ${
-                    isCurrentVOS 
-                      ? 'bg-gradient-to-br from-blue-50 to-purple-50 border-blue-300 border-2 ring-2 ring-blue-300' 
-                      : 'bg-white bg-opacity-90 backdrop-filter backdrop-blur-lg border-white border-opacity-30'
+                    !isEnabled
+                      ? 'bg-gray-100 border-gray-300 opacity-60' // 未启用：灰色
+                      : isCurrentVOS 
+                        ? 'bg-gradient-to-br from-blue-50 to-purple-50 border-blue-300 border-2 ring-2 ring-blue-300' 
+                        : 'bg-white bg-opacity-90 backdrop-filter backdrop-blur-lg border-white border-opacity-30'
                   }`}
                 >
                   <div className='flex items-center justify-between mb-4'>
                     <div className='flex items-center gap-2'>
-                      <h3 className='font-semibold text-gray-800'>{inst.instance_name}</h3>
+                      <h3 className={`font-semibold ${!isEnabled ? 'text-gray-500' : 'text-gray-800'}`}>
+                        {inst.instance_name}
+                      </h3>
+                      {/* 健康状态图标 */}
+                      {isEnabled && (
+                        <div className='flex items-center' title={healthStatus === 'healthy' ? '健康' : '异常'}>
+                          {healthIcon}
+                        </div>
+                      )}
                       {isCurrentVOS && (
                         <span className='px-2 py-0.5 bg-blue-500 text-white text-xs rounded-full'>
                           当前
+                        </span>
+                      )}
+                      {!isEnabled && (
+                        <span className='px-2 py-0.5 bg-gray-400 text-white text-xs rounded-full'>
+                          未启用
                         </span>
                       )}
                     </div>
@@ -483,99 +514,6 @@ export default function Page(){
         </section>
       )}
 
-      {/* 已注册实例 */}
-      <section>
-        <h2 className='text-xl font-bold mb-4 text-gray-800'>已注册 VOS 实例</h2>
-        {instances.length === 0 ? (
-          <div className='text-center py-16 bg-white bg-opacity-90 rounded-xl shadow-sm'>
-            <svg className='mx-auto h-12 w-12 text-gray-400' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
-              <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01' />
-            </svg>
-            <h3 className='mt-2 text-lg font-medium text-gray-900'>暂无 VOS 实例</h3>
-            <p className='mt-1 text-sm text-gray-500'>前往 VOS 节点页面添加第一个实例</p>
-            <div className='mt-6'>
-              <a
-                href='/vos'
-                className='inline-flex items-center px-4 py-2 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg hover:from-blue-700 hover:to-purple-700 transition'
-              >
-                添加 VOS 节点
-              </a>
-            </div>
-          </div>
-        ) : (
-          <div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4'>
-            {instances.map((inst: any) => {
-              const isCurrentVOS = currentVOS?.id === inst.id
-              const healthStatus = inst.health_status || 'unknown'
-              const healthStatusConfig = {
-                healthy: { 
-                  bg: 'bg-green-100', 
-                  text: 'text-green-800', 
-                  icon: '✓', 
-                  label: '健康' 
-                },
-                unhealthy: { 
-                  bg: 'bg-red-100', 
-                  text: 'text-red-800', 
-                  icon: '✗', 
-                  label: '异常' 
-                },
-                unknown: { 
-                  bg: 'bg-gray-100', 
-                  text: 'text-gray-800', 
-                  icon: '?', 
-                  label: '未知' 
-                }
-              }
-              const statusConfig = healthStatusConfig[healthStatus as keyof typeof healthStatusConfig] || healthStatusConfig.unknown
-              
-              return (
-                <div 
-                  key={inst.id}
-                  className={`p-5 rounded-xl shadow-lg border transition-all ${
-                    isCurrentVOS 
-                      ? 'bg-gradient-to-br from-blue-50 to-purple-50 border-blue-300 border-2 ring-2 ring-blue-300' 
-                      : 'bg-white bg-opacity-90 backdrop-filter backdrop-blur-lg border-white border-opacity-30'
-                  }`}
-                >
-                  <a href={`/vos/${inst.id}`} className='block'>
-                    <div className='flex items-center gap-2 mb-2'>
-                      <h3 className='text-lg font-semibold text-gray-900 hover:text-blue-600 transition'>
-                        {inst.name}
-                      </h3>
-                      {isCurrentVOS && (
-                        <span className='px-2 py-0.5 bg-blue-500 text-white text-xs rounded-full'>
-                          当前
-                        </span>
-                      )}
-                    </div>
-                    <p className='text-sm text-gray-600 mt-1 break-all'>{inst.base_url}</p>
-                  {inst.vos_uuid && (
-                    <p className='text-xs text-gray-500 mt-2 font-mono'>
-                      UUID: {inst.vos_uuid}
-                    </p>
-                  )}
-                  {inst.description && (
-                    <p className='text-sm text-gray-500 mt-2'>{inst.description}</p>
-                  )}
-                  <div className='mt-3 pt-3 border-t flex items-center justify-between'>
-                    <div className='flex items-center gap-2'>
-                    <span className={`text-xs px-2 py-1 rounded-full ${inst.enabled ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>
-                      {inst.enabled ? '✓ 启用中' : '○ 已禁用'}
-                    </span>
-                      <span className={`text-xs px-2 py-1 rounded-full ${statusConfig.bg} ${statusConfig.text}`} title={inst.health_error || `响应时间: ${inst.health_response_time?.toFixed(0)}ms`}>
-                        {statusConfig.icon} {statusConfig.label}
-                      </span>
-                    </div>
-                    <span className='text-xs text-blue-600 hover:underline'>查看详情 →</span>
-                  </div>
-                </a>
-              </div>
-              )
-            })}
-          </div>
-        )}
-      </section>
     </div>
   )
 }
