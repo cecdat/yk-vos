@@ -239,6 +239,29 @@ async def query_cdrs_from_vos(
     # 获取话单列表
     cdrs = result.get('infoCdrs', [])
     
+    # 尝试从ClickHouse获取总数（用于分页显示）
+    # 注意：VOS API不返回总数，所以我们需要从ClickHouse查询
+    total_count = len(cdrs)  # 默认使用当前返回的数据量作为估算
+    try:
+        # 尝试从ClickHouse查询总数（query_cdrs会先查询总数，再查询数据，limit不影响总数）
+        _, total_count = ClickHouseCDR.query_cdrs(
+            vos_id=instance_id,
+            start_date=begin_dt,
+            end_date=end_dt,
+            accounts=query_params.accounts,
+            caller_e164=query_params.caller_e164,
+            callee_e164=query_params.callee_e164,
+            callee_gateway=query_params.callee_gateway,
+            limit=1,  # 只需要总数，不需要数据（limit不影响总数查询）
+            offset=0
+        )
+        logger.info(f'从ClickHouse获取到总数: {total_count}')
+    except Exception as e:
+        logger.warning(f'无法从ClickHouse获取总数，使用当前返回的数据量作为估算: {e}')
+        # 如果无法获取总数，使用当前返回的数据量作为估算
+        # 注意：这种情况下分页可能不准确，但至少可以显示当前页的数据
+        total_count = len(cdrs)
+    
     # 3. 存入 ClickHouse（后台异步，不阻塞响应）
     if cdrs:
         try:
@@ -263,11 +286,15 @@ async def query_cdrs_from_vos(
         'success': True,
         'cdrs': cdrs,
         'count': len(cdrs),
+        'total': total_count,
+        'page': page,
+        'page_size': page_size,
+        'total_pages': (total_count + page_size - 1) // page_size if total_count > 0 else 0,
         'instance_id': instance_id,
         'instance_name': instance.name,
         'data_source': 'vos_api',
         'query_time_ms': round(vos_time * 1000, 2),
-        'message': f'从VOS API查询到 {len(cdrs)} 条记录（耗时：{round(vos_time * 1000, 2)}ms）'
+        'message': f'从VOS API查询到 {len(cdrs)} 条记录（总记录数：{total_count}，耗时：{round(vos_time * 1000, 2)}ms）'
     }
 
 @router.get('/query-all-instances')

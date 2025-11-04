@@ -75,6 +75,7 @@ export default function CdrPage() {
         // 查询当前 VOS
         if (!currentVOS) {
           alert('请先选择 VOS 节点')
+          setLoading(false)
           return
         }
 
@@ -115,6 +116,9 @@ export default function CdrPage() {
           }])
         } else {
           setCdrs([])
+          setOriginalCdrs([])
+          setTotalCount(0)
+          setBackendTotalPages(0)
           setInstanceResults([{
             instance_id: currentVOS.id,
             instance_name: currentVOS.name,
@@ -141,6 +145,11 @@ export default function CdrPage() {
     } catch (e: any) {
       console.error('查询话单失败:', e)
       alert(e.response?.data?.detail || '查询失败')
+      // 查询失败时重置状态
+      setCdrs([])
+      setOriginalCdrs([])
+      setTotalCount(0)
+      setBackendTotalPages(0)
     } finally {
       setLoading(false)
     }
@@ -202,15 +211,17 @@ export default function CdrPage() {
 
   // 查询页码改变时重新查询
   useEffect(() => {
-    if (queryPage > 1 && cdrs.length > 0) {
-      // 只有在已经有数据且页码>1时才重新查询（避免初始化时重复查询）
+    // 只有当页码>1且有查询条件时才重新查询（避免初始化时重复查询）
+    // 移除cdrs.length > 0的条件，允许翻页查询空结果集
+    if (queryPage > 1 && beginTime && endTime && currentVOS) {
       handleQuery()
     }
   }, [queryPage])
 
   // 每页数量改变时重置到第一页并重新查询
   useEffect(() => {
-    if (cdrs.length > 0) {
+    // 如果有查询条件，就重新查询（不依赖cdrs.length）
+    if (beginTime && endTime && currentVOS) {
       setQueryPage(1)
       handleQuery()
     }
