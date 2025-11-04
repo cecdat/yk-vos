@@ -228,29 +228,27 @@ export default function StatisticsPage() {
               value: stat.total_fee
             }))
             
-            const accountPieData = React.useMemo(() => {
-              const accountMap = new Map<string, number>()
-              accountStats.forEach((stat: AccountStatistics) => {
-                const current = accountMap.get(stat.account_name) || 0
-                accountMap.set(stat.account_name, current + stat.total_fee)
-              })
-              return Array.from(accountMap.entries())
-                .map(([name, value]) => ({ name, value }))
-                .sort((a, b) => b.value - a.value)
-                .slice(0, 10)
-            }, [accountStats])
+            // 计算账户消费分布（Top 10）
+            const accountMap = new Map<string, number>()
+            accountStats.forEach((stat: AccountStatistics) => {
+              const current = accountMap.get(stat.account_name) || 0
+              accountMap.set(stat.account_name, current + stat.total_fee)
+            })
+            const accountPieData = Array.from(accountMap.entries())
+              .map(([name, value]) => ({ name, value }))
+              .sort((a, b) => b.value - a.value)
+              .slice(0, 10)
             
-            const gatewayPieData = React.useMemo(() => {
-              const gatewayMap = new Map<string, number>()
-              gatewayStats.forEach((stat: GatewayStatistics) => {
-                const current = gatewayMap.get(stat.gateway_name) || 0
-                gatewayMap.set(stat.gateway_name, current + stat.total_fee)
-              })
-              return Array.from(gatewayMap.entries())
-                .map(([name, value]) => ({ name, value }))
-                .sort((a, b) => b.value - a.value)
-                .slice(0, 10)
-            }, [gatewayStats])
+            // 计算网关消费分布（Top 10）
+            const gatewayMap = new Map<string, number>()
+            gatewayStats.forEach((stat: GatewayStatistics) => {
+              const current = gatewayMap.get(stat.gateway_name) || 0
+              gatewayMap.set(stat.gateway_name, current + stat.total_fee)
+            })
+            const gatewayPieData = Array.from(gatewayMap.entries())
+              .map(([name, value]) => ({ name, value }))
+              .sort((a, b) => b.value - a.value)
+              .slice(0, 10)
             
             return (
               <Card key={inst.id} className={`overflow-hidden ${isCurrentVOS ? 'ring-2 ring-blue-300' : ''}`}>
