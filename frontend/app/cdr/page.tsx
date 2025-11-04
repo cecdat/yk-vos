@@ -217,10 +217,14 @@ export default function CdrPage() {
   useEffect(() => {
     // 只有当页码改变且有查询条件时才重新查询（避免初始化时重复查询）
     // 使用当前的查询条件（包括时间范围、pageSize等）进行翻页
+    // 注意：这里不包含beginTime、endTime等依赖，避免查询条件改变时重复触发
+    // 只在queryPage改变时触发翻页查询
     if (queryPage > 0 && beginTime && endTime && currentVOS) {
+      // 使用当前状态中的查询条件，确保翻页时保持相同的查询参数
       handleQuery()
     }
-  }, [queryPage])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [queryPage])  // 只依赖queryPage，确保翻页时使用当前的beginTime、endTime、pageSize等状态
 
   // 每页数量改变时重置到第一页并重新查询
   useEffect(() => {
