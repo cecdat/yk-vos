@@ -241,6 +241,10 @@ async def query_vos_api(
             'instance_name': instance.name
         }
     
+    # 检查VOS API返回的retCode（即使有数据，retCode非0也应该标记为失败）
+    ret_code = data.get('retCode', -999)
+    is_success = ret_code == 0
+    
     # 获取同步时间
     from app.models.vos_data_cache import VosDataCache
     cache_key = VosCacheService.generate_cache_key(api_path, params)
@@ -252,9 +256,27 @@ async def query_vos_api(
     
     synced_at = cached.synced_at.isoformat() if cached and cached.synced_at else None
     
-    # 直接返回VOS原始数据（保持原有接口兼容性）
-    # 这样前端可以直接使用 res.data.gatewayMappings, res.data.retCode 等
-    return data
+    # 返回统一格式的响应
+    if is_success:
+        return {
+            'success': True,
+            'data': data,  # VOS原始数据
+            'error': None,
+            'data_source': source,
+            'synced_at': synced_at,
+            'instance_name': instance.name
+        }
+    else:
+        # retCode非0，即使有数据也标记为失败
+        error_msg = data.get('exception', f'VOS API返回错误: retCode={ret_code}')
+        return {
+            'success': False,
+            'data': data,  # 仍然返回原始数据，前端可以选择性使用
+            'error': error_msg,
+            'data_source': source,
+            'synced_at': synced_at,
+            'instance_name': instance.name
+        }
 
 
 # ==================== 路由处理器 ====================

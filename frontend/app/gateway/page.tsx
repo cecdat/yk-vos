@@ -44,15 +44,23 @@ export default function GatewayPage() {
       })
       
       // 后端返回格式：{ success, data, error, data_source, synced_at, instance_name }
-      if (res.data.success === false) {
+      // res.data.data 是 VOS API 的原始响应
+      const vosApiResponse = res.data.data || {}
+      
+      // 尝试从VOS响应中提取网关数据（即使success为false，也可能有数据）
+      let gateways = vosApiResponse.gatewayMappings || 
+                     vosApiResponse.infoGatewayMappings || 
+                     []
+      
+      // 如果success为false且没有数据，抛出错误
+      if (res.data.success === false && gateways.length === 0) {
         throw new Error(res.data.error || '获取对接网关失败')
       }
       
-      // res.data.data 是 VOS API 的原始响应
-      const vosApiResponse = res.data.data || {}
-      const gateways = vosApiResponse.gatewayMappings || 
-                      vosApiResponse.infoGatewayMappings || 
-                      []
+      // 如果success为false但有数据，仍然显示数据，但记录警告
+      if (res.data.success === false && gateways.length > 0) {
+        console.warn(`获取对接网关时VOS返回错误但仍有数据: ${res.data.error}`, gateways.length)
+      }
       
       console.log(`加载对接网关成功: ${gateways.length}个 (来源: ${res.data.data_source})`)
       setMappingGateways(gateways)
@@ -79,15 +87,23 @@ export default function GatewayPage() {
       })
       
       // 后端返回格式：{ success, data, error, data_source, synced_at, instance_name }
-      if (res.data.success === false) {
+      // res.data.data 是 VOS API 的原始响应
+      const vosApiResponse = res.data.data || {}
+      
+      // 尝试从VOS响应中提取网关数据（即使success为false，也可能有数据）
+      let gateways = vosApiResponse.gatewayRoutings || 
+                     vosApiResponse.infoGatewayRoutings || 
+                     []
+      
+      // 如果success为false且没有数据，抛出错误
+      if (res.data.success === false && gateways.length === 0) {
         throw new Error(res.data.error || '获取落地网关失败')
       }
       
-      // res.data.data 是 VOS API 的原始响应
-      const vosApiResponse = res.data.data || {}
-      const gateways = vosApiResponse.gatewayRoutings || 
-                      vosApiResponse.infoGatewayRoutings || 
-                      []
+      // 如果success为false但有数据，仍然显示数据，但记录警告
+      if (res.data.success === false && gateways.length > 0) {
+        console.warn(`获取落地网关时VOS返回错误但仍有数据: ${res.data.error}`, gateways.length)
+      }
       
       console.log(`加载落地网关成功: ${gateways.length}个 (来源: ${res.data.data_source})`)
       setRoutingGateways(gateways)
