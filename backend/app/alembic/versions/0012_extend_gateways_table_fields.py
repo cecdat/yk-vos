@@ -1,6 +1,6 @@
 """extend gateways table fields
 
-Revision ID: 0012_extend_gateways_table_fields
+Revision ID: 0012_extend_gateways_fields
 Revises: 0011_add_vos_uuid_fields
 Create Date: 2025-01-15 12:00:00.000000
 
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
-revision = '0012_extend_gateways_table_fields'
+revision = '0012_extend_gateways_fields'
 down_revision = '0011_add_vos_uuid_fields'
 branch_labels = None
 depends_on = None
