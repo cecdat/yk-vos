@@ -68,6 +68,14 @@ if [ $attempt -eq $max_attempts ]; then
   echo "   将继续启动，但话单查询功能可能不可用"
 fi
 
+# 清理 Python 缓存（避免使用旧的 .pyc 文件）
+echo ""
+echo "🧹 清理 Python 缓存..."
+find /srv -type d -name __pycache__ -exec rm -r {} + 2>/dev/null || true
+find /srv -type f -name "*.pyc" -delete 2>/dev/null || true
+find /srv -type f -name "*.pyo" -delete 2>/dev/null || true
+echo "✅ Python 缓存已清理"
+
 # 运行数据库迁移（PostgreSQL）
 echo ""
 echo "📦 运行数据库迁移 (PostgreSQL)..."
