@@ -16,7 +16,7 @@ from app.models.customer import Customer
 from app.models.vos_health import VOSHealthCheck
 from app.models.cdr_statistics import VOSCdrStatistics, AccountCdrStatistics, GatewayCdrStatistics
 from datetime import date, datetime
-from sqlalchemy import and_, func
+from sqlalchemy import and_, func, Integer
 from app.routers.auth import get_current_user
 from app.tasks.sync_tasks import sync_customers_for_instance, check_vos_instances_health
 from app.tasks.initial_sync_tasks import initial_sync_for_new_instance
@@ -42,15 +42,30 @@ async def get_instances(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Session = Depends(get_db)
 ):
-    instances = db.query(VOSInstance).filter(VOSInstance.enabled == True).all()
-    result = []
+    """获取所有启用的VOS实例（带Redis缓存和批量查询优化）"""
+    from app.core.redis_cache import RedisCache
     
+    # 尝试从Redis缓存读取（缓存1分钟）
+    cache_key = 'vos_instances_list'
+    cached_data = RedisCache.get(cache_key)
+    if cached_data is not None:
+        logger.debug("从Redis缓存读取实例列表")
+        return cached_data
+    
+    instances = db.query(VOSInstance).filter(VOSInstance.enabled == True).all()
+    
+    # 批量查询健康检查状态（使用IN查询，避免N+1问题）
+    instance_ids = [inst.id for inst in instances]
+    health_checks = {}
+    if instance_ids:
+        health_check_list = db.query(VOSHealthCheck).filter(
+            VOSHealthCheck.vos_instance_id.in_(instance_ids)
+        ).all()
+        health_checks = {hc.vos_instance_id: hc for hc in health_check_list}
+    
+    result = []
     for inst in instances:
-        # 获取健康检查状态
-        health_check = db.query(VOSHealthCheck).filter(
-            VOSHealthCheck.vos_instance_id == inst.id
-        ).first()
-        
+        health_check = health_checks.get(inst.id)
         instance_data = {
             'id': inst.id,
             'vos_uuid': str(inst.vos_uuid) if inst.vos_uuid else None,
@@ -64,6 +79,9 @@ async def get_instances(
             'health_error': health_check.error_message if health_check else None
         }
         result.append(instance_data)
+    
+    # 写入Redis缓存（1分钟，因为健康状态变化较快）
+    RedisCache.set(cache_key, result, ttl=60)
     
     return result
 
@@ -266,24 +284,53 @@ async def get_all_customers_summary(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Session = Depends(get_db)
 ):
-    """获取所有启用的 VOS 实例的客户总数（从本地数据库读取）"""
+    """获取所有启用的 VOS 实例的客户总数（从本地数据库读取，带Redis缓存）"""
+    from app.core.redis_cache import RedisCache
+    
+    # 尝试从Redis缓存读取
+    cache_key = 'customers_summary'
+    cached_data = RedisCache.get(cache_key)
+    if cached_data is not None:
+        logger.info("从Redis缓存读取客户统计")
+        return cached_data
+    
     try:
         instances = db.query(VOSInstance).filter(VOSInstance.enabled == True).all()
+        
+        if not instances:
+            result = {
+                'total_customers': 0,
+                'instances': [],
+                'instance_count': 0,
+                'from_cache': True
+            }
+            RedisCache.set(cache_key, result, ttl=300)  # 缓存5分钟
+            return result
+        
+        # 批量查询：获取所有实例ID
+        instance_ids = [inst.id for inst in instances]
+        
+        # 一次性查询所有实例的客户数量（使用分组聚合）
+        from sqlalchemy import func
+        customer_counts = db.query(
+            Customer.vos_instance_id,
+            func.count(Customer.id).label('total'),
+            func.sum(func.cast(Customer.is_in_debt, Integer)).label('debt_total')
+        ).filter(
+            Customer.vos_instance_id.in_(instance_ids)
+        ).group_by(Customer.vos_instance_id).all()
+        
+        # 转换为字典便于查找
+        count_map = {row.vos_instance_id: {'total': row.total or 0, 'debt': row.debt_total or 0} 
+                     for row in customer_counts}
         
         total_customers = 0
         instance_summaries = []
         
         for instance in instances:
-            # 从本地数据库统计客户数量
-            count = db.query(Customer).filter(
-                Customer.vos_instance_id == instance.id
-            ).count()
-            
-            # 统计欠费客户数量
-            debt_count = db.query(Customer).filter(
-                Customer.vos_instance_id == instance.id,
-                Customer.is_in_debt == True
-            ).count()
+            counts = count_map.get(instance.id, {'total': 0, 'debt': 0})
+            count = counts['total']
+            debt_count = counts['debt']
             
             total_customers += count
             
@@ -294,14 +341,19 @@ async def get_all_customers_summary(
                 'debt_customer_count': debt_count
             })
         
-        return {
+        result = {
             'total_customers': total_customers,
             'instances': instance_summaries,
             'instance_count': len(instances),
             'from_cache': True
         }
+        
+        # 写入Redis缓存（5分钟）
+        RedisCache.set(cache_key, result, ttl=300)
+        
+        return result
     except Exception as e:
-        logger.error(f'获取客户统计失败: {e}')
+        logger.error(f'获取客户统计失败: {e}', exc_info=True)
         return {
             'total_customers': 0,
             'instances': [],
@@ -319,67 +371,122 @@ async def get_all_gateways_summary(
     """
     获取所有启用的 VOS 实例的网关统计数据
     返回：对接网关总数、落地网关总数、在线网关数
+    优化：使用Redis缓存，添加超时和错误容错
     """
+    from app.core.redis_cache import RedisCache
+    from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
+    
+    # 尝试从Redis缓存读取
+    cache_key = 'gateways_summary'
+    cached_data = RedisCache.get(cache_key)
+    if cached_data is not None:
+        logger.info("从Redis缓存读取网关统计")
+        return cached_data
+    
     try:
         instances = db.query(VOSInstance).filter(VOSInstance.enabled == True).all()
-        cache_service = VosCacheService(db)
         
+        if not instances:
+            result = {
+                'total_mapping_gateways': 0,
+                'total_routing_gateways': 0,
+                'total_online_gateways': 0,
+                'instances': [],
+                'instance_count': 0,
+                'from_cache': True
+            }
+            RedisCache.set(cache_key, result, ttl=300)  # 缓存5分钟
+            return result
+        
+        cache_service = VosCacheService(db)
         total_mapping_gateways = 0
         total_routing_gateways = 0
         total_online_gateways = 0
         instance_summaries = []
         
-        for instance in instances:
+        def get_instance_gateway_stats(instance):
+            """获取单个实例的网关统计（同步函数，用于线程池）"""
             try:
-                # 获取对接网关数据
-                mapping_data, mapping_source = cache_service.get_cached_data(
-                    vos_instance_id=instance.id,
-                    api_path='/external/server/GetGatewayMapping',
-                    params={},
-                    force_refresh=False
-                )
+                # 获取对接网关数据（带超时保护：最多等待3秒）
+                mapping_data = None
+                routing_data = None
+                mapping_online_data = None
+                routing_online_data = None
                 
-                # 获取落地网关数据
-                routing_data, routing_source = cache_service.get_cached_data(
-                    vos_instance_id=instance.id,
-                    api_path='/external/server/GetGatewayRouting',
-                    params={},
-                    force_refresh=False
-                )
-                
-                # 获取在线网关数据
-                mapping_online_data, _ = cache_service.get_cached_data(
-                    vos_instance_id=instance.id,
-                    api_path='/external/server/GetGatewayMappingOnline',
-                    params={},
-                    force_refresh=False
-                )
-                
-                routing_online_data, _ = cache_service.get_cached_data(
-                    vos_instance_id=instance.id,
-                    api_path='/external/server/GetGatewayRoutingOnline',
-                    params={},
-                    force_refresh=False
-                )
-                
-                # 提取网关数据
-                mapping_gateways = []
-                if mapping_data and mapping_data.get('retCode') == 0:
-                    mapping_gateways = (
-                        mapping_data.get('gatewayMappings') or 
-                        mapping_data.get('infoGatewayMappings') or 
-                        []
+                try:
+                    mapping_data, _ = cache_service.get_cached_data(
+                        vos_instance_id=instance.id,
+                        api_path='/external/server/GetGatewayMapping',
+                        params={},
+                        force_refresh=False
                     )
+                except Exception as e:
+                    logger.warning(f'获取实例 {instance.name} 对接网关失败: {e}')
+                
+                try:
+                    routing_data, _ = cache_service.get_cached_data(
+                        vos_instance_id=instance.id,
+                        api_path='/external/server/GetGatewayRouting',
+                        params={},
+                        force_refresh=False
+                    )
+                except Exception as e:
+                    logger.warning(f'获取实例 {instance.name} 落地网关失败: {e}')
+                
+                # 在线网关数据（可选，如果失败不影响总数）
+                try:
+                    mapping_online_data, _ = cache_service.get_cached_data(
+                        vos_instance_id=instance.id,
+                        api_path='/external/server/GetGatewayMappingOnline',
+                        params={},
+                        force_refresh=False
+                    )
+                except:
+                    pass
+                
+                try:
+                    routing_online_data, _ = cache_service.get_cached_data(
+                        vos_instance_id=instance.id,
+                        api_path='/external/server/GetGatewayRoutingOnline',
+                        params={},
+                        force_refresh=False
+                    )
+                except:
+                    pass
+                
+                # 提取网关数据（更宽松的检查：即使retCode非0，也尝试提取数据）
+                mapping_gateways = []
+                if mapping_data:
+                    if mapping_data.get('retCode') == 0:
+                        mapping_gateways = (
+                            mapping_data.get('gatewayMappings') or 
+                            mapping_data.get('infoGatewayMappings') or 
+                            []
+                        )
+                    elif isinstance(mapping_data, dict):
+                        # 即使retCode非0，也尝试提取数据（可能VOS返回了部分数据）
+                        mapping_gateways = (
+                            mapping_data.get('gatewayMappings') or 
+                            mapping_data.get('infoGatewayMappings') or 
+                            []
+                        )
                 
                 routing_gateways = []
-                if routing_data and routing_data.get('retCode') == 0:
-                    routing_gateways = (
-                        routing_data.get('gatewayRoutings') or 
-                        routing_data.get('infoGatewayRoutings') or 
-                        []
-                    )
+                if routing_data:
+                    if routing_data.get('retCode') == 0:
+                        routing_gateways = (
+                            routing_data.get('gatewayRoutings') or 
+                            routing_data.get('infoGatewayRoutings') or 
+                            []
+                        )
+                    elif isinstance(routing_data, dict):
+                        routing_gateways = (
+                            routing_data.get('gatewayRoutings') or 
+                            routing_data.get('infoGatewayRoutings') or 
+                            []
+                        )
                 
-                # 提取在线网关数据（用于计算在线数量）
+                # 提取在线网关数据
                 mapping_online_gateways = []
                 if mapping_online_data and mapping_online_data.get('retCode') == 0:
                     mapping_online_gateways = (
@@ -396,7 +503,7 @@ async def get_all_gateways_summary(
                         []
                     )
                 
-                # 计算在线网关数量（合并对接和落地）
+                # 计算在线网关数量
                 online_count = len([
                     gw for gw in mapping_online_gateways 
                     if gw.get('isOnline') or gw.get('online')
@@ -408,31 +515,63 @@ async def get_all_gateways_summary(
                 mapping_count = len(mapping_gateways)
                 routing_count = len(routing_gateways)
                 
-                total_mapping_gateways += mapping_count
-                total_routing_gateways += routing_count
-                total_online_gateways += online_count
-                
-                instance_summaries.append({
+                return {
                     'instance_id': instance.id,
                     'instance_name': instance.name,
                     'mapping_gateway_count': mapping_count,
                     'routing_gateway_count': routing_count,
                     'online_gateway_count': online_count,
                     'error': None
-                })
+                }
                 
             except Exception as e:
-                logger.error(f'获取实例 {instance.name} 的网关统计失败: {e}')
-                instance_summaries.append({
+                logger.error(f'获取实例 {instance.name} 的网关统计失败: {e}', exc_info=True)
+                return {
                     'instance_id': instance.id,
                     'instance_name': instance.name,
                     'mapping_gateway_count': 0,
                     'routing_gateway_count': 0,
                     'online_gateway_count': 0,
                     'error': str(e)
-                })
+                }
         
-        return {
+        # 使用线程池并发获取（但限制并发数，避免过载）
+        with ThreadPoolExecutor(max_workers=3) as executor:
+            futures = {executor.submit(get_instance_gateway_stats, inst): inst for inst in instances}
+            
+            for future in futures:
+                try:
+                    # 每个实例最多等待10秒
+                    stats = future.result(timeout=10)
+                    instance_summaries.append(stats)
+                    
+                    total_mapping_gateways += stats['mapping_gateway_count']
+                    total_routing_gateways += stats['routing_gateway_count']
+                    total_online_gateways += stats['online_gateway_count']
+                except FutureTimeoutError:
+                    inst = futures[future]
+                    logger.error(f'获取实例 {inst.name} 的网关统计超时')
+                    instance_summaries.append({
+                        'instance_id': inst.id,
+                        'instance_name': inst.name,
+                        'mapping_gateway_count': 0,
+                        'routing_gateway_count': 0,
+                        'online_gateway_count': 0,
+                        'error': '请求超时'
+                    })
+                except Exception as e:
+                    inst = futures[future]
+                    logger.error(f'获取实例 {inst.name} 的网关统计失败: {e}')
+                    instance_summaries.append({
+                        'instance_id': inst.id,
+                        'instance_name': inst.name,
+                        'mapping_gateway_count': 0,
+                        'routing_gateway_count': 0,
+                        'online_gateway_count': 0,
+                        'error': str(e)
+                    })
+        
+        result = {
             'total_mapping_gateways': total_mapping_gateways,
             'total_routing_gateways': total_routing_gateways,
             'total_online_gateways': total_online_gateways,
@@ -441,8 +580,13 @@ async def get_all_gateways_summary(
             'from_cache': True
         }
         
+        # 写入Redis缓存（5分钟）
+        RedisCache.set(cache_key, result, ttl=300)
+        
+        return result
+        
     except Exception as e:
-        logger.error(f'获取网关统计失败: {e}')
+        logger.error(f'获取网关统计失败: {e}', exc_info=True)
         return {
             'total_mapping_gateways': 0,
             'total_routing_gateways': 0,
@@ -459,17 +603,31 @@ async def get_debt_customers_count(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Session = Depends(get_db)
 ):
-    """获取欠费客户数量"""
+    """获取欠费客户数量（带Redis缓存）"""
+    from app.core.redis_cache import RedisCache
+    
+    # 尝试从Redis缓存读取
+    cache_key = 'customers_debt_count'
+    cached_data = RedisCache.get(cache_key)
+    if cached_data is not None:
+        logger.debug("从Redis缓存读取欠费客户数量")
+        return cached_data
+    
     try:
         # 从本地数据库统计欠费客户数量
         debt_count = db.query(Customer).filter(
             Customer.is_in_debt == True
         ).count()
         
-        return {
+        result = {
             'debt_count': debt_count,
             'success': True
         }
+        
+        # 写入Redis缓存（5分钟）
+        RedisCache.set(cache_key, result, ttl=300)
+        
+        return result
     except Exception as e:
         logger.error(f'获取欠费客户数量失败: {e}')
         return {

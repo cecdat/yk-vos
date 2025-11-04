@@ -16,10 +16,17 @@ class VOSClient:
     - HTML 头部信息 Content-Type 设置为 text/html;charset-UTF-8
     """
     
-    def __init__(self, base_url: str, timeout: int = 30):
+    def __init__(self, base_url: str, timeout: int = 10):
+        """
+        初始化VOS客户端
+        
+        Args:
+            base_url: VOS服务器基础URL
+            timeout: 请求超时时间（秒），默认10秒，避免长时间等待
+        """
         self.base_url = base_url.rstrip('/')
         self.client = httpx.Client(timeout=timeout)
-        logger.info(f"VOS Client initialized for {self.base_url}")
+        logger.debug(f"VOS Client initialized for {self.base_url} (timeout={timeout}s)")
     
     def path_url(self, path: str) -> str:
         """构建完整的 API URL"""

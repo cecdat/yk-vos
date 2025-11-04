@@ -13,6 +13,7 @@ from sqlalchemy import and_, func
 from app.models.vos_data_cache import VosDataCache
 from app.models.vos_instance import VOSInstance
 from app.core.vos_client import VOSClient
+from app.core.redis_cache import RedisCache
 
 logger = logging.getLogger(__name__)
 
@@ -52,7 +53,7 @@ class VosCacheService:
         force_refresh: bool = False
     ) -> Tuple[Optional[Dict[str, Any]], str]:
         """
-        获取缓存数据（三级查询）
+        获取缓存数据（三级查询：Redis → PostgreSQL → VOS API）
         
         Args:
             vos_instance_id: VOS实例ID
@@ -66,13 +67,23 @@ class VosCacheService:
             - source: 数据来源 ('redis', 'database', 'vos_api', 'error')
         """
         cache_key = self.generate_cache_key(api_path, params)
+        redis_key = f"vos_cache:{vos_instance_id}:{api_path}:{cache_key}"
         
         # 如果强制刷新，直接从VOS获取
         if force_refresh:
             logger.info(f"强制刷新VOS数据: {api_path} (key={cache_key[:8]})")
-            return self._fetch_from_vos(vos_instance_id, api_path, params, cache_key)
+            result = self._fetch_from_vos(vos_instance_id, api_path, params, cache_key)
+            # 清除Redis缓存
+            RedisCache.delete(redis_key)
+            return result
         
-        # 1️⃣ 第一级：尝试从数据库缓存读取
+        # 1️⃣ 第一级：尝试从Redis缓存读取（最快）
+        redis_data = RedisCache.get(redis_key)
+        if redis_data is not None:
+            logger.debug(f"从Redis缓存读取: {api_path} (key={cache_key[:8]})")
+            return redis_data, 'redis'
+        
+        # 2️⃣ 第二级：尝试从数据库缓存读取
         cached = self.db.query(VosDataCache).filter(
             and_(
                 VosDataCache.vos_instance_id == vos_instance_id,
@@ -82,12 +93,14 @@ class VosCacheService:
             )
         ).first()
         
-        # 如果缓存存在且未过期，直接返回
+        # 如果缓存存在且未过期，直接返回并写入Redis
         if cached and not cached.is_expired():
             logger.info(
                 f"从数据库缓存读取: {api_path} "
                 f"(key={cache_key[:8]}, age={int((datetime.now(timezone.utc) - cached.synced_at).total_seconds())}s)"
             )
+            # 写入Redis缓存（TTL=5分钟，短于数据库缓存）
+            RedisCache.set(redis_key, cached.response_data, ttl=300)
             return cached.response_data, 'database'
         
         # 如果缓存过期，记录日志
@@ -97,7 +110,7 @@ class VosCacheService:
                 f"(key={cache_key[:8]}, expired={int((datetime.now(timezone.utc) - cached.expires_at).total_seconds())}s ago)"
             )
         
-        # 2️⃣ 第二级：从VOS API获取最新数据
+        # 3️⃣ 第三级：从VOS API获取最新数据
         return self._fetch_from_vos(vos_instance_id, api_path, params, cache_key)
     
     def _fetch_from_vos(
@@ -150,6 +163,9 @@ class VosCacheService:
             )
             
             if is_success:
+                # 写入Redis缓存（TTL=5分钟）
+                redis_key = f"vos_cache:{vos_instance_id}:{api_path}:{cache_key}"
+                RedisCache.set(redis_key, result, ttl=300)
                 return result, 'vos_api'
             else:
                 return None, 'error'
