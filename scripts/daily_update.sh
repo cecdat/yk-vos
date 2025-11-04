@@ -1,6 +1,6 @@
 #!/bin/bash
-# 日常更新部署脚本 - 用于代码更新和服务部署
-# 支持代码更新、服务重启、健康检查等功能
+# 日常更新部署脚本 - 用于服务维护和健康检查
+# 支持服务重启、健康检查、日志查看等功能
 
 set -e
 
@@ -41,20 +41,20 @@ show_usage() {
     echo "用法: $0 [选项]"
     echo
     echo "选项:"
-    echo "  update-code     更新代码"
     echo "  restart         重启服务"
     echo "  health-check    健康检查（完成后显示系统信息）"
     echo "  logs            查看日志"
     echo "  status          查看状态（显示系统信息）"
     echo "  cleanup         清理系统"
-    echo "  deploy          完整部署（更新代码+重启服务+健康检查+系统信息）"
+    echo "  deploy          完整部署（重启服务+健康检查+系统信息）"
     echo "  info            显示系统信息（数据库信息、登录信息等）"
     echo
     echo "示例:"
-    echo "  $0 update-code    # 更新代码"
     echo "  $0 restart        # 重启服务"
     echo "  $0 health-check   # 健康检查"
-    echo "  $0 deploy         # 完整部署"
+    echo "  $0 deploy         # 完整部署（不更新代码）"
+    echo
+    echo "注意: 此脚本不包含代码更新功能，如需更新代码请手动操作"
 }
 
 # 检查项目目录
@@ -91,31 +91,8 @@ load_environment() {
     log_info "数据库配置: $POSTGRES_USER@$POSTGRES_DB"
 }
 
-# 更新代码
-update_code() {
-    log_header "更新代码..."
-    
-    if [[ -d ".git" ]]; then
-        log_info "从Git仓库更新代码..."
-        
-        # 检查是否有未提交的更改
-        if ! git diff --quiet; then
-            log_warning "检测到未提交的更改，请先提交或暂存"
-            git status
-            return 1
-        fi
-        
-        # 拉取最新代码
-        git fetch origin
-        git checkout main
-        git pull origin main
-        
-        log_success "代码更新完成"
-    else
-        log_warning "未找到Git仓库，请手动更新代码"
-        return 1
-    fi
-}
+# 注意：代码更新功能已移除，日常维护脚本不负责代码更新
+# 如需更新代码，请手动执行 git pull 或其他代码更新操作
 
 # 重启服务
 restart_services() {
@@ -407,19 +384,13 @@ show_system_info() {
     echo
 }
 
-# 完整部署流程
+# 完整部署流程（不包含代码更新）
 deploy_all() {
     log_header "开始完整部署流程..."
     
-    # 1. 更新代码
-    if update_code; then
-        log_success "代码更新完成"
-    else
-        log_error "代码更新失败，停止部署"
-        return 1
-    fi
+    log_info "注意: 此脚本不包含代码更新功能，请确保代码已是最新版本"
     
-    # 2. 重启服务
+    # 1. 重启服务
     if restart_services; then
         log_success "服务重启完成"
     else
@@ -427,16 +398,16 @@ deploy_all() {
         return 1
     fi
     
-    # 3. 健康检查
+    # 2. 健康检查
     health_check
     
     log_success "完整部署流程完成"
     
-    # 4. 显示系统信息
+    # 3. 显示系统信息
     show_system_info
 }
 
-    # 主函数
+# 主函数
 main() {
     local action="${1:-deploy}"
     
@@ -451,9 +422,6 @@ main() {
     load_environment
     
     case $action in
-        "update-code")
-            update_code
-            ;;
         "restart")
             restart_services
             ;;
