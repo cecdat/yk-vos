@@ -176,13 +176,22 @@ async def get_cdr_sync_status(
     db: Session = Depends(get_db)
 ):
     """
-    获取历史话单同步状态
+    获取历史话单同步状态（带Redis缓存）
     
     返回:
     - 最后同步时间
     - 同步的数据量
     - 任务状态（运行中/成功/失败）
     """
+    from app.core.redis_cache import RedisCache
+    
+    # Redis缓存键（缓存30秒，因为状态变化较快）
+    cache_key = 'cdr_sync_status'
+    cached_data = RedisCache.get(cache_key)
+    if cached_data is not None:
+        logger.debug("从Redis缓存读取CDR同步状态")
+        return cached_data
+    
     try:
         from app.models.clickhouse_cdr import ClickHouseCDR
         from app.models.vos_instance import VOSInstance
@@ -258,7 +267,7 @@ async def get_cdr_sync_status(
             cn_time = utc_time.astimezone(timezone(timedelta(hours=8)))
             latest_sync_str = cn_time.isoformat()
         
-        return {
+        response = {
             'success': True,
             'status': 'syncing' if is_syncing else 'idle',
             'is_syncing': is_syncing,
@@ -268,6 +277,11 @@ async def get_cdr_sync_status(
             'instances': instance_stats,
             'next_sync': '每天凌晨 01:30 自动同步'
         }
+        
+        # 写入Redis缓存（30秒，因为同步状态变化较快）
+        RedisCache.set(cache_key, response, ttl=30)
+        
+        return response
         
     except Exception as e:
         logger.exception(f'获取话单同步状态失败: {e}')

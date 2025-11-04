@@ -676,12 +676,18 @@ async def get_instance_customers(
     获取指定 VOS 实例的所有客户（详细版）
     三级缓存策略：Redis → PostgreSQL → VOS API
     """
+    from app.core.redis_cache import RedisCache
+    
     instance = db.query(VOSInstance).filter(VOSInstance.id == instance_id).first()
     if not instance:
         raise HTTPException(status_code=404, detail='VOS实例未找到')
     
+    # Redis缓存键
+    cache_key = f'vos_instance_{instance_id}_customers'
+    
     # 如果强制刷新，清除缓存并触发同步
     if refresh:
+        RedisCache.delete(cache_key)
         logger.info(f'强制刷新VOS {instance.name} 客户数据')
         sync_customers_for_instance.delay(instance_id)
         # 立即从VOS查询最新数据
@@ -724,7 +730,7 @@ async def get_instance_customers(
         
         latest_sync = customers_db[0].synced_at if customers_db else None
         
-        return {
+        response = {
             'customers': customers,
             'count': len(customers),
             'instance_id': instance_id,
@@ -733,6 +739,11 @@ async def get_instance_customers(
             'data_source': 'database',
             'last_synced_at': latest_sync.isoformat() if latest_sync else None
         }
+        
+        # 写入Redis缓存（5分钟）
+        RedisCache.set(cache_key, response, ttl=300)
+        
+        return response
     
     # 3️⃣ 数据库没有数据，直接调用VOS API
     logger.info(f'本地数据库无数据，从VOS {instance.name} 获取客户列表')
@@ -882,7 +893,7 @@ async def get_instance_statistics(
     db: Session = Depends(get_db)
 ):
     """
-    获取VOS实例的统计数据
+    获取VOS实例的统计数据（带Redis缓存）
     
     Args:
         instance_id: VOS实例ID
@@ -890,6 +901,17 @@ async def get_instance_statistics(
         start_date: 开始日期（可选）
         end_date: 结束日期（可选）
     """
+    from app.core.redis_cache import RedisCache
+    
+    # Redis缓存键（包含所有查询参数）
+    cache_key = f'vos_instance_{instance_id}_statistics_{period_type}_{start_date or "all"}_{end_date or "all"}'
+    
+    # 尝试从Redis缓存读取（缓存5分钟）
+    cached_data = RedisCache.get(cache_key)
+    if cached_data is not None:
+        logger.debug(f"从Redis缓存读取实例 {instance_id} 的统计数据")
+        return cached_data
+    
     instance = db.query(VOSInstance).filter(VOSInstance.id == instance_id).first()
     if not instance:
         raise HTTPException(status_code=404, detail='Instance not found')
@@ -996,6 +1018,11 @@ async def get_instance_statistics(
             for stat in gateway_stats
         ]
     }
+    
+    # 写入Redis缓存（5分钟）
+    RedisCache.set(cache_key, response, ttl=300)
+    
+    return response
 
 
 @router.post('/instances/{instance_id}/statistics/calculate')

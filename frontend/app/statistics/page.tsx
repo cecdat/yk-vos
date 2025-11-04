@@ -49,12 +49,15 @@ export default function StatisticsPage() {
 
   useEffect(() => {
     if (instances.length > 0) {
-      // 为所有实例加载统计数据
-      instances.forEach(inst => {
-        if (inst.enabled && inst.vos_uuid) {
-          fetchInstanceStatistics(inst.id)
-        }
-      })
+      // 并行加载所有实例的统计数据（使用Promise.all）
+      const enabledInstances = instances.filter(inst => inst.enabled && inst.vos_uuid)
+      if (enabledInstances.length > 0) {
+        Promise.all(
+          enabledInstances.map(inst => fetchInstanceStatistics(inst.id))
+        ).catch(err => {
+          console.error('批量加载统计数据失败:', err)
+        })
+      }
     }
   }, [instances, periodType])
 
