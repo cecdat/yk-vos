@@ -66,7 +66,7 @@ export default function StatisticsPage() {
 
   async function fetchInstanceStatistics(instanceId: number) {
     setLoading(true)
-    setInstanceStats(prev => ({ ...prev, loading: true, error: undefined } as InstanceStatistics | null))
+    setInstanceStats(prev => prev ? ({ ...prev, loading: true, error: undefined } as InstanceStatistics) : null)
 
     try {
       const params: any = { period_type: periodType }
