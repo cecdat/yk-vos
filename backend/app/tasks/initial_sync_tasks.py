@@ -270,7 +270,7 @@ def sync_cdrs_for_single_day(instance_id: int, date_str: str):
                     logger.warning(f'      客户 {account} 话单查询失败')
                     # 即使失败也延迟，避免请求过快
                     if idx < len(customers):
-                        time.sleep(0.5)
+                        time.sleep(2)
                     continue
                 
                 # 提取话单列表
@@ -290,13 +290,13 @@ def sync_cdrs_for_single_day(instance_id: int, date_str: str):
                 logger.exception(f'      ❌ 客户 {account} 同步失败: {e}')
                 # 即使失败也延迟，避免请求过快
                 if idx < len(customers):
-                    time.sleep(0.5)
+                    time.sleep(2)
                 continue
             
-            # 每个客户之间延迟0.5秒，避免请求过于频繁导致VOS卡死
+            # 每个客户之间延迟2秒，避免请求过于频繁导致VOS卡死
             # 最后一个客户不需要延迟
             if idx < len(customers):
-                time.sleep(0.5)
+                time.sleep(2)
         
         # 清除同步进度
         if r:
