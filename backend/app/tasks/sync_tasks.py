@@ -311,7 +311,6 @@ def sync_customers_for_instance(instance_id: int):
         
         # 在客户数据同步完成后，刷新仪表盘统计视图
         try:
-            from app.tasks.refresh_dashboard_statistics import refresh_dashboard_statistics_view
             refresh_dashboard_statistics_view.delay()
         except Exception as e:
             logger.warning(f'触发仪表盘统计视图刷新失败: {e}')
