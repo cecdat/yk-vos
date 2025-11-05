@@ -8,7 +8,6 @@ import uuid
 
 from app.core.db import get_db
 from app.core.vos_client import VOSClient
-from app.core.vos_cache_service import VosCacheService
 from app.models.user import User
 from app.models.vos_instance import VOSInstance
 from app.models.phone import Phone
@@ -407,10 +406,11 @@ async def get_all_gateways_summary(
     """
     获取所有启用的 VOS 实例的网关统计数据
     返回：对接网关总数、落地网关总数、在线网关数
-    优化：使用Redis缓存，添加超时和错误容错
+    优化：直接从数据库查询（不再调用外部VOS API），使用Redis缓存
     """
     from app.core.redis_cache import RedisCache
-    from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
+    from app.models.gateway import Gateway
+    from sqlalchemy import func
     
     # 尝试从Redis缓存读取
     cache_key = 'gateways_summary'
@@ -434,178 +434,59 @@ async def get_all_gateways_summary(
             RedisCache.set(cache_key, result, ttl=300)  # 缓存5分钟
             return result
         
-        cache_service = VosCacheService(db)
+        instance_ids = [inst.id for inst in instances]
+        
+        # 直接从数据库查询网关统计（按实例分组）
+        # 分别统计不同类型的网关数量
+        from sqlalchemy import case
+        
+        gateway_stats = db.query(
+            Gateway.vos_instance_id,
+            func.sum(case((Gateway.gateway_type == 'mapping', 1), else_=0)).label('mapping_count'),
+            func.sum(case((Gateway.gateway_type == 'routing', 1), else_=0)).label('routing_count'),
+            func.sum(case((Gateway.is_online == True, 1), else_=0)).label('online_count')
+        ).filter(
+            Gateway.vos_instance_id.in_(instance_ids)
+        ).group_by(Gateway.vos_instance_id).all()
+        
+        # 如果没有网关数据，gateway_stats 可能为空
+        
+        # 创建实例ID到统计数据的映射
+        stats_map = {row.vos_instance_id: {
+            'mapping': row.mapping_count or 0,
+            'routing': row.routing_count or 0,
+            'online': row.online_count or 0
+        } for row in gateway_stats}
+        
         total_mapping_gateways = 0
         total_routing_gateways = 0
         total_online_gateways = 0
         instance_summaries = []
         
-        def get_instance_gateway_stats(instance):
-            """获取单个实例的网关统计（同步函数，用于线程池）"""
-            try:
-                # 获取对接网关数据（带超时保护：最多等待3秒）
-                mapping_data = None
-                routing_data = None
-                mapping_online_data = None
-                routing_online_data = None
-                
-                try:
-                    mapping_data, _ = cache_service.get_cached_data(
-                        vos_instance_id=instance.id,
-                        api_path='/external/server/GetGatewayMapping',
-                        params={},
-                        force_refresh=False
-                    )
-                except Exception as e:
-                    logger.warning(f'获取实例 {instance.name} 对接网关失败: {e}')
-                
-                try:
-                    routing_data, _ = cache_service.get_cached_data(
-                        vos_instance_id=instance.id,
-                        api_path='/external/server/GetGatewayRouting',
-                        params={},
-                        force_refresh=False
-                    )
-                except Exception as e:
-                    logger.warning(f'获取实例 {instance.name} 落地网关失败: {e}')
-                
-                # 在线网关数据（可选，如果失败不影响总数）
-                try:
-                    mapping_online_data, _ = cache_service.get_cached_data(
-                        vos_instance_id=instance.id,
-                        api_path='/external/server/GetGatewayMappingOnline',
-                        params={},
-                        force_refresh=False
-                    )
-                except:
-                    pass
-                
-                try:
-                    routing_online_data, _ = cache_service.get_cached_data(
-                        vos_instance_id=instance.id,
-                        api_path='/external/server/GetGatewayRoutingOnline',
-                        params={},
-                        force_refresh=False
-                    )
-                except:
-                    pass
-                
-                # 提取网关数据（更宽松的检查：即使retCode非0，也尝试提取数据）
-                mapping_gateways = []
-                if mapping_data:
-                    if mapping_data.get('retCode') == 0:
-                        mapping_gateways = (
-                            mapping_data.get('gatewayMappings') or 
-                            mapping_data.get('infoGatewayMappings') or 
-                            []
-                        )
-                    elif isinstance(mapping_data, dict):
-                        # 即使retCode非0，也尝试提取数据（可能VOS返回了部分数据）
-                        mapping_gateways = (
-                            mapping_data.get('gatewayMappings') or 
-                            mapping_data.get('infoGatewayMappings') or 
-                            []
-                        )
-                
-                routing_gateways = []
-                if routing_data:
-                    if routing_data.get('retCode') == 0:
-                        routing_gateways = (
-                            routing_data.get('gatewayRoutings') or 
-                            routing_data.get('infoGatewayRoutings') or 
-                            []
-                        )
-                    elif isinstance(routing_data, dict):
-                        routing_gateways = (
-                            routing_data.get('gatewayRoutings') or 
-                            routing_data.get('infoGatewayRoutings') or 
-                            []
-                        )
-                
-                # 提取在线网关数据
-                mapping_online_gateways = []
-                if mapping_online_data and mapping_online_data.get('retCode') == 0:
-                    mapping_online_gateways = (
-                        mapping_online_data.get('gatewayMappings') or 
-                        mapping_online_data.get('infoGatewayMappings') or 
-                        []
-                    )
-                
-                routing_online_gateways = []
-                if routing_online_data and routing_online_data.get('retCode') == 0:
-                    routing_online_gateways = (
-                        routing_online_data.get('gatewayRoutings') or 
-                        routing_online_data.get('infoGatewayRoutings') or 
-                        []
-                    )
-                
-                # 计算在线网关数量
-                online_count = len([
-                    gw for gw in mapping_online_gateways 
-                    if gw.get('isOnline') or gw.get('online')
-                ]) + len([
-                    gw for gw in routing_online_gateways 
-                    if gw.get('isOnline') or gw.get('online')
-                ])
-                
-                mapping_count = len(mapping_gateways)
-                routing_count = len(routing_gateways)
-                
-                return {
-                    'instance_id': instance.id,
-                    'instance_name': instance.name,
-                    'mapping_gateway_count': mapping_count,
-                    'routing_gateway_count': routing_count,
-                    'online_gateway_count': online_count,
-                    'error': None
-                }
-                
-            except Exception as e:
-                logger.error(f'获取实例 {instance.name} 的网关统计失败: {e}', exc_info=True)
-                return {
-                    'instance_id': instance.id,
-                    'instance_name': instance.name,
-                    'mapping_gateway_count': 0,
-                    'routing_gateway_count': 0,
-                    'online_gateway_count': 0,
-                    'error': str(e)
-                }
-        
-        # 使用线程池并发获取（但限制并发数，避免过载）
-        with ThreadPoolExecutor(max_workers=3) as executor:
-            futures = {executor.submit(get_instance_gateway_stats, inst): inst for inst in instances}
+        for inst in instances:
+            stats = stats_map.get(inst.id, {'mapping': 0, 'routing': 0, 'online': 0})
             
-            for future in futures:
-                try:
-                    # 每个实例最多等待5秒（减少从10秒到5秒，避免长时间阻塞）
-                    stats = future.result(timeout=5)
-                    instance_summaries.append(stats)
-                    
-                    total_mapping_gateways += stats['mapping_gateway_count']
-                    total_routing_gateways += stats['routing_gateway_count']
-                    total_online_gateways += stats['online_gateway_count']
-                except FutureTimeoutError:
-                    inst = futures[future]
-                    logger.warning(f'获取实例 {inst.name} 的网关统计超时（5秒）')
-                    instance_summaries.append({
-                        'instance_id': inst.id,
-                        'instance_name': inst.name,
-                        'mapping_gateway_count': 0,
-                        'routing_gateway_count': 0,
-                        'online_gateway_count': 0,
-                        'error': '请求超时'
-                    })
-                except Exception as e:
-                    inst = futures[future]
-                    logger.error(f'获取实例 {inst.name} 的网关统计失败: {e}')
-                    instance_summaries.append({
-                        'instance_id': inst.id,
-                        'instance_name': inst.name,
-                        'mapping_gateway_count': 0,
-                        'routing_gateway_count': 0,
-                        'online_gateway_count': 0,
-                        'error': str(e)
-                    })
+            mapping_count = stats['mapping']
+            routing_count = stats['routing']
+            online_count = stats['online']
+            
+            total_mapping_gateways += mapping_count
+            total_routing_gateways += routing_count
+            total_online_gateways += online_count
+            
+            instance_summaries.append({
+                'instance_id': inst.id,
+                'instance_name': inst.name,
+                'mapping_gateway_count': mapping_count,
+                'routing_gateway_count': routing_count,
+                'online_gateway_count': online_count,
+                'error': None
+            })
+        
+        # 已删除：旧的VOS API调用逻辑（get_instance_gateway_stats 和 ThreadPoolExecutor）
+        # 现在改为直接从数据库查询，避免网络延迟和超时问题
+        
+        # 结果已在上面的循环中计算完成
         
         result = {
             'total_mapping_gateways': total_mapping_gateways,
