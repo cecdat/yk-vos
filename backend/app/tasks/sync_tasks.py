@@ -55,20 +55,35 @@ def sync_all_instances_online_phones():
         db.close()
 
 @celery.task
-def sync_all_instances_cdrs(days=1):
+def sync_all_instances_cdrs(days=None):
     """
-    定时同步所有VOS实例的历史话单到ClickHouse（优化版）
+    定时同步所有VOS实例的历史话单到ClickHouse（按天创建任务，避免VOS卡死）
     
     同步策略：
     1. 检查是否有VOS节点，没有则跳过
-    2. 先同步客户信息
-    3. 按客户维度同步历史话单
-    4. 实时更新同步进度到Redis
+    2. 先同步所有实例的客户信息
+    3. 按天、按实例创建多个任务，每个任务同步一天的数据
+    4. 任务之间延迟执行，避免并发过高影响VOS性能
+    
+    Args:
+        days: 同步天数，如果为None则从数据库读取配置
     """
     db = SessionLocal()
-    from app.models.clickhouse_cdr import ClickHouseCDR
+    from app.tasks.initial_sync_tasks import sync_cdrs_for_single_day
+    from app.models.app_config import AppConfig
     from app.core.config import settings
     import redis
+    
+    # 如果 days 为 None，从数据库读取配置
+    if days is None:
+        config = db.query(AppConfig).filter(AppConfig.config_key == 'cdr_sync_days').first()
+        if config and config.config_value:
+            try:
+                days = int(config.config_value)
+            except ValueError:
+                days = 1
+        else:
+            days = 1
     
     # 连接 Redis 用于存储同步进度
     try:
@@ -84,143 +99,71 @@ def sync_all_instances_cdrs(days=1):
             logger.info('没有启用的VOS实例，跳过同步话单任务')
             return {'success': True, 'message': '没有VOS实例需要同步', 'instances_count': 0}
         
-        results = []
-        total_synced = 0
+        logger.info(f'🚀 开始为所有VOS实例创建话单同步任务（最近{days}天）')
         
+        # 2. 先同步所有实例的客户信息
+        logger.info(f'📋 步骤1: 同步所有实例的客户信息...')
         for inst in instances:
-            logger.info(f'🚀 开始同步 VOS 实例: {inst.name}')
-            
-            # 更新同步进度：当前实例
-            if r:
-                r.setex(
-                    'cdr_sync_progress',
-                    3600,  # 1小时过期
-                    json.dumps({
-                        'status': 'syncing',
-                        'current_instance': inst.name,
-                        'current_instance_id': inst.id,
-                        'current_customer': None,
-                        'synced_count': total_synced,
-                        'start_time': datetime.now().isoformat()
-                    }, ensure_ascii=False)
-                )
-            
-            # 2. 先同步客户信息
-            logger.info(f'📋 步骤1: 同步客户信息...')
             customer_result = sync_customers_for_instance(inst.id)
             if not customer_result.get('success'):
-                logger.error(f'客户信息同步失败: {customer_result.get("message")}')
-                results.append({
-                    'instance_id': inst.id,
-                    'instance_name': inst.name,
-                    'success': False,
-                    'error': f'客户同步失败: {customer_result.get("message")}'
-                })
-                continue
-            
-            # 3. 获取客户列表
-            customers = db.query(Customer).filter(
-                Customer.vos_instance_id == inst.id
-            ).all()
-            
-            if not customers:
-                logger.warning(f'VOS {inst.name} 没有客户数据，跳过话单同步')
-                results.append({
-                    'instance_id': inst.id,
-                    'instance_name': inst.name,
-                    'success': True,
-                    'synced_count': 0,
-                    'message': '没有客户数据'
-                })
-                continue
-            
-            logger.info(f'📞 步骤2: 按客户同步历史话单 (共 {len(customers)} 个客户)...')
-            
-            # 4. 按客户循环同步话单
-            instance_synced = 0
-            client = VOSClient(inst.base_url)
-            end = datetime.utcnow()
-            start = end - timedelta(days=days)
-            
-            for idx, customer in enumerate(customers, 1):
-                account = customer.account
-                logger.info(f'  [{idx}/{len(customers)}] 同步客户: {account}')
-                
-                # 更新同步进度：当前客户
-                if r:
-                    r.setex(
-                        'cdr_sync_progress',
-                        3600,
-                        json.dumps({
-                            'status': 'syncing',
-                            'current_instance': inst.name,
-                            'current_instance_id': inst.id,
-                            'current_customer': account,
-                            'current_customer_index': idx,
-                            'total_customers': len(customers),
-                            'synced_count': total_synced + instance_synced,
-                            'start_time': datetime.now().isoformat()
-                        }, ensure_ascii=False)
-                    )
-                
-                # 查询该客户的话单
-                payload = {
-                    'accounts': [account],
-                    'callerE164': None,
-                    'calleeE164': None,
-                    'callerGateway': None,
-                    'calleeGateway': None,
-                    'beginTime': start.strftime('%Y%m%d'),
-                    'endTime': end.strftime('%Y%m%d')
-                }
-                
-                try:
-                    res = client.post('/external/server/GetCdr', payload=payload)
-                    
-                    if not isinstance(res, dict) or res.get('retCode') != 0:
-                        logger.warning(f'    客户 {account} 话单查询失败')
-                        continue
-                    
-                    cdrs = res.get('infoCdrs') or res.get('cdrs') or res.get('CDRList') or []
-                    if not isinstance(cdrs, list):
-                        for v in res.values():
-                            if isinstance(v, list):
-                                cdrs = v
-                                break
-                    
-                    if cdrs:
-                        inserted = ClickHouseCDR.insert_cdrs(cdrs, vos_id=inst.id, vos_uuid=str(inst.vos_uuid))
-                        instance_synced += inserted
-                        logger.info(f'    ✅ 客户 {account}: 同步 {inserted} 条话单')
-                    
-                except Exception as e:
-                    logger.exception(f'    ❌ 客户 {account} 同步失败: {e}')
-                    continue
-            
-            total_synced += instance_synced
-            logger.info(f'✅ VOS {inst.name} 话单同步完成: 共 {instance_synced} 条')
-            
-            results.append({
-                'instance_id': inst.id,
-                'instance_name': inst.name,
-                'success': True,
-                'synced_count': instance_synced,
-                'customers_count': len(customers)
-            })
+                logger.error(f'实例 {inst.name} 客户信息同步失败: {customer_result.get("message")}')
+            else:
+                logger.info(f'  ✅ 实例 {inst.name} 客户信息同步完成')
         
-        # 清除同步进度（完成）
+        # 3. 按天、按实例创建多个任务
+        today = datetime.now().date()
+        task_count = 0
+        task_ids = []
+        
+        logger.info(f'📞 步骤2: 创建按天同步任务（避免一次性查询所有天导致VOS卡死）...')
+        
+        for day_offset in range(days):
+            sync_date = today - timedelta(days=day_offset)
+            date_str = sync_date.strftime('%Y%m%d')
+            
+            # 为每个实例创建当天的同步任务
+            for inst_idx, inst in enumerate(instances, 1):
+                # 计算延迟时间：每个实例间隔5秒，每天间隔30秒
+                delay_seconds = day_offset * 30 + inst_idx * 5
+                
+                task = sync_cdrs_for_single_day.apply_async(
+                    args=[inst.id, date_str],
+                    countdown=delay_seconds
+                )
+                task_ids.append(str(task.id))
+                task_count += 1
+                
+                logger.info(f'  📅 已创建任务: {inst.name} - {date_str} (将在{delay_seconds}秒后执行)')
+        
+        logger.info(f'✅ 已创建 {task_count} 个同步任务（{len(instances)}个实例 × {days}天）')
+        
+        # 更新同步进度：任务已创建
         if r:
-            r.delete('cdr_sync_progress')
+            r.setex(
+                'cdr_sync_progress',
+                3600 * 2,  # 2小时过期（多天同步可能需要更长时间）
+                json.dumps({
+                    'status': 'task_created',
+                    'total_tasks': task_count,
+                    'instances_count': len(instances),
+                    'days': days,
+                    'task_ids': task_ids,
+                    'start_time': datetime.now().isoformat(),
+                    'message': f'已创建{task_count}个同步任务，正在按计划执行...'
+                }, ensure_ascii=False)
+            )
         
         return {
             'success': True,
             'instances_count': len(instances),
-            'total_synced': total_synced,
-            'results': results
+            'days': days,
+            'total_tasks': task_count,
+            'task_ids': task_ids,
+            'message': f'已创建{task_count}个同步任务（{len(instances)}个实例 × {days}天），任务将按计划执行'
         }
         
     except Exception as e:
-        logger.exception(f'Error syncing CDRs: {e}')
+        logger.exception(f'创建同步任务失败: {e}')
         # 清除同步进度（错误）
         if r:
             r.delete('cdr_sync_progress')

@@ -167,12 +167,14 @@ async def manual_cdr_sync(
         # 触发同步任务
         if params.instance_id is None:
             # 模式1：全部节点
+            # 注意：sync_all_instances_cdrs 现在会创建多个任务（按天、按实例）
             task = sync_all_instances_cdrs.apply_async(args=[params.days])
-            logger.info(f'用户 {current_user.username} 触发全部节点话单同步，任务ID: {task.id}')
+            logger.info(f'用户 {current_user.username} 触发全部节点话单同步，将创建多个任务（每个实例×{params.days}天）')
             return {
                 'success': True,
-                'message': f'已启动全部节点的话单同步任务（最近{params.days}天）',
-                'task_id': str(task.id)
+                'message': f'已启动全部节点的话单同步（最近{params.days}天），系统将按天创建多个任务以避免VOS卡死',
+                'task_id': str(task.id),
+                'note': '此任务会创建多个子任务，每个实例每天一个任务，任务将按计划延迟执行'
             }
         
         elif params.customer_id is None:
@@ -201,16 +203,25 @@ async def manual_cdr_sync(
             customer = db.query(Customer).filter(Customer.id == params.customer_id).first()
             
             # 使用专门的单客户同步任务
+            # 注意：如果 days > 1，会创建多个任务（每天一个）
             task = sync_single_customer_cdrs.apply_async(
                 args=[params.instance_id, params.customer_id, params.days]
             )
             
-            logger.info(f'用户 {current_user.username} 触发节点 {params.instance_id} 客户 {customer.account} 话单同步')
+            logger.info(f'用户 {current_user.username} 触发节点 {params.instance_id} 客户 {customer.account} 话单同步（{params.days}天）')
+            message = f'已启动客户 {customer.account} 的话单同步'
+            if params.days > 1:
+                message += f'（最近{params.days}天），系统将按天创建多个任务以避免VOS卡死'
+            else:
+                message += f'（最近{params.days}天）'
+            
             return {
                 'success': True,
-                'message': f'已启动客户 {customer.account} 的话单同步（最近{params.days}天）',
+                'message': message,
                 'task_id': str(task.id),
-                'customer': customer.account
+                'customer': customer.account,
+                'days': params.days,
+                'note': f'多天同步时会创建{params.days}个任务，任务将按计划延迟执行' if params.days > 1 else None
             }
     
     except HTTPException:
