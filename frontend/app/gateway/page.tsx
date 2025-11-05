@@ -28,6 +28,12 @@ export default function GatewayPage() {
   // 落地网关数据
   const [routingGateways, setRoutingGateways] = useState<Gateway[]>([])
   const [routingLoading, setRoutingLoading] = useState(false)
+  
+  // 分页状态
+  const [mappingPage, setMappingPage] = useState(1)
+  const [mappingPageSize, setMappingPageSize] = useState(20)
+  const [routingPage, setRoutingPage] = useState(1)
+  const [routingPageSize, setRoutingPageSize] = useState(20)
 
   // 加载对接网关
   async function loadMappingGateways() {
@@ -124,13 +130,19 @@ export default function GatewayPage() {
     }
   }, [currentVOS])
   
-  // 切换标签页时，如果当前标签页数据未加载，则加载
+  // 切换标签页时，如果当前标签页数据未加载，则加载，并重置分页
   useEffect(() => {
     if (currentVOS) {
-      if (activeTab === 'mapping' && mappingGateways.length === 0 && !mappingLoading) {
-        loadMappingGateways()
-      } else if (activeTab === 'routing' && routingGateways.length === 0 && !routingLoading) {
-        loadRoutingGateways()
+      if (activeTab === 'mapping') {
+        setMappingPage(1) // 切换标签页时重置到第一页
+        if (mappingGateways.length === 0 && !mappingLoading) {
+          loadMappingGateways()
+        }
+      } else if (activeTab === 'routing') {
+        setRoutingPage(1) // 切换标签页时重置到第一页
+        if (routingGateways.length === 0 && !routingLoading) {
+          loadRoutingGateways()
+        }
       }
     }
   }, [activeTab])
@@ -138,10 +150,98 @@ export default function GatewayPage() {
   // 刷新当前标签页数据
   function handleRefresh() {
     if (activeTab === 'mapping') {
+      setMappingPage(1) // 刷新时重置到第一页
       loadMappingGateways()
     } else {
+      setRoutingPage(1) // 刷新时重置到第一页
       loadRoutingGateways()
     }
+  }
+
+  // 分页计算函数
+  function getPaginationData(gateways: Gateway[], page: number, pageSize: number) {
+    const total = gateways.length
+    const totalPages = Math.ceil(total / pageSize)
+    const startIndex = (page - 1) * pageSize
+    const endIndex = startIndex + pageSize
+    const paginatedGateways = gateways.slice(startIndex, endIndex)
+    
+    return {
+      data: paginatedGateways,
+      total,
+      totalPages,
+      currentPage: page,
+      pageSize
+    }
+  }
+
+  // 渲染分页控件
+  function renderPagination(
+    currentPage: number,
+    totalPages: number,
+    total: number,
+    pageSize: number,
+    onPageChange: (page: number) => void,
+    onPageSizeChange: (size: number) => void
+  ) {
+    if (totalPages <= 1) return null
+
+    return (
+      <div className='flex items-center justify-between mt-4 pt-4 border-t border-gray-200'>
+        <div className='flex items-center gap-4'>
+          <span className='text-sm text-gray-700'>
+            共 {total} 条，每页
+            <select
+              value={pageSize}
+              onChange={(e) => {
+                onPageSizeChange(Number(e.target.value))
+                onPageChange(1) // 切换每页数量时重置到第一页
+              }}
+              className='mx-2 px-2 py-1 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500'
+            >
+              <option value={20}>20</option>
+              <option value={50}>50</option>
+              <option value={100}>100</option>
+            </select>
+            条
+          </span>
+          <span className='text-sm text-gray-500'>
+            第 {currentPage} / {totalPages} 页
+          </span>
+        </div>
+        
+        <div className='flex items-center gap-2'>
+          <button
+            onClick={() => onPageChange(1)}
+            disabled={currentPage === 1}
+            className='px-3 py-1 text-sm border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed'
+          >
+            首页
+          </button>
+          <button
+            onClick={() => onPageChange(currentPage - 1)}
+            disabled={currentPage === 1}
+            className='px-3 py-1 text-sm border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed'
+          >
+            上一页
+          </button>
+          <button
+            onClick={() => onPageChange(currentPage + 1)}
+            disabled={currentPage >= totalPages}
+            className='px-3 py-1 text-sm border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed'
+          >
+            下一页
+          </button>
+          <button
+            onClick={() => onPageChange(totalPages)}
+            disabled={currentPage >= totalPages}
+            className='px-3 py-1 text-sm border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed'
+          >
+            末页
+          </button>
+        </div>
+      </div>
+    )
   }
 
   // 渲染对接网关表格
@@ -168,61 +268,80 @@ export default function GatewayPage() {
       )
     }
 
+    const pagination = getPaginationData(mappingGateways, mappingPage, mappingPageSize)
+    
+    // 如果当前页超出范围，重置到第一页
+    if (pagination.currentPage > pagination.totalPages && pagination.totalPages > 0) {
+      setMappingPage(1)
+      return null
+    }
+
     return (
-      <div className='overflow-x-auto'>
-        <table className='min-w-full divide-y divide-gray-200'>
-          <thead className='bg-gray-50'>
-            <tr>
-              <th className='px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider'>网关名称</th>
-              <th className='px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider'>IP地址</th>
-              <th className='px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider'>端口</th>
-              <th className='px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider'>协议</th>
-              <th className='px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider'>ASR</th>
-              <th className='px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider'>ACD</th>
-              <th className='px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider'>并发</th>
-              <th className='px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider'>状态</th>
-            </tr>
-          </thead>
-          <tbody className='bg-white divide-y divide-gray-200'>
-            {mappingGateways.map((gw, idx) => (
-              <tr key={idx} className='hover:bg-gray-50'>
-                <td className='px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900'>
-                  {gw.gatewayName || gw.name || '-'}
-                </td>
-                <td className='px-6 py-4 whitespace-nowrap text-sm text-gray-500'>
-                  {gw.ipAddress || gw.ip || '-'}
-                </td>
-                <td className='px-6 py-4 whitespace-nowrap text-sm text-gray-500'>
-                  {gw.port || '-'}
-                </td>
-                <td className='px-6 py-4 whitespace-nowrap text-sm text-gray-500'>
-                  {gw.protocol || '-'}
-                </td>
-                <td className='px-6 py-4 whitespace-nowrap text-sm text-gray-500'>
-                  {gw.asr !== undefined ? `${gw.asr}%` : '-'}
-                </td>
-                <td className='px-6 py-4 whitespace-nowrap text-sm text-gray-500'>
-                  {gw.acd !== undefined ? `${gw.acd}s` : '-'}
-                </td>
-                <td className='px-6 py-4 whitespace-nowrap text-sm text-gray-500'>
-                  {gw.concurrentCalls || gw.concurrent || 0}
-                </td>
-                <td className='px-6 py-4 whitespace-nowrap'>
-                  {gw.isOnline || gw.online ? (
-                    <span className='inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800'>
-                      在线
-                    </span>
-                  ) : (
-                    <span className='inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800'>
-                      离线
-                    </span>
-                  )}
-                </td>
+      <>
+        <div className='overflow-x-auto'>
+          <table className='min-w-full divide-y divide-gray-200'>
+            <thead className='bg-gray-50'>
+              <tr>
+                <th className='px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider'>网关名称</th>
+                <th className='px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider'>IP地址</th>
+                <th className='px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider'>端口</th>
+                <th className='px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider'>协议</th>
+                <th className='px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider'>ASR</th>
+                <th className='px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider'>ACD</th>
+                <th className='px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider'>并发</th>
+                <th className='px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider'>状态</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody className='bg-white divide-y divide-gray-200'>
+              {pagination.data.map((gw, idx) => (
+                <tr key={idx} className='hover:bg-gray-50'>
+                  <td className='px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900'>
+                    {gw.gatewayName || gw.name || '-'}
+                  </td>
+                  <td className='px-6 py-4 whitespace-nowrap text-sm text-gray-500'>
+                    {gw.ipAddress || gw.ip || '-'}
+                  </td>
+                  <td className='px-6 py-4 whitespace-nowrap text-sm text-gray-500'>
+                    {gw.port || '-'}
+                  </td>
+                  <td className='px-6 py-4 whitespace-nowrap text-sm text-gray-500'>
+                    {gw.protocol || '-'}
+                  </td>
+                  <td className='px-6 py-4 whitespace-nowrap text-sm text-gray-500'>
+                    {gw.asr !== undefined ? `${gw.asr}%` : '-'}
+                  </td>
+                  <td className='px-6 py-4 whitespace-nowrap text-sm text-gray-500'>
+                    {gw.acd !== undefined ? `${gw.acd}s` : '-'}
+                  </td>
+                  <td className='px-6 py-4 whitespace-nowrap text-sm text-gray-500'>
+                    {gw.concurrentCalls || gw.concurrent || 0}
+                  </td>
+                  <td className='px-6 py-4 whitespace-nowrap'>
+                    {gw.isOnline || gw.online ? (
+                      <span className='inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800'>
+                        在线
+                      </span>
+                    ) : (
+                      <span className='inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800'>
+                        离线
+                      </span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        
+        {renderPagination(
+          pagination.currentPage,
+          pagination.totalPages,
+          pagination.total,
+          pagination.pageSize,
+          setMappingPage,
+          setMappingPageSize
+        )}
+      </>
     )
   }
 
@@ -250,61 +369,80 @@ export default function GatewayPage() {
       )
     }
 
+    const pagination = getPaginationData(routingGateways, routingPage, routingPageSize)
+    
+    // 如果当前页超出范围，重置到第一页
+    if (pagination.currentPage > pagination.totalPages && pagination.totalPages > 0) {
+      setRoutingPage(1)
+      return null
+    }
+
     return (
-      <div className='overflow-x-auto'>
-        <table className='min-w-full divide-y divide-gray-200'>
-          <thead className='bg-gray-50'>
-            <tr>
-              <th className='px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider'>网关名称</th>
-              <th className='px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider'>IP地址</th>
-              <th className='px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider'>端口</th>
-              <th className='px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider'>协议</th>
-              <th className='px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider'>ASR</th>
-              <th className='px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider'>ACD</th>
-              <th className='px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider'>并发</th>
-              <th className='px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider'>状态</th>
-            </tr>
-          </thead>
-          <tbody className='bg-white divide-y divide-gray-200'>
-            {routingGateways.map((gw, idx) => (
-              <tr key={idx} className='hover:bg-gray-50'>
-                <td className='px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900'>
-                  {gw.gatewayName || gw.name || '-'}
-                </td>
-                <td className='px-6 py-4 whitespace-nowrap text-sm text-gray-500'>
-                  {gw.ipAddress || gw.ip || '-'}
-                </td>
-                <td className='px-6 py-4 whitespace-nowrap text-sm text-gray-500'>
-                  {gw.port || '-'}
-                </td>
-                <td className='px-6 py-4 whitespace-nowrap text-sm text-gray-500'>
-                  {gw.protocol || '-'}
-                </td>
-                <td className='px-6 py-4 whitespace-nowrap text-sm text-gray-500'>
-                  {gw.asr !== undefined ? `${gw.asr}%` : '-'}
-                </td>
-                <td className='px-6 py-4 whitespace-nowrap text-sm text-gray-500'>
-                  {gw.acd !== undefined ? `${gw.acd}s` : '-'}
-                </td>
-                <td className='px-6 py-4 whitespace-nowrap text-sm text-gray-500'>
-                  {gw.concurrentCalls || gw.concurrent || 0}
-                </td>
-                <td className='px-6 py-4 whitespace-nowrap'>
-                  {gw.isOnline || gw.online ? (
-                    <span className='inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800'>
-                      在线
-                    </span>
-                  ) : (
-                    <span className='inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800'>
-                      离线
-                    </span>
-                  )}
-                </td>
+      <>
+        <div className='overflow-x-auto'>
+          <table className='min-w-full divide-y divide-gray-200'>
+            <thead className='bg-gray-50'>
+              <tr>
+                <th className='px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider'>网关名称</th>
+                <th className='px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider'>IP地址</th>
+                <th className='px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider'>端口</th>
+                <th className='px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider'>协议</th>
+                <th className='px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider'>ASR</th>
+                <th className='px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider'>ACD</th>
+                <th className='px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider'>并发</th>
+                <th className='px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider'>状态</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody className='bg-white divide-y divide-gray-200'>
+              {pagination.data.map((gw, idx) => (
+                <tr key={idx} className='hover:bg-gray-50'>
+                  <td className='px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900'>
+                    {gw.gatewayName || gw.name || '-'}
+                  </td>
+                  <td className='px-6 py-4 whitespace-nowrap text-sm text-gray-500'>
+                    {gw.ipAddress || gw.ip || '-'}
+                  </td>
+                  <td className='px-6 py-4 whitespace-nowrap text-sm text-gray-500'>
+                    {gw.port || '-'}
+                  </td>
+                  <td className='px-6 py-4 whitespace-nowrap text-sm text-gray-500'>
+                    {gw.protocol || '-'}
+                  </td>
+                  <td className='px-6 py-4 whitespace-nowrap text-sm text-gray-500'>
+                    {gw.asr !== undefined ? `${gw.asr}%` : '-'}
+                  </td>
+                  <td className='px-6 py-4 whitespace-nowrap text-sm text-gray-500'>
+                    {gw.acd !== undefined ? `${gw.acd}s` : '-'}
+                  </td>
+                  <td className='px-6 py-4 whitespace-nowrap text-sm text-gray-500'>
+                    {gw.concurrentCalls || gw.concurrent || 0}
+                  </td>
+                  <td className='px-6 py-4 whitespace-nowrap'>
+                    {gw.isOnline || gw.online ? (
+                      <span className='inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800'>
+                        在线
+                      </span>
+                    ) : (
+                      <span className='inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800'>
+                        离线
+                      </span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        
+        {renderPagination(
+          pagination.currentPage,
+          pagination.totalPages,
+          pagination.total,
+          pagination.pageSize,
+          setRoutingPage,
+          setRoutingPageSize
+        )}
+      </>
     )
   }
 

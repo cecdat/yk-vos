@@ -90,6 +90,10 @@ export default function CustomersPage() {
   const totalCustomers = customersData.length
   const totalBalance = filteredCustomers.reduce((sum, c) => sum + c.money, 0)
   const debtCustomers = filteredCustomers.filter(c => c.money < 0).length
+  // 总欠费金额：只计算欠费客户的欠费总额（绝对值）
+  const totalDebtAmount = filteredCustomers
+    .filter(c => c.money < 0)
+    .reduce((sum, c) => sum + Math.abs(c.money), 0)
 
   // 分页
   const totalPages = Math.ceil(filteredCustomers.length / pageSize)
@@ -126,9 +130,9 @@ export default function CustomersPage() {
           <p className='text-blue-100 text-sm mb-1'>客户总数</p>
           <p className='text-3xl font-bold'>{totalCustomers}</p>
         </div>
-        <div className='bg-gradient-to-br from-green-500 to-green-600 rounded-xl p-6 text-white shadow-lg'>
-          <p className='text-green-100 text-sm mb-1'>总余额</p>
-          <p className='text-3xl font-bold'>{totalBalance.toFixed(2)}</p>
+        <div className='bg-gradient-to-br from-orange-500 to-orange-600 rounded-xl p-6 text-white shadow-lg'>
+          <p className='text-orange-100 text-sm mb-1'>总欠费金额</p>
+          <p className='text-3xl font-bold'>¥{totalDebtAmount.toFixed(2)}</p>
         </div>
         <div className='bg-gradient-to-br from-red-500 to-red-600 rounded-xl p-6 text-white shadow-lg'>
           <p className='text-red-100 text-sm mb-1'>欠费客户</p>
