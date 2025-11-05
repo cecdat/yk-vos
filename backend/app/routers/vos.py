@@ -330,7 +330,7 @@ async def get_all_customers_summary(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Session = Depends(get_db)
 ):
-    """获取所有启用的 VOS 实例的客户总数（从本地数据库读取，带Redis缓存）"""
+    """获取所有启用的 VOS 实例的客户总数（使用视图优化，带Redis缓存）"""
     from app.core.redis_cache import RedisCache
     
     # 尝试从Redis缓存读取
@@ -341,63 +341,53 @@ async def get_all_customers_summary(
         return cached_data
     
     try:
-        instances = db.query(VOSInstance).filter(VOSInstance.enabled == True).all()
+        # 使用视图查询，简化SQL并提高性能
+        from sqlalchemy import text
+        result = db.execute(text("""
+            SELECT 
+                instance_id,
+                instance_name,
+                total_customers,
+                debt_customers
+            FROM vw_customer_statistics
+            ORDER BY instance_id
+        """))
         
-        if not instances:
-            result = {
+        rows = result.fetchall()
+        
+        if not rows:
+            result_data = {
                 'total_customers': 0,
                 'instances': [],
                 'instance_count': 0,
                 'from_cache': True
             }
-            RedisCache.set(cache_key, result, ttl=300)  # 缓存5分钟
-            return result
-        
-        # 批量查询：获取所有实例ID
-        instance_ids = [inst.id for inst in instances]
-        
-        # 一次性查询所有实例的客户数量（使用分组聚合）
-        from sqlalchemy import func
-        customer_counts = db.query(
-            Customer.vos_instance_id,
-            func.count(Customer.id).label('total'),
-            func.sum(func.cast(Customer.is_in_debt, Integer)).label('debt_total')
-        ).filter(
-            Customer.vos_instance_id.in_(instance_ids)
-        ).group_by(Customer.vos_instance_id).all()
-        
-        # 转换为字典便于查找
-        count_map = {row.vos_instance_id: {'total': row.total or 0, 'debt': row.debt_total or 0} 
-                     for row in customer_counts}
+            RedisCache.set(cache_key, result_data, ttl=300)
+            return result_data
         
         total_customers = 0
         instance_summaries = []
         
-        for instance in instances:
-            counts = count_map.get(instance.id, {'total': 0, 'debt': 0})
-            count = counts['total']
-            debt_count = counts['debt']
-            
-            total_customers += count
-            
+        for row in rows:
+            total_customers += row.total_customers or 0
             instance_summaries.append({
-                'instance_id': instance.id,
-                'instance_name': instance.name,
-                'customer_count': count,
-                'debt_customer_count': debt_count
+                'instance_id': row.instance_id,
+                'instance_name': row.instance_name,
+                'customer_count': row.total_customers or 0,
+                'debt_customer_count': row.debt_customers or 0
             })
         
-        result = {
+        result_data = {
             'total_customers': total_customers,
             'instances': instance_summaries,
-            'instance_count': len(instances),
+            'instance_count': len(instance_summaries),
             'from_cache': True
         }
         
         # 写入Redis缓存（5分钟）
-        RedisCache.set(cache_key, result, ttl=300)
+        RedisCache.set(cache_key, result_data, ttl=300)
         
-        return result
+        return result_data
     except Exception as e:
         logger.error(f'获取客户统计失败: {e}', exc_info=True)
         return {
