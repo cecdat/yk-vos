@@ -46,6 +46,12 @@ celery.conf.beat_schedule = {
         'task': 'app.tasks.cdr_statistics_tasks.calculate_all_instances_statistics',
         'schedule': crontab(minute=30, hour=2),  # 每天凌晨2点30分
     },
+    
+    # 每小时刷新仪表盘统计物化视图
+    'refresh-dashboard-statistics': {
+        'task': 'app.tasks.sync_tasks.refresh_dashboard_statistics_view',
+        'schedule': crontab(minute=0),  # 每小时的第0分钟执行
+    },
 }
 
 # 导入任务模块以注册任务

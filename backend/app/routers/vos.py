@@ -42,49 +42,89 @@ async def get_instances(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Session = Depends(get_db)
 ):
-          """获取所有VOS实例（包括停用的），带Redis缓存和健康检查优化"""
-      from app.core.redis_cache import RedisCache
-      
-      # 尝试从Redis缓存读取
-      cache_key = 'vos_instances_list'
-      cached_data = RedisCache.get(cache_key)
-      if cached_data is not None:
-          logger.debug("从Redis缓存读取实例列表")
-          return cached_data
-      
-      # 返回所有节点（包括停用的），以便在管理页面显示
-      instances = db.query(VOSInstance).all()
+    """获取所有VOS实例（包括停用的），使用视图优化，带Redis缓存和健康检查优化"""
+    from app.core.redis_cache import RedisCache
     
-    # 批量查询健康检查状态（使用IN查询，避免N+1问题）
-    instance_ids = [inst.id for inst in instances]
-    health_checks = {}
-    if instance_ids:
-        health_check_list = db.query(VOSHealthCheck).filter(
-            VOSHealthCheck.vos_instance_id.in_(instance_ids)
-        ).all()
-        health_checks = {hc.vos_instance_id: hc for hc in health_check_list}
+    # 尝试从Redis缓存读取
+    cache_key = 'vos_instances_list'
+    cached_data = RedisCache.get(cache_key)
+    if cached_data is not None:
+        logger.debug("从Redis缓存读取实例列表")
+        return cached_data
     
-    result = []
-    for inst in instances:
-        health_check = health_checks.get(inst.id)
-        instance_data = {
-            'id': inst.id,
-            'vos_uuid': str(inst.vos_uuid) if inst.vos_uuid else None,
-            'name': inst.name,
-            'base_url': inst.base_url,
-            'description': inst.description,
-            'enabled': inst.enabled,
-            'health_status': health_check.status if health_check else 'unknown',
-            'health_last_check': health_check.last_check_at.isoformat() if health_check and health_check.last_check_at else None,
-            'health_response_time': health_check.response_time_ms if health_check else None,
-            'health_error': health_check.error_message if health_check else None
-        }
-        result.append(instance_data)
-    
-    # 写入Redis缓存（1分钟，因为健康状态变化较快）
-    RedisCache.set(cache_key, result, ttl=60)
-    
-    return result
+    try:
+        # 使用视图查询，简化SQL并提高性能
+        from sqlalchemy import text
+        result = db.execute(text("""
+            SELECT 
+                instance_id AS id,
+                instance_name AS name,
+                vos_uuid,
+                base_url,
+                description,
+                enabled,
+                health_status,
+                health_last_check,
+                health_response_time AS health_response_time_ms,
+                consecutive_failures,
+                health_error
+            FROM vw_instance_health_summary
+            ORDER BY instance_id
+        """))
+        
+        rows = result.fetchall()
+        
+        result_list = []
+        for row in rows:
+            result_list.append({
+                'id': row.id,
+                'vos_uuid': str(row.vos_uuid) if row.vos_uuid else None,
+                'name': row.name,
+                'base_url': row.base_url,
+                'description': row.description,
+                'enabled': row.enabled,
+                'health_status': row.health_status or 'unknown',
+                'health_last_check': row.health_last_check.isoformat() if row.health_last_check else None,
+                'health_response_time': row.health_response_time_ms,
+                'health_error': row.health_error
+            })
+        
+        # 写入Redis缓存（1分钟，因为健康状态变化较快）
+        RedisCache.set(cache_key, result_list, ttl=60)
+        
+        return result_list
+    except Exception as e:
+        logger.warning(f'使用视图查询失败，降级到原始查询: {e}')
+        # 降级到原始查询方法
+        instances = db.query(VOSInstance).all()
+        
+        instance_ids = [inst.id for inst in instances]
+        health_checks = {}
+        if instance_ids:
+            health_check_list = db.query(VOSHealthCheck).filter(
+                VOSHealthCheck.vos_instance_id.in_(instance_ids)
+            ).all()
+            health_checks = {hc.vos_instance_id: hc for hc in health_check_list}
+        
+        result_list = []
+        for inst in instances:
+            health_check = health_checks.get(inst.id)
+            instance_data = {
+                'id': inst.id,
+                'vos_uuid': str(inst.vos_uuid) if inst.vos_uuid else None,
+                'name': inst.name,
+                'base_url': inst.base_url,
+                'description': inst.description,
+                'enabled': inst.enabled,
+                'health_status': health_check.status if health_check else 'unknown',
+                'health_last_check': health_check.last_check_at.isoformat() if health_check and health_check.last_check_at else None,
+                'health_response_time': health_check.response_time_ms if health_check else None,
+                'health_error': health_check.error_message if health_check else None
+            }
+            result_list.append(instance_data)
+        
+        RedisCache.set(cache_key, result_list, ttl=60)
+        return result_list
 
 @router.get('/instances/{instance_id}')
 async def get_instance(

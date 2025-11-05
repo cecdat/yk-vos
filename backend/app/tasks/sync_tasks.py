@@ -309,6 +309,13 @@ def sync_customers_for_instance(instance_id: int):
         total = synced_count + updated_count
         logger.info(f'VOS {inst.name} 客户同步完成: 共 {total} 个客户 (新增: {synced_count}, 更新: {updated_count})')
         
+        # 在客户数据同步完成后，刷新仪表盘统计视图
+        try:
+            from app.tasks.refresh_dashboard_statistics import refresh_dashboard_statistics_view
+            refresh_dashboard_statistics_view.delay()
+        except Exception as e:
+            logger.warning(f'触发仪表盘统计视图刷新失败: {e}')
+
         return {
             'success': True,
             'total': total,
