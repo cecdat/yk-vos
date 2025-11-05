@@ -13,6 +13,7 @@ from app.models.user import User
 from app.models.vos_instance import VOSInstance
 from app.models.phone import Phone
 from app.models.cdr import CDR
+from app.models.cdr_statistics import VOSCdrStatistics, AccountCdrStatistics, GatewayCdrStatistics
 
 # this is the Alembic Config object
 config = context.config
