@@ -13,6 +13,7 @@ from app.routers.auth import get_current_user
 from app.models.user import User
 from app.models.vos_instance import VOSInstance
 from app.models.customer import Customer
+from app.models.app_config import AppConfig
 from app.tasks.sync_tasks import sync_all_instances_cdrs, sync_customers_for_instance, sync_instance_gateways_enhanced, sync_all_instances_gateways
 from app.tasks.initial_sync_tasks import sync_cdrs_for_single_day
 from app.tasks.manual_sync_tasks import sync_single_customer_cdrs
@@ -49,36 +50,73 @@ class ManualGatewaySync(BaseModel):
 
 @router.get('/config')
 async def get_sync_config(
-    current_user: Annotated[User, Depends(get_current_user)]
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Session = Depends(get_db)
 ):
     """
     获取同步配置
     
-    目前配置存储在环境变量或默认值中
-    未来可以存储到数据库的配置表
+    从数据库读取配置，如果不存在则返回默认值
     """
-    # TODO: 从数据库读取配置
+    def get_config_value(key: str, default: str) -> str:
+        """从数据库获取配置值，如果不存在则返回默认值"""
+        config = db.query(AppConfig).filter(AppConfig.config_key == key).first()
+        return config.config_value if config else default
+    
+    def get_config_int(key: str, default: int) -> int:
+        """从数据库获取配置值（整数），如果不存在则返回默认值"""
+        config = db.query(AppConfig).filter(AppConfig.config_key == key).first()
+        if config and config.config_value:
+            try:
+                return int(config.config_value)
+            except ValueError:
+                return default
+        return default
+    
     return {
-        'cdr_sync_time': '01:30',
-        'customer_sync_time': '01:00',
-        'cdr_sync_days': 1
+        'cdr_sync_time': get_config_value('cdr_sync_time', '01:30'),
+        'customer_sync_time': get_config_value('customer_sync_time', '01:00'),
+        'cdr_sync_days': get_config_int('cdr_sync_days', 1)
     }
 
 
 @router.post('/config')
 async def save_sync_config(
     config: SyncConfig,
-    current_user: Annotated[User, Depends(get_current_user)]
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Session = Depends(get_db)
 ):
     """
     保存同步配置
     
-    TODO: 将配置保存到数据库，并更新Celery Beat调度
+    将配置保存到数据库
+    TODO: 动态更新Celery Beat任务调度时间
     """
     logger.info(f'保存同步配置: {config.dict()}')
     
-    # TODO: 保存到数据库
-    # TODO: 动态更新Celery Beat任务调度时间
+    def save_config(key: str, value: str, description: str = ''):
+        """保存或更新配置项"""
+        app_config = db.query(AppConfig).filter(AppConfig.config_key == key).first()
+        if app_config:
+            app_config.config_value = value
+            if description:
+                app_config.description = description
+        else:
+            app_config = AppConfig(
+                config_key=key,
+                config_value=value,
+                description=description
+            )
+            db.add(app_config)
+    
+    # 保存配置
+    save_config('cdr_sync_time', config.cdr_sync_time, 'CDR同步时间（HH:MM格式）')
+    save_config('customer_sync_time', config.customer_sync_time, '客户数据同步时间（HH:MM格式）')
+    save_config('cdr_sync_days', str(config.cdr_sync_days), 'CDR同步天数（1-30天）')
+    
+    db.commit()
+    
+    logger.info(f'同步配置已保存到数据库')
     
     return {
         'success': True,

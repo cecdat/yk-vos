@@ -330,7 +330,24 @@ export default function SyncManagementPage() {
                   min='1'
                   max='30'
                   value={syncConfig.cdr_sync_days}
-                  onChange={e => setSyncConfig({ ...syncConfig, cdr_sync_days: parseInt(e.target.value) || 1 })}
+                  onChange={e => {
+                    const value = e.target.value
+                    const numValue = parseInt(value, 10)
+                    if (value === '') {
+                      // 允许清空输入框
+                      setSyncConfig({ ...syncConfig, cdr_sync_days: 1 })
+                    } else if (!isNaN(numValue) && numValue >= 1 && numValue <= 30) {
+                      setSyncConfig({ ...syncConfig, cdr_sync_days: numValue })
+                    }
+                  }}
+                  onBlur={e => {
+                    // 失去焦点时，如果值为空或无效，设置为默认值1
+                    const value = e.target.value
+                    const numValue = parseInt(value, 10)
+                    if (value === '' || isNaN(numValue) || numValue < 1 || numValue > 30) {
+                      setSyncConfig({ ...syncConfig, cdr_sync_days: 1 })
+                    }
+                  }}
                   className='w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent'
                 />
                 <p className='text-xs text-gray-500 mt-1'>
