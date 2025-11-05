@@ -352,11 +352,55 @@ def save_gateway_statistics(db, vos_id: int, vos_uuid: str, gateway_name: str, s
         db.add(existing)
 
 
+def get_period_types_to_calculate(stat_date: date):
+    """
+    根据统计日期，智能判断需要统计哪些周期类型
+    
+    规则：
+    1. 日统计：每天都要统计
+    2. 月统计：只在每月1日统计上个月的数据
+    3. 季度统计：只在每季度第一天（1月1日、4月1日、7月1日、10月1日）统计上一季度的数据
+    4. 年度统计：只在每年1月1日统计上一年的数据，跨年后上一年的数据不再更新
+    """
+    today = date.today()
+    period_types = ['day']  # 日统计总是需要
+    
+    # 判断是否需要统计月统计（每月1日统计上个月）
+    # 注意：stat_date 是 yesterday，如果今天是1日，yesterday 是上个月的最后一天
+    if today.day == 1:
+        period_types.append('month')
+        # stat_date 是上个月的最后一天，使用 stat_date 来统计上个月是正确的
+        logger.info(f"今天是每月第一天，将统计上个月（{stat_date.strftime('%Y年%m月')}）的数据")
+    
+    # 判断是否需要统计季度统计（每季度第一天：1月1日、4月1日、7月1日、10月1日）
+    # 注意：stat_date 是 yesterday，如果今天是季度第一天，yesterday 是上一季度的最后一天
+    if today.month in [1, 4, 7, 10] and today.day == 1:
+        period_types.append('quarter')
+        quarter = (stat_date.month - 1) // 3 + 1
+        logger.info(f"今天是季度第一天，将统计上一季度（{stat_date.year}年第{quarter}季度）的数据")
+    
+    # 判断是否需要统计年度统计（每年1月1日统计上一年）
+    # 注意：如果今天是1月1日，stat_date 是12月31日（上一年的最后一天）
+    # 使用 stat_date 来统计年度数据，会统计上一年的数据，这是正确的
+    # 跨年后上一年的数据不再更新，因为我们只在1月1日统计一次
+    if today.month == 1 and today.day == 1:
+        period_types.append('year')
+        last_year = stat_date.year  # stat_date 是上一年的最后一天
+        logger.info(f"今天是年初第一天，将统计上一年（{last_year}年）的数据")
+        logger.info(f"注意：跨年后，{last_year}年的数据将不再更新")
+    
+    return period_types
+
+
 @celery.task
 def calculate_all_instances_statistics():
     """
     为所有启用的VOS实例计算统计（每天凌晨2点30分执行）
-    统计前一天的所有周期类型数据（日/月/季度/年）
+    智能判断需要统计的周期类型：
+    - 日统计：每天都要统计前一天的数据
+    - 月统计：只在每月1日统计上个月的数据
+    - 季度统计：只在每季度第一天（1/4/7/10月1日）统计上一季度的数据
+    - 年度统计：只在每年1月1日统计上一年的数据，跨年后上一年的数据不再更新
     """
     db = SessionLocal()
     try:
@@ -368,6 +412,10 @@ def calculate_all_instances_statistics():
         yesterday = date.today() - timedelta(days=1)
         logger.info(f"开始为所有VOS实例计算统计，日期={yesterday}")
         
+        # 智能判断需要统计的周期类型
+        period_types = get_period_types_to_calculate(yesterday)
+        logger.info(f"本次统计将计算以下周期类型: {period_types}")
+        
         results = []
         
         for inst in instances:
@@ -376,10 +424,6 @@ def calculate_all_instances_statistics():
                 continue
             
             try:
-                # 统计前一天的所有周期类型数据（日/月/季度/年）
-                # 这样可以确保月度、季度、年度统计也会自动更新
-                period_types = ['day', 'month', 'quarter', 'year']
-                
                 result = calculate_cdr_statistics.delay(inst.id, yesterday, period_types)
                 results.append({
                     'instance_id': inst.id,
@@ -407,6 +451,7 @@ def calculate_all_instances_statistics():
             'success_count': success_count,
             'failed_count': len(instances) - success_count,
             'statistic_date': str(yesterday),
+            'period_types': period_types,
             'results': results
         }
     except Exception as e:
