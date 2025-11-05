@@ -314,7 +314,7 @@ def sync_customers_for_instance(instance_id: int):
             refresh_dashboard_statistics_view.delay()
         except Exception as e:
             logger.warning(f'触发仪表盘统计视图刷新失败: {e}')
-
+        
         return {
             'success': True,
             'total': total,
@@ -813,5 +813,27 @@ def check_vos_instances_health():
     except Exception as e:
         logger.exception(f'VOS健康检查任务失败: {e}')
         return {'success': False, 'message': str(e)}
+    finally:
+        db.close()
+
+
+@celery_app.task(bind=True)
+def refresh_dashboard_statistics_view(self):
+    """
+    刷新仪表盘统计物化视图
+    在客户数据更新后调用，保持统计数据最新
+    """
+    from app.core.db import SessionLocal
+    from sqlalchemy import text
+    
+    db = SessionLocal()
+    try:
+        logger.info("🔄 刷新仪表盘统计物化视图...")
+        db.execute(text("SELECT refresh_dashboard_statistics()"))
+        db.commit()
+        logger.info("✅ 仪表盘统计物化视图刷新完成")
+    except Exception as e:
+        logger.error(f'❌ 刷新仪表盘统计物化视图失败: {e}', exc_info=True)
+        db.rollback()
     finally:
         db.close()
