@@ -895,7 +895,7 @@ async def get_instance_statistics(
         GatewayCdrStatistics.total_fee.desc()
     ).limit(1000).all()
     
-    return {
+    response = {
         'instance_id': instance_id,
         'instance_name': instance.name,
         'period_type': period_type,

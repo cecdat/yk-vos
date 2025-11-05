@@ -40,24 +40,40 @@ export default function StatisticsPage() {
   const [instanceStats, setInstanceStats] = useState<InstanceStatistics | null>(null)
   const [loading, setLoading] = useState(true)
   const [periodType, setPeriodType] = useState<'day' | 'month' | 'quarter' | 'year'>('day')
+  
+  // 日期选择状态
+  const [startDate, setStartDate] = useState<string>('')
+  const [endDate, setEndDate] = useState<string>('')
+
+  // 初始化日期范围（默认最近30天）
+  useEffect(() => {
+    const today = new Date()
+    const thirtyDaysAgo = new Date(today)
+    thirtyDaysAgo.setDate(today.getDate() - 30)
+    
+    setEndDate(today.toISOString().split('T')[0])
+    setStartDate(thirtyDaysAgo.toISOString().split('T')[0])
+  }, [])
 
   useEffect(() => {
-    if (currentVOS && currentVOS.vos_uuid) {
+    if (currentVOS && currentVOS.vos_uuid && startDate && endDate) {
       fetchInstanceStatistics(currentVOS.id)
     } else {
       setInstanceStats(null)
       setLoading(false)
     }
-  }, [currentVOS, periodType])
+  }, [currentVOS, periodType, startDate, endDate])
 
   async function fetchInstanceStatistics(instanceId: number) {
     setLoading(true)
     setInstanceStats(prev => ({ ...prev, loading: true, error: undefined } as InstanceStatistics | null))
 
     try {
-      const res = await api.get(`/vos/instances/${instanceId}/statistics`, {
-        params: { period_type: periodType }
-      })
+      const params: any = { period_type: periodType }
+      if (startDate) params.start_date = startDate
+      if (endDate) params.end_date = endDate
+
+      const res = await api.get(`/vos/instances/${instanceId}/statistics`, { params })
       setInstanceStats({
         instance_id: instanceId,
         instance_name: res.data?.instance_name || '',
@@ -99,6 +115,100 @@ export default function StatisticsPage() {
     return `¥${fee.toFixed(2)}`
   }
 
+  // 快速选择日期范围
+  function setQuickDateRange(days: number) {
+    const today = new Date()
+    const start = new Date(today)
+    start.setDate(today.getDate() - days)
+    setStartDate(start.toISOString().split('T')[0])
+    setEndDate(today.toISOString().split('T')[0])
+  }
+
+  // 根据周期类型获取日期选择器的类型
+  function getDateInputType(): 'date' | 'month' | undefined {
+    if (periodType === 'month') return 'month'
+    if (periodType === 'year') return undefined // 年份需要特殊处理
+    return 'date'
+  }
+
+  // 年份选择器
+  function renderYearSelector() {
+    const currentYear = new Date().getFullYear()
+    const years = Array.from({ length: 5 }, (_, i) => currentYear - i)
+    
+    return (
+      <div className='flex items-center gap-2'>
+        <select
+          value={startDate ? startDate.substring(0, 4) : ''}
+          onChange={(e) => {
+            const year = e.target.value
+            setStartDate(`${year}-01-01`)
+            setEndDate(`${year}-12-31`)
+          }}
+          className='px-3 py-2 border rounded-lg bg-white'
+        >
+          <option value=''>选择年份</option>
+          {years.map(year => (
+            <option key={year} value={year}>{year}年</option>
+          ))}
+        </select>
+      </div>
+    )
+  }
+
+  // 季度选择器
+  function renderQuarterSelector() {
+    const currentYear = new Date().getFullYear()
+    const quarters = [
+      { label: 'Q1 (1-3月)', value: 'Q1', start: '01-01', end: '03-31' },
+      { label: 'Q2 (4-6月)', value: 'Q2', start: '04-01', end: '06-30' },
+      { label: 'Q3 (7-9月)', value: 'Q3', start: '07-01', end: '09-30' },
+      { label: 'Q4 (10-12月)', value: 'Q4', start: '10-01', end: '12-31' },
+    ]
+    
+    // 根据当前选择的日期范围反推季度
+    let selectedQuarter = ''
+    if (startDate && endDate) {
+      const quarter = quarters.find(q => {
+        const startStr = `${currentYear}-${q.start}`
+        const endStr = `${currentYear}-${q.end}`
+        return startDate.startsWith(`${currentYear}-${q.start.substring(0, 2)}`) && 
+               endDate.startsWith(`${currentYear}-${q.end.substring(0, 2)}`)
+      })
+      if (quarter) {
+        selectedQuarter = quarter.value
+      }
+    }
+    
+    return (
+      <div className='flex items-center gap-2'>
+        <select
+          value={selectedQuarter}
+          onChange={(e) => {
+            const quarterValue = e.target.value
+            if (quarterValue) {
+              const quarter = quarters.find(q => q.value === quarterValue)
+              if (quarter) {
+                const year = currentYear
+                setStartDate(`${year}-${quarter.start}`)
+                setEndDate(`${year}-${quarter.end}`)
+              }
+            } else {
+              setStartDate('')
+              setEndDate('')
+            }
+          }}
+          className='px-3 py-2 border rounded-lg bg-white'
+        >
+          <option value=''>选择季度</option>
+          {quarters.map(q => (
+            <option key={q.value} value={q.value}>{currentYear}年 {q.label}</option>
+          ))}
+        </select>
+      </div>
+    )
+  }
+
   const periodLabels = {
     day: '日',
     month: '月',
@@ -106,7 +216,7 @@ export default function StatisticsPage() {
     year: '年'
   }
 
-  if (loading) {
+  if (loading && !instanceStats) {
     return (
       <div className='flex items-center justify-center py-20'>
         <svg className='animate-spin h-10 w-10 text-blue-600' fill='none' viewBox='0 0 24 24'>
@@ -119,11 +229,12 @@ export default function StatisticsPage() {
 
   return (
     <div className='max-w-7xl'>
-      <div className='flex items-center justify-between mb-6'>
+      <div className='flex items-center justify-between mb-6 flex-wrap gap-4'>
         <h1 className='text-3xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent'>
           数据统计
         </h1>
-        <div className='flex items-center gap-3'>
+        <div className='flex items-center gap-3 flex-wrap'>
+          {/* 周期类型选择 */}
           <select
             value={periodType}
             onChange={(e) => setPeriodType(e.target.value as any)}
@@ -134,9 +245,71 @@ export default function StatisticsPage() {
             <option value='quarter'>季度统计</option>
             <option value='year'>年统计</option>
           </select>
+
+          {/* 日期选择器 */}
+          {periodType === 'year' ? (
+            renderYearSelector()
+          ) : periodType === 'quarter' ? (
+            renderQuarterSelector()
+          ) : periodType === 'month' ? (
+            <div className='flex items-center gap-2'>
+              <input
+                type='month'
+                value={startDate ? startDate.substring(0, 7) : ''}
+                onChange={(e) => {
+                  const monthValue = e.target.value
+                  if (monthValue) {
+                    const [year, month] = monthValue.split('-')
+                    const lastDay = new Date(parseInt(year), parseInt(month), 0).getDate()
+                    setStartDate(`${monthValue}-01`)
+                    setEndDate(`${monthValue}-${lastDay.toString().padStart(2, '0')}`)
+                  }
+                }}
+                className='px-3 py-2 border rounded-lg bg-white'
+              />
+            </div>
+          ) : (
+            <div className='flex items-center gap-2'>
+              <input
+                type='date'
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                className='px-3 py-2 border rounded-lg bg-white'
+              />
+              <span className='text-gray-500'>至</span>
+              <input
+                type='date'
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                className='px-3 py-2 border rounded-lg bg-white'
+              />
+              {/* 快速选择 */}
+              <div className='flex items-center gap-1 ml-2'>
+                <button
+                  onClick={() => setQuickDateRange(7)}
+                  className='px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded transition'
+                >
+                  最近7天
+                </button>
+                <button
+                  onClick={() => setQuickDateRange(30)}
+                  className='px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded transition'
+                >
+                  最近30天
+                </button>
+                <button
+                  onClick={() => setQuickDateRange(90)}
+                  className='px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded transition'
+                >
+                  最近90天
+                </button>
+              </div>
+            </div>
+          )}
+
           <button
             onClick={() => currentVOS && fetchInstanceStatistics(currentVOS.id)}
-            disabled={loading || !currentVOS}
+            disabled={loading || !currentVOS || !startDate || !endDate}
             className='px-4 py-2 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg hover:from-blue-700 hover:to-purple-700 transition flex items-center gap-2 disabled:opacity-50'
           >
             <svg className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} fill='none' viewBox='0 0 24 24' stroke='currentColor'>
