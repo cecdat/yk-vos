@@ -10,7 +10,7 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
-revision = '0013_create_cdr_statistics_tables'
+revision = '0013_cdr_statistics'
 down_revision = '0012_extend_gateways_fields'
 branch_labels = None
 depends_on = None

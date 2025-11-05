@@ -9,8 +9,8 @@ from alembic import op
 import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
-revision = '0014_create_dashboard_statistics_views'
-down_revision = '0013_create_cdr_statistics_tables'
+revision = '0014_dashboard_stats'
+down_revision = '0013_cdr_statistics'
 branch_labels = None
 depends_on = None
 
