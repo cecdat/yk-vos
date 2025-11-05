@@ -12,6 +12,7 @@ from datetime import datetime, timedelta
 import logging
 import hashlib
 import json
+import time
 from dateutil import parser as dateparser
 
 logger = logging.getLogger(__name__)
@@ -267,6 +268,9 @@ def sync_cdrs_for_single_day(instance_id: int, date_str: str):
                 
                 if not isinstance(result, dict) or result.get('retCode') != 0:
                     logger.warning(f'      客户 {account} 话单查询失败')
+                    # 即使失败也延迟，避免请求过快
+                    if idx < len(customers):
+                        time.sleep(0.5)
                     continue
                 
                 # 提取话单列表
@@ -284,7 +288,15 @@ def sync_cdrs_for_single_day(instance_id: int, date_str: str):
                 
             except Exception as e:
                 logger.exception(f'      ❌ 客户 {account} 同步失败: {e}')
+                # 即使失败也延迟，避免请求过快
+                if idx < len(customers):
+                    time.sleep(0.5)
                 continue
+            
+            # 每个客户之间延迟0.5秒，避免请求过于频繁导致VOS卡死
+            # 最后一个客户不需要延迟
+            if idx < len(customers):
+                time.sleep(0.5)
         
         # 清除同步进度
         if r:
