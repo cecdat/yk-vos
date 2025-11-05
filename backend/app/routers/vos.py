@@ -42,17 +42,18 @@ async def get_instances(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Session = Depends(get_db)
 ):
-    """获取所有启用的VOS实例（带Redis缓存和批量查询优化）"""
-    from app.core.redis_cache import RedisCache
-    
-    # 尝试从Redis缓存读取（缓存1分钟）
-    cache_key = 'vos_instances_list'
-    cached_data = RedisCache.get(cache_key)
-    if cached_data is not None:
-        logger.debug("从Redis缓存读取实例列表")
-        return cached_data
-    
-    instances = db.query(VOSInstance).filter(VOSInstance.enabled == True).all()
+          """获取所有VOS实例（包括停用的），带Redis缓存和健康检查优化"""
+      from app.core.redis_cache import RedisCache
+      
+      # 尝试从Redis缓存读取
+      cache_key = 'vos_instances_list'
+      cached_data = RedisCache.get(cache_key)
+      if cached_data is not None:
+          logger.debug("从Redis缓存读取实例列表")
+          return cached_data
+      
+      # 返回所有节点（包括停用的），以便在管理页面显示
+      instances = db.query(VOSInstance).all()
     
     # 批量查询健康检查状态（使用IN查询，避免N+1问题）
     instance_ids = [inst.id for inst in instances]
@@ -546,8 +547,8 @@ async def get_all_gateways_summary(
             
             for future in futures:
                 try:
-                    # 每个实例最多等待10秒
-                    stats = future.result(timeout=10)
+                    # 每个实例最多等待5秒（减少从10秒到5秒，避免长时间阻塞）
+                    stats = future.result(timeout=5)
                     instance_summaries.append(stats)
                     
                     total_mapping_gateways += stats['mapping_gateway_count']
@@ -555,7 +556,7 @@ async def get_all_gateways_summary(
                     total_online_gateways += stats['online_gateway_count']
                 except FutureTimeoutError:
                     inst = futures[future]
-                    logger.error(f'获取实例 {inst.name} 的网关统计超时')
+                    logger.warning(f'获取实例 {inst.name} 的网关统计超时（5秒）')
                     instance_summaries.append({
                         'instance_id': inst.id,
                         'instance_name': inst.name,

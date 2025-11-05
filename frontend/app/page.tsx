@@ -73,14 +73,28 @@ export default function Page(){
 
   async function fetchData() {
     setLoading(true)
-    await Promise.all([
-      fetchInstances(),
-      fetchCustomerSummary(),
-      fetchDebtCustomers(),
-      fetchGatewaySummary(),
-      fetchCDRSyncStatus()
-    ])
-    setLoading(false)
+    try {
+      // 使用Promise.allSettled而不是Promise.all，确保即使某个API失败也不影响其他数据加载
+      const results = await Promise.allSettled([
+        fetchInstances(),
+        fetchCustomerSummary(),
+        fetchDebtCustomers(),
+        fetchGatewaySummary(),
+        fetchCDRSyncStatus()
+      ])
+      
+      // 记录失败的请求
+      results.forEach((result, index) => {
+        if (result.status === 'rejected') {
+          const apiNames = ['instances', 'customerSummary', 'debtCustomers', 'gatewaySummary', 'cdrSyncStatus']
+          console.error(`获取${apiNames[index]}失败:`, result.reason)
+        }
+      })
+    } catch (e) {
+      console.error('获取仪表盘数据失败:', e)
+    } finally {
+      setLoading(false)
+    }
   }
   
   async function fetchGatewaySummary() {

@@ -133,16 +133,16 @@ export default function VosList(){
           <p className='mt-1 text-sm text-gray-500'>点击"添加节点"按钮创建第一个 VOS 节点</p>
         </div>
       ) : (
-        <div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4'>
-          {instances.map(inst => (
-            <Card key={inst.id}>
-              <div className='flex justify-between items-start mb-3'>
-                <div className='flex-1'>
-                  <h3 className='text-lg font-semibold text-gray-900'>{inst.name}</h3>
-                  <div className='mt-1 text-sm text-gray-600 break-all'>{inst.base_url}</div>
-                  {inst.description && (
-                    <p className='mt-2 text-sm text-gray-500'>{inst.description}</p>
-                  )}
+                  <div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4'>
+            {instances.map(inst => (
+              <Card key={inst.id} className={!inst.enabled ? 'opacity-60 bg-gray-50' : ''}>
+                <div className={`flex justify-between items-start mb-3 ${!inst.enabled ? '' : ''}`}>
+                  <div className='flex-1'>
+                    <h3 className={`text-lg font-semibold ${!inst.enabled ? 'text-gray-500' : 'text-gray-900'}`}>{inst.name}</h3>
+                    <div className={`mt-1 text-sm break-all ${!inst.enabled ? 'text-gray-400' : 'text-gray-600'}`}>{inst.base_url}</div>
+                    {inst.description && (
+                      <p className={`mt-2 text-sm ${!inst.enabled ? 'text-gray-400' : 'text-gray-500'}`}>{inst.description}</p>
+                    )}
                 </div>
                 <div className='ml-2 flex items-center gap-2'>
                   {/* 启用/禁用开关按钮 */}
