@@ -817,7 +817,7 @@ def check_vos_instances_health():
         db.close()
 
 
-@celery_app.task(bind=True)
+@celery.task(bind=True)
 def refresh_dashboard_statistics_view(self):
     """
     刷新仪表盘统计物化视图
