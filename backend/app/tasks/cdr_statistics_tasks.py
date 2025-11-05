@@ -16,20 +16,29 @@ logger = logging.getLogger(__name__)
 
 
 def get_period_dates(stat_date: date, period_type: str):
-    """根据统计日期和周期类型，获取查询的起始和结束日期"""
+    """
+    根据统计日期和周期类型，获取查询的起始和结束日期
+    
+    对于月/季度/年统计，统计从周期开始到stat_date（昨天）的累计数据
+    这样可以每天更新当月/当季/当年的累计统计
+    """
     if period_type == 'day':
+        # 日统计：统计单日数据
         start_date = stat_date
         end_date = stat_date + timedelta(days=1)
     elif period_type == 'month':
+        # 月统计：从当月1日到stat_date（昨天）的累计数据
         start_date = stat_date.replace(day=1)
-        end_date = (start_date + relativedelta(months=1))
+        end_date = stat_date + timedelta(days=1)  # 到昨天为止（包含昨天）
     elif period_type == 'quarter':
+        # 季度统计：从当季第一天到stat_date（昨天）的累计数据
         quarter = (stat_date.month - 1) // 3
         start_date = date(stat_date.year, quarter * 3 + 1, 1)
-        end_date = (start_date + relativedelta(months=3))
+        end_date = stat_date + timedelta(days=1)  # 到昨天为止（包含昨天）
     elif period_type == 'year':
+        # 年度统计：从当年1月1日到stat_date（昨天）的累计数据
         start_date = date(stat_date.year, 1, 1)
-        end_date = date(stat_date.year + 1, 1, 1)
+        end_date = stat_date + timedelta(days=1)  # 到昨天为止（包含昨天）
     else:
         raise ValueError(f"Unsupported period_type: {period_type}")
     
@@ -115,6 +124,84 @@ def calculate_cdr_statistics(vos_id: int, statistic_date: date = None, period_ty
         
     except Exception as e:
         logger.error(f"❌ 统计失败: {e}", exc_info=True)
+        db.rollback()
+        return {'success': False, 'error': str(e)}
+    finally:
+        db.close()
+
+
+@celery.task
+def calculate_cdr_statistics_with_date_range(
+    vos_id: int, 
+    statistic_date: date, 
+    period_types: list,
+    start_date: date,
+    end_date: date
+):
+    """
+    使用自定义日期范围计算指定VOS节点的话单统计
+    
+    用于统计完整周期的数据（如：上个月的完整数据）
+    
+    Args:
+        vos_id: VOS实例ID
+        statistic_date: 统计日期（用于存储到数据库）
+        period_types: 统计周期类型列表
+        start_date: 查询的起始日期
+        end_date: 查询的结束日期（不包含）
+    """
+    db = SessionLocal()
+    ch_db = get_clickhouse_db()
+    
+    try:
+        # 获取VOS实例
+        instance = db.query(VOSInstance).filter(VOSInstance.id == vos_id).first()
+        if not instance or not instance.enabled:
+            logger.warning(f"VOS实例 {vos_id} 不存在或未启用")
+            return {'success': False, 'message': 'VOS实例不存在或未启用'}
+        
+        if not instance.vos_uuid:
+            logger.warning(f"VOS实例 {vos_id} 没有UUID")
+            return {'success': False, 'message': 'VOS实例没有UUID'}
+        
+        vos_uuid_str = str(instance.vos_uuid)
+        
+        logger.info(f"开始统计VOS节点 {instance.name} (ID={vos_id}) 的完整周期数据，日期范围={start_date} 到 {end_date}, 周期={period_types}")
+        
+        results = {
+            'vos_statistics': 0,
+            'account_statistics': 0,
+            'gateway_statistics': 0
+        }
+        
+        for period_type in period_types:
+            logger.info(f"  统计周期: {period_type}, 日期范围: {start_date} 到 {end_date}")
+            
+            # 1. 统计VOS节点级别
+            vos_stats = calculate_vos_statistics(ch_db, vos_id, vos_uuid_str, start_date, end_date, statistic_date, period_type)
+            if vos_stats:
+                save_vos_statistics(db, vos_id, vos_uuid_str, statistic_date, period_type, vos_stats)
+                results['vos_statistics'] += 1
+            
+            # 2. 统计账户级别
+            account_stats = calculate_account_statistics(ch_db, vos_id, vos_uuid_str, start_date, end_date, statistic_date, period_type)
+            for account_name, stats in account_stats.items():
+                save_account_statistics(db, vos_id, vos_uuid_str, account_name, statistic_date, period_type, stats)
+                results['account_statistics'] += 1
+            
+            # 3. 统计网关级别
+            gateway_stats = calculate_gateway_statistics(ch_db, vos_id, vos_uuid_str, start_date, end_date, statistic_date, period_type)
+            for gateway_name, stats in gateway_stats.items():
+                save_gateway_statistics(db, vos_id, vos_uuid_str, gateway_name, statistic_date, period_type, stats)
+                results['gateway_statistics'] += 1
+        
+        db.commit()
+        logger.info(f"✅ VOS节点 {instance.name} 完整周期统计完成: {results}")
+        
+        return {'success': True, 'results': results}
+        
+    except Exception as e:
+        logger.error(f"❌ 完整周期统计失败: {e}", exc_info=True)
         db.rollback()
         return {'success': False, 'error': str(e)}
     finally:
@@ -357,39 +444,67 @@ def get_period_types_to_calculate(stat_date: date):
     根据统计日期，智能判断需要统计哪些周期类型
     
     规则：
-    1. 日统计：每天都要统计
-    2. 月统计：只在每月1日统计上个月的数据
-    3. 季度统计：只在每季度第一天（1月1日、4月1日、7月1日、10月1日）统计上一季度的数据
-    4. 年度统计：只在每年1月1日统计上一年的数据，跨年后上一年的数据不再更新
+    1. 日统计：每天都要统计前一天的数据
+    2. 月统计：每天都要统计当月1日到昨天的累计数据（进行中的月份）
+    3. 季度统计：每天都要统计当季第一天到昨天的累计数据（进行中的季度）
+    4. 年度统计：每天都要统计当年1月1日到昨天的累计数据（进行中的年份）
+    
+    注意：在特定日期还会额外统计上一个完整周期的数据：
+    - 每月1日：额外统计上个月的完整数据
+    - 每季度第一天：额外统计上一季度的完整数据
+    - 每年1月1日：额外统计上一年的完整数据
     """
     today = date.today()
-    period_types = ['day']  # 日统计总是需要
+    period_types = ['day', 'month', 'quarter', 'year']  # 每天都要统计这些周期类型
     
-    # 判断是否需要统计月统计（每月1日统计上个月）
-    # 注意：stat_date 是 yesterday，如果今天是1日，yesterday 是上个月的最后一天
+    # 在特定日期，需要额外统计上一个完整周期的数据
+    # 注意：stat_date 是 yesterday
+    additional_periods = []
+    
+    # 如果今天是每月1日，yesterday 是上个月的最后一天，需要统计上个月的完整数据
     if today.day == 1:
-        period_types.append('month')
-        # stat_date 是上个月的最后一天，使用 stat_date 来统计上个月是正确的
-        logger.info(f"今天是每月第一天，将统计上个月（{stat_date.strftime('%Y年%m月')}）的数据")
+        # 计算上个月的日期范围
+        last_month_end = stat_date  # 上个月的最后一天
+        last_month_start = last_month_end.replace(day=1)  # 上个月的第一天
+        additional_periods.append({
+            'type': 'month',
+            'period_start': last_month_start,
+            'period_end': last_month_end + timedelta(days=1),
+            'stat_date': last_month_end,
+            'description': f"上个月（{last_month_start.strftime('%Y年%m月')}）的完整数据"
+        })
+        logger.info(f"今天是每月第一天，将额外统计上个月（{last_month_start.strftime('%Y年%m月')}）的完整数据")
     
-    # 判断是否需要统计季度统计（每季度第一天：1月1日、4月1日、7月1日、10月1日）
-    # 注意：stat_date 是 yesterday，如果今天是季度第一天，yesterday 是上一季度的最后一天
+    # 如果今天是每季度第一天，yesterday 是上一季度的最后一天，需要统计上一季度的完整数据
     if today.month in [1, 4, 7, 10] and today.day == 1:
-        period_types.append('quarter')
-        quarter = (stat_date.month - 1) // 3 + 1
-        logger.info(f"今天是季度第一天，将统计上一季度（{stat_date.year}年第{quarter}季度）的数据")
+        last_quarter_end = stat_date  # 上一季度的最后一天
+        last_quarter_month = ((last_quarter_end.month - 1) // 3) * 3 + 1  # 上一季度的起始月份
+        last_quarter_start = date(last_quarter_end.year, last_quarter_month, 1)
+        quarter_num = (last_quarter_end.month - 1) // 3 + 1
+        additional_periods.append({
+            'type': 'quarter',
+            'period_start': last_quarter_start,
+            'period_end': last_quarter_end + timedelta(days=1),
+            'stat_date': last_quarter_end,
+            'description': f"上一季度（{last_quarter_end.year}年第{quarter_num}季度）的完整数据"
+        })
+        logger.info(f"今天是季度第一天，将额外统计上一季度（{last_quarter_end.year}年第{quarter_num}季度）的完整数据")
     
-    # 判断是否需要统计年度统计（每年1月1日统计上一年）
-    # 注意：如果今天是1月1日，stat_date 是12月31日（上一年的最后一天）
-    # 使用 stat_date 来统计年度数据，会统计上一年的数据，这是正确的
-    # 跨年后上一年的数据不再更新，因为我们只在1月1日统计一次
+    # 如果今天是每年1月1日，yesterday 是上一年的最后一天，需要统计上一年的完整数据
     if today.month == 1 and today.day == 1:
-        period_types.append('year')
-        last_year = stat_date.year  # stat_date 是上一年的最后一天
-        logger.info(f"今天是年初第一天，将统计上一年（{last_year}年）的数据")
-        logger.info(f"注意：跨年后，{last_year}年的数据将不再更新")
+        last_year_end = stat_date  # 上一年的最后一天
+        last_year_start = date(last_year_end.year, 1, 1)
+        additional_periods.append({
+            'type': 'year',
+            'period_start': last_year_start,
+            'period_end': date(last_year_end.year + 1, 1, 1),
+            'stat_date': last_year_end,
+            'description': f"上一年（{last_year_end.year}年）的完整数据"
+        })
+        logger.info(f"今天是年初第一天，将额外统计上一年（{last_year_end.year}年）的完整数据")
+        logger.info(f"注意：跨年后，{last_year_end.year}年的数据将不再更新")
     
-    return period_types
+    return period_types, additional_periods
 
 
 @celery.task
@@ -398,9 +513,14 @@ def calculate_all_instances_statistics():
     为所有启用的VOS实例计算统计（每天凌晨2点30分执行）
     智能判断需要统计的周期类型：
     - 日统计：每天都要统计前一天的数据
-    - 月统计：只在每月1日统计上个月的数据
-    - 季度统计：只在每季度第一天（1/4/7/10月1日）统计上一季度的数据
-    - 年度统计：只在每年1月1日统计上一年的数据，跨年后上一年的数据不再更新
+    - 月统计：每天都要统计当月1日到昨天的累计数据（进行中的月份）
+    - 季度统计：每天都要统计当季第一天到昨天的累计数据（进行中的季度）
+    - 年度统计：每天都要统计当年1月1日到昨天的累计数据（进行中的年份）
+    
+    在特定日期还会额外统计上一个完整周期的数据：
+    - 每月1日：额外统计上个月的完整数据
+    - 每季度第一天：额外统计上一季度的完整数据
+    - 每年1月1日：额外统计上一年的完整数据
     """
     db = SessionLocal()
     try:
@@ -413,8 +533,10 @@ def calculate_all_instances_statistics():
         logger.info(f"开始为所有VOS实例计算统计，日期={yesterday}")
         
         # 智能判断需要统计的周期类型
-        period_types = get_period_types_to_calculate(yesterday)
+        period_types, additional_periods = get_period_types_to_calculate(yesterday)
         logger.info(f"本次统计将计算以下周期类型: {period_types}")
+        if additional_periods:
+            logger.info(f"额外统计完整周期: {[p['description'] for p in additional_periods]}")
         
         results = []
         
@@ -424,15 +546,41 @@ def calculate_all_instances_statistics():
                 continue
             
             try:
+                # 1. 统计进行中的周期（当月/当季/当年）
                 result = calculate_cdr_statistics.delay(inst.id, yesterday, period_types)
                 results.append({
                     'instance_id': inst.id,
                     'instance_name': inst.name,
                     'task_id': result.id,
                     'statistic_date': str(yesterday),
-                    'period_types': period_types
+                    'period_types': period_types,
+                    'type': 'current_periods'
                 })
                 logger.info(f"✅ 已创建统计任务: {inst.name} (ID={inst.id}), 日期={yesterday}, 周期={period_types}")
+                
+                # 2. 统计额外完整周期（如果有）
+                for additional_period in additional_periods:
+                    # 使用自定义日期范围统计完整周期
+                    period_type = additional_period['type']
+                    period_stat_date = additional_period['stat_date']
+                    result = calculate_cdr_statistics_with_date_range.delay(
+                        inst.id, 
+                        period_stat_date, 
+                        [period_type],
+                        additional_period['period_start'],
+                        additional_period['period_end']
+                    )
+                    results.append({
+                        'instance_id': inst.id,
+                        'instance_name': inst.name,
+                        'task_id': result.id,
+                        'statistic_date': str(period_stat_date),
+                        'period_types': [period_type],
+                        'type': 'complete_period',
+                        'description': additional_period['description']
+                    })
+                    logger.info(f"✅ 已创建完整周期统计任务: {inst.name} (ID={inst.id}), {additional_period['description']}")
+                    
             except Exception as e:
                 logger.error(f"❌ 为实例 {inst.name} (ID={inst.id}) 创建统计任务失败: {e}", exc_info=True)
                 results.append({
@@ -443,7 +591,7 @@ def calculate_all_instances_statistics():
                 })
         
         success_count = sum(1 for r in results if 'task_id' in r)
-        logger.info(f"✅ 统计任务创建完成: 成功 {success_count}/{len(instances)} 个实例")
+        logger.info(f"✅ 统计任务创建完成: 成功 {success_count}/{len(instances) * (1 + len(additional_periods))} 个任务")
         
         return {
             'success': True,
@@ -452,6 +600,7 @@ def calculate_all_instances_statistics():
             'failed_count': len(instances) - success_count,
             'statistic_date': str(yesterday),
             'period_types': period_types,
+            'additional_periods': [p['description'] for p in additional_periods],
             'results': results
         }
     except Exception as e:
