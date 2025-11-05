@@ -339,7 +339,7 @@ export default function StatisticsPage() {
           {!currentVOS.enabled && <p className='text-sm text-gray-500 mt-2'>该实例未启用</p>}
           {!currentVOS.vos_uuid && <p className='text-sm text-gray-500 mt-2'>该实例缺少UUID</p>}
         </div>
-      ) : instanceStats.vos_statistics.length === 0 ? (
+      ) : !instanceStats.vos_statistics || instanceStats.vos_statistics.length === 0 ? (
         <div className='text-center py-16 bg-white bg-opacity-90 rounded-xl shadow-sm'>
           <p className='text-gray-500'>暂无统计数据，请先计算统计数据</p>
         </div>
