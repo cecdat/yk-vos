@@ -325,10 +325,40 @@ async def get_cdr_sync_progress(
         # 解析进度数据
         progress = json.loads(progress_data)
         
+        # 计算进度百分比
+        progress_percent = 0
+        status = progress.get('status', 'unknown')
+        
+        if status == 'task_created':
+            # 任务刚创建，还未开始执行
+            progress_percent = 0
+        elif status == 'completed':
+            # 所有任务已完成
+            progress_percent = 100
+        elif status == 'syncing':
+            # 正在同步中
+            total_tasks = progress.get('total_tasks')
+            completed_tasks = progress.get('completed_tasks', 0)
+            
+            if total_tasks and total_tasks > 0:
+                # 多任务模式：使用任务完成进度
+                # 计算已完成任务的进度 + 当前任务的进度
+                current_task_progress = 0
+                if progress.get('current_customer_index') and progress.get('total_customers'):
+                    # 当前任务的客户进度（按比例）
+                    current_task_progress = (progress.get('current_customer_index', 0) / progress.get('total_customers', 1)) * (1 / total_tasks)
+                
+                progress_percent = round((completed_tasks / total_tasks) * 100 + current_task_progress * 100, 1)
+                progress_percent = min(progress_percent, 100)  # 确保不超过100%
+            else:
+                # 单任务模式：使用客户进度
+                if progress.get('current_customer_index') and progress.get('total_customers'):
+                    progress_percent = round((progress.get('current_customer_index', 0) / progress.get('total_customers', 1)) * 100, 1)
+        
         return {
             'success': True,
-            'is_syncing': True,
-            'status': progress.get('status', 'unknown'),
+            'is_syncing': status != 'completed',
+            'status': status,
             'current_instance': progress.get('current_instance'),
             'current_instance_id': progress.get('current_instance_id'),
             'current_customer': progress.get('current_customer'),
@@ -336,7 +366,10 @@ async def get_cdr_sync_progress(
             'total_customers': progress.get('total_customers'),
             'synced_count': progress.get('synced_count', 0),
             'start_time': progress.get('start_time'),
-            'progress_percent': round((progress.get('current_customer_index', 0) / progress.get('total_customers', 1)) * 100, 1) if progress.get('total_customers') else 0
+            'progress_percent': progress_percent,
+            'total_tasks': progress.get('total_tasks'),
+            'completed_tasks': progress.get('completed_tasks', 0),
+            'message': progress.get('message')
         }
         
     except Exception as e:

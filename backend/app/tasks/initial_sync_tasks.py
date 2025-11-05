@@ -236,22 +236,40 @@ def sync_cdrs_for_single_day(instance_id: int, date_str: str):
             account = customer.account
             logger.info(f'    [{idx}/{len(customers)}] 同步客户: {account}')
             
-            # 更新同步进度
+            # 更新同步进度（保留总任务数信息）
             if r:
+                progress_key = 'cdr_sync_progress'
+                # 先获取现有进度，保留总任务数等信息
+                existing_progress = r.get(progress_key)
+                base_progress = {}
+                if existing_progress:
+                    try:
+                        base_progress = json.loads(existing_progress)
+                    except:
+                        pass
+                
+                # 更新当前任务进度，但保留总任务数等信息
+                progress_data = {
+                    'status': 'syncing',
+                    'current_instance': inst.name,
+                    'current_instance_id': inst.id,
+                    'current_customer': account,
+                    'current_customer_index': idx,
+                    'total_customers': len(customers),
+                    'synced_count': total_synced,
+                    'start_time': base_progress.get('start_time', datetime.now().isoformat()),
+                    'sync_date': date_str,
+                    # 保留总任务数信息
+                    'total_tasks': base_progress.get('total_tasks', 1),
+                    'completed_tasks': base_progress.get('completed_tasks', 0),
+                    'instances_count': base_progress.get('instances_count', 1),
+                    'days': base_progress.get('days', 1)
+                }
+                
                 r.setex(
-                    'cdr_sync_progress',
-                    3600,
-                    json.dumps({
-                        'status': 'syncing',
-                        'current_instance': inst.name,
-                        'current_instance_id': inst.id,
-                        'current_customer': account,
-                        'current_customer_index': idx,
-                        'total_customers': len(customers),
-                        'synced_count': total_synced,
-                        'start_time': datetime.now().isoformat(),
-                        'sync_date': date_str
-                    }, ensure_ascii=False)
+                    progress_key,
+                    3600 * 2,  # 2小时过期
+                    json.dumps(progress_data, ensure_ascii=False)
                 )
             
             # 查询该客户的话单
@@ -298,9 +316,31 @@ def sync_cdrs_for_single_day(instance_id: int, date_str: str):
             if idx < len(customers):
                 time.sleep(2)
         
-        # 清除同步进度
+        # 更新已完成任务数（不删除进度，保留总进度信息）
         if r:
-            r.delete('cdr_sync_progress')
+            progress_key = 'cdr_sync_progress'
+            completed_tasks_key = 'cdr_sync_completed_tasks'
+            
+            # 增加已完成任务数
+            completed_tasks = r.incr(completed_tasks_key)
+            
+            # 更新进度信息
+            existing_progress = r.get(progress_key)
+            if existing_progress:
+                try:
+                    progress_data = json.loads(existing_progress)
+                    progress_data['completed_tasks'] = completed_tasks
+                    progress_data['status'] = 'syncing'  # 保持syncing状态，直到所有任务完成
+                    
+                    # 如果所有任务都完成了，更新状态
+                    total_tasks = progress_data.get('total_tasks', 1)
+                    if completed_tasks >= total_tasks:
+                        progress_data['status'] = 'completed'
+                        progress_data['message'] = f'所有同步任务已完成（共{total_tasks}个任务）'
+                    
+                    r.setex(progress_key, 3600 * 2, json.dumps(progress_data, ensure_ascii=False))
+                except:
+                    pass
         
         logger.info(f'✅ VOS {inst.name} 在 {date_str} 话单同步完成: 共 {total_synced} 条')
         
@@ -315,9 +355,10 @@ def sync_cdrs_for_single_day(instance_id: int, date_str: str):
     
     except Exception as e:
         logger.exception(f'同步VOS实例 {instance_id} 在 {date_str} 的话单数据时发生错误: {e}')
-        # 清除同步进度（错误）
+        # 即使出错也增加已完成任务数（任务已结束）
         if r:
-            r.delete('cdr_sync_progress')
+            completed_tasks_key = 'cdr_sync_completed_tasks'
+            r.incr(completed_tasks_key)
         return {'success': False, 'message': str(e), 'date': date_str}
     finally:
         db.close()

@@ -139,12 +139,18 @@ def sync_all_instances_cdrs(days=None):
         
         # 更新同步进度：任务已创建
         if r:
+            # 初始化总进度信息
+            progress_key = 'cdr_sync_progress'
+            completed_tasks_key = 'cdr_sync_completed_tasks'
+            
+            # 设置总任务数和总进度信息
             r.setex(
-                'cdr_sync_progress',
+                progress_key,
                 3600 * 2,  # 2小时过期（多天同步可能需要更长时间）
                 json.dumps({
                     'status': 'task_created',
                     'total_tasks': task_count,
+                    'completed_tasks': 0,
                     'instances_count': len(instances),
                     'days': days,
                     'task_ids': task_ids,
@@ -152,6 +158,10 @@ def sync_all_instances_cdrs(days=None):
                     'message': f'已创建{task_count}个同步任务，正在按计划执行...'
                 }, ensure_ascii=False)
             )
+            
+            # 初始化已完成任务计数器
+            r.set(completed_tasks_key, 0)
+            r.expire(completed_tasks_key, 3600 * 2)
         
         return {
             'success': True,
