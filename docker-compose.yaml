@@ -21,11 +21,13 @@ services:
     networks:
       - vos-network
     restart: unless-stopped
+    # 使用 IPv4 地址进行健康检查，避免 IPv6 问题
     healthcheck:
-      test: ["CMD", "clickhouse-client", "--query", "SELECT 1"]
+      test: ["CMD", "clickhouse-client", "--host", "127.0.0.1", "--query", "SELECT 1"]
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 30s
     ulimits:
       nofile:
         soft: 262144

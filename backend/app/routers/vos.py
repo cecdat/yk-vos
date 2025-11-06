@@ -952,12 +952,52 @@ async def trigger_statistics_calculation(
     current_user: Annotated[User, Depends(get_current_user)] = None,
     db: Session = Depends(get_db)
 ):
-    """手动触发统计计算"""
+    """手动触发统计计算（需要认证）"""
     from app.tasks.cdr_statistics_tasks import calculate_cdr_statistics
     
     instance = db.query(VOSInstance).filter(VOSInstance.id == instance_id).first()
     if not instance:
         raise HTTPException(status_code=404, detail='Instance not found')
+    
+    stat_date = None
+    if statistic_date:
+        try:
+            stat_date = datetime.strptime(statistic_date, '%Y-%m-%d').date()
+        except ValueError:
+            raise HTTPException(status_code=400, detail='Invalid date format, should be YYYY-MM-DD')
+    
+    period_types_list = [p.strip() for p in period_types.split(',') if p.strip() in ['day', 'month', 'quarter', 'year']]
+    
+    result = calculate_cdr_statistics.delay(instance_id, stat_date, period_types_list)
+    
+    return {
+        'message': '统计任务已触发',
+        'task_id': result.id,
+        'instance_id': instance_id,
+        'instance_name': instance.name
+    }
+
+
+@router.post('/instances/{instance_id}/statistics/calculate/public')
+async def trigger_statistics_calculation_public(
+    instance_id: int,
+    statistic_date: Optional[str] = Query(None, description='统计日期 YYYY-MM-DD，默认昨天'),
+    period_types: Optional[str] = Query('day', description='统计周期类型，逗号分隔：day,month,quarter,year'),
+    db: Session = Depends(get_db)
+):
+    """
+    手动触发统计计算（免token，用于定时任务或外部调用）
+    
+    注意：此接口不需要认证，请确保在安全环境中使用
+    """
+    from app.tasks.cdr_statistics_tasks import calculate_cdr_statistics
+    
+    instance = db.query(VOSInstance).filter(VOSInstance.id == instance_id).first()
+    if not instance:
+        raise HTTPException(status_code=404, detail='Instance not found')
+    
+    if not instance.enabled:
+        raise HTTPException(status_code=400, detail='Instance is disabled')
     
     stat_date = None
     if statistic_date:
