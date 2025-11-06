@@ -75,7 +75,7 @@ class ClickHouseDB:
                     if val is None:
                         if col in ['flow_no', 'account_name', 'account', 'caller_e164', 
                                    'caller_access_e164', 'callee_e164', 'callee_access_e164',
-                                   'end_reason', 'callee_gateway', 'callee_ip', 'raw']:
+                                   'end_reason', 'caller_gateway', 'callee_gateway', 'callee_ip', 'raw']:
                             val = ''
                         elif col in ['hold_time', 'fee_time', 'end_direction', 'vos_id', 'id']:
                             val = 0

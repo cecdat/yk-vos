@@ -71,7 +71,8 @@ class GatewayCdrStatistics(Base):
     id = Column(Integer, primary_key=True, index=True)
     vos_id = Column(Integer, nullable=False, index=True)
     vos_uuid = Column(UUID(as_uuid=True), nullable=False, index=True)
-    callee_gateway = Column(String(256), nullable=False, index=True, comment='落地网关')
+    gateway_name = Column(String(256), nullable=False, index=True, comment='网关名称')
+    gateway_type = Column(String(20), nullable=False, index=True, comment='网关类型：caller（对接网关）或callee（落地网关）')
     statistic_date = Column(Date, nullable=False, index=True)
     period_type = Column(String(10), nullable=False, index=True)
     
@@ -85,7 +86,7 @@ class GatewayCdrStatistics(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     __table_args__ = (
-        UniqueConstraint('vos_id', 'vos_uuid', 'callee_gateway', 'statistic_date', 'period_type', name='uq_gateway_cdr_statistics'),
-        Index('idx_gateway_cdr_statistics_composite', 'vos_uuid', 'callee_gateway', 'statistic_date', 'period_type'),
+        UniqueConstraint('vos_id', 'vos_uuid', 'gateway_name', 'gateway_type', 'statistic_date', 'period_type', name='uq_gateway_cdr_statistics'),
+        Index('idx_gateway_cdr_statistics_composite', 'vos_uuid', 'gateway_name', 'gateway_type', 'statistic_date', 'period_type'),
     )
 

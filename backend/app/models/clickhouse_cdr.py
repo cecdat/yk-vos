@@ -109,7 +109,8 @@ class ClickHouseCDR:
                 'fee': safe_float(cdr.get('fee')),
                 'end_reason': safe_str(cdr.get('endReason')),
                 'end_direction': safe_int(cdr.get('endDirection')),
-                'callee_gateway': safe_str(cdr.get('calleeGateway')),
+                'caller_gateway': safe_str(cdr.get('callerGateway') or ''),  # 对接网关（主叫网关）
+                'callee_gateway': safe_str(cdr.get('calleeGateway') or ''),  # 落地网关（被叫网关）
                 'callee_ip': safe_str(cdr.get('calleeip')),
                 'raw': str(cdr),
                 'created_at': datetime.now(),

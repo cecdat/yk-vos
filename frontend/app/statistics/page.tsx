@@ -22,6 +22,8 @@ interface AccountStatistics extends Statistics {
 
 interface GatewayStatistics extends Statistics {
   gateway_name: string
+  gateway_type: 'caller' | 'callee'
+  gateway_type_label: string
 }
 
 interface InstanceStatistics {
@@ -367,11 +369,12 @@ export default function StatisticsPage() {
               .sort((a, b) => b.value - a.value)
               .slice(0, 10)
             
-            // 网关费用分布（Top 10）
+            // 网关费用分布（Top 10，区分对接网关和落地网关）
             const gatewayMap = new Map<string, number>()
             gatewayStats.forEach((stat: GatewayStatistics) => {
-              const current = gatewayMap.get(stat.gateway_name) || 0
-              gatewayMap.set(stat.gateway_name, current + stat.total_fee)
+              const key = `${stat.gateway_name} (${stat.gateway_type_label})`
+              const current = gatewayMap.get(key) || 0
+              gatewayMap.set(key, current + stat.total_fee)
             })
             const gatewayPieData = Array.from(gatewayMap.entries())
               .map(([name, value]) => ({ name, value }))
@@ -490,6 +493,58 @@ export default function StatisticsPage() {
                       <p className='mt-2 text-sm text-gray-500 text-center'>显示前20条，共 {vosStats.length} 条记录</p>
                     )}
                   </div>
+
+                  {/* 网关统计表格（对接网关和落地网关） */}
+                  {gatewayStats.length > 0 && (
+                    <div className='mb-6'>
+                      <h3 className='text-lg font-bold mb-4'>网关统计（{periodLabels[periodType]}）</h3>
+                      <div className='overflow-x-auto'>
+                        <table className='min-w-full divide-y divide-gray-200'>
+                          <thead className='bg-gray-50'>
+                            <tr>
+                              <th className='px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase'>网关名称</th>
+                              <th className='px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase'>网关类型</th>
+                              <th className='px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase'>日期</th>
+                              <th className='px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase'>总费用</th>
+                              <th className='px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase'>通话时长</th>
+                              <th className='px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase'>总通话数</th>
+                              <th className='px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase'>接通数</th>
+                              <th className='px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase'>接通率</th>
+                            </tr>
+                          </thead>
+                          <tbody className='bg-white divide-y divide-gray-200'>
+                            {gatewayStats.slice(0, 50).map((stat, idx) => (
+                              <tr key={idx}>
+                                <td className='px-6 py-4 whitespace-nowrap text-sm font-medium'>{stat.gateway_name}</td>
+                                <td className='px-6 py-4 whitespace-nowrap text-sm'>
+                                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                                    stat.gateway_type === 'caller' 
+                                      ? 'bg-blue-100 text-blue-800' 
+                                      : 'bg-green-100 text-green-800'
+                                  }`}>
+                                    {stat.gateway_type_label}
+                                  </span>
+                                </td>
+                                <td className='px-6 py-4 whitespace-nowrap text-sm'>{stat.date}</td>
+                                <td className='px-6 py-4 whitespace-nowrap text-sm font-medium text-green-600'>
+                                  {formatFee(stat.total_fee)}
+                                </td>
+                                <td className='px-6 py-4 whitespace-nowrap text-sm'>{formatDuration(stat.total_duration)}</td>
+                                <td className='px-6 py-4 whitespace-nowrap text-sm'>{stat.total_calls}</td>
+                                <td className='px-6 py-4 whitespace-nowrap text-sm'>{stat.connected_calls}</td>
+                                <td className='px-6 py-4 whitespace-nowrap text-sm font-medium'>
+                                  {stat.connection_rate.toFixed(1)}%
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                      {gatewayStats.length > 50 && (
+                        <p className='mt-2 text-sm text-gray-500 text-center'>显示前50条，共 {gatewayStats.length} 条记录</p>
+                      )}
+                    </div>
+                  )}
                 </div>
               </Card>
             )

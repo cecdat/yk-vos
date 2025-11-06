@@ -86,7 +86,27 @@ def calculate_cdr_statistics(vos_id: int, statistic_date: date = None, period_ty
         
         vos_uuid_str = str(instance.vos_uuid)
         
-        logger.info(f"开始统计VOS节点 {instance.name} (ID={vos_id}, UUID={vos_uuid_str}) 的话单数据，日期={statistic_date}, 周期={period_types}")
+        logger.info(f"📊 开始统计VOS节点 {instance.name} (ID={vos_id}, UUID={vos_uuid_str})")
+        logger.info(f"   统计日期: {statistic_date}, 周期类型: {period_types}")
+        
+        # 检查ClickHouse中是否有数据
+        try:
+            check_query = f"""
+                SELECT count() as total
+                FROM cdrs
+                WHERE vos_id = {vos_id}
+                  AND vos_uuid = '{vos_uuid_str}'
+                  AND toDate(start) >= toDate('{statistic_date - timedelta(days=7)}')
+                  AND toDate(start) <= toDate('{statistic_date}')
+            """
+            ch_result = ch_db.execute(check_query)
+            if ch_result and ch_result[0]:
+                total_cdrs = ch_result[0][0] or 0
+                logger.info(f"   ClickHouse中最近7天的话单数量: {total_cdrs}")
+                if total_cdrs == 0:
+                    logger.warning(f"   ⚠️ ClickHouse中没有找到话单数据，可能还没有同步话单")
+        except Exception as e:
+            logger.warning(f"   ⚠️ 检查ClickHouse数据时出错: {e}")
         
         results = {
             'vos_statistics': 0,
@@ -97,25 +117,49 @@ def calculate_cdr_statistics(vos_id: int, statistic_date: date = None, period_ty
         for period_type in period_types:
             start_date, end_date = get_period_dates(statistic_date, period_type)
             
-            logger.info(f"  统计周期: {period_type}, 日期范围: {start_date} 到 {end_date}")
+            logger.info(f"  📈 统计周期: {period_type}, 日期范围: {start_date} 到 {end_date}")
             
-            # 1. 统计VOS节点级别
-            vos_stats = calculate_vos_statistics(ch_db, vos_id, vos_uuid_str, start_date, end_date, statistic_date, period_type)
-            if vos_stats:
-                save_vos_statistics(db, vos_id, vos_uuid_str, statistic_date, period_type, vos_stats)
-                results['vos_statistics'] += 1
-            
-            # 2. 统计账户级别
-            account_stats = calculate_account_statistics(ch_db, vos_id, vos_uuid_str, start_date, end_date, statistic_date, period_type)
-            for account_name, stats in account_stats.items():
-                save_account_statistics(db, vos_id, vos_uuid_str, account_name, statistic_date, period_type, stats)
-                results['account_statistics'] += 1
-            
-            # 3. 统计网关级别
-            gateway_stats = calculate_gateway_statistics(ch_db, vos_id, vos_uuid_str, start_date, end_date, statistic_date, period_type)
-            for gateway_name, stats in gateway_stats.items():
-                save_gateway_statistics(db, vos_id, vos_uuid_str, gateway_name, statistic_date, period_type, stats)
-                results['gateway_statistics'] += 1
+            try:
+                # 1. 统计VOS节点级别
+                logger.info(f"    计算VOS节点级别统计...")
+                vos_stats = calculate_vos_statistics(ch_db, vos_id, vos_uuid_str, start_date, end_date, statistic_date, period_type)
+                if vos_stats:
+                    if vos_stats.get('total_calls', 0) > 0:
+                        save_vos_statistics(db, vos_id, vos_uuid_str, statistic_date, period_type, vos_stats)
+                        results['vos_statistics'] += 1
+                        logger.info(f"    ✅ VOS节点统计: 通话数={vos_stats.get('total_calls', 0)}, 费用={vos_stats.get('total_fee', 0)}")
+                    else:
+                        logger.info(f"    ⚠️ VOS节点统计: 没有通话数据，跳过保存")
+                else:
+                    logger.warning(f"    ⚠️ VOS节点统计: 返回空结果")
+                
+                # 2. 统计账户级别
+                logger.info(f"    计算账户级别统计...")
+                account_stats = calculate_account_statistics(ch_db, vos_id, vos_uuid_str, start_date, end_date, statistic_date, period_type)
+                account_count = len(account_stats)
+                if account_count > 0:
+                    for account_name, stats in account_stats.items():
+                        save_account_statistics(db, vos_id, vos_uuid_str, account_name, statistic_date, period_type, stats)
+                        results['account_statistics'] += 1
+                    logger.info(f"    ✅ 账户统计: {account_count} 个账户")
+                else:
+                    logger.info(f"    ⚠️ 账户统计: 没有账户数据")
+                
+                # 3. 统计网关级别（对接网关和落地网关）
+                logger.info(f"    计算网关级别统计...")
+                gateway_stats = calculate_gateway_statistics(ch_db, vos_id, vos_uuid_str, start_date, end_date, statistic_date, period_type)
+                gateway_count = len(gateway_stats)
+                if gateway_count > 0:
+                    for (gateway_name, gateway_type), stats in gateway_stats.items():
+                        save_gateway_statistics(db, vos_id, vos_uuid_str, gateway_name, gateway_type, statistic_date, period_type, stats)
+                        results['gateway_statistics'] += 1
+                    logger.info(f"    ✅ 网关统计: {gateway_count} 个网关（对接+落地）")
+                else:
+                    logger.info(f"    ⚠️ 网关统计: 没有网关数据")
+                    
+            except Exception as e:
+                logger.error(f"    ❌ 统计周期 {period_type} 时出错: {e}", exc_info=True)
+                continue
         
         db.commit()
         logger.info(f"✅ VOS节点 {instance.name} 统计完成: {results}")
@@ -189,10 +233,10 @@ def calculate_cdr_statistics_with_date_range(
                 save_account_statistics(db, vos_id, vos_uuid_str, account_name, statistic_date, period_type, stats)
                 results['account_statistics'] += 1
             
-            # 3. 统计网关级别
+            # 3. 统计网关级别（对接网关和落地网关）
             gateway_stats = calculate_gateway_statistics(ch_db, vos_id, vos_uuid_str, start_date, end_date, statistic_date, period_type)
-            for gateway_name, stats in gateway_stats.items():
-                save_gateway_statistics(db, vos_id, vos_uuid_str, gateway_name, statistic_date, period_type, stats)
+            for (gateway_name, gateway_type), stats in gateway_stats.items():
+                save_gateway_statistics(db, vos_id, vos_uuid_str, gateway_name, gateway_type, statistic_date, period_type, stats)
                 results['gateway_statistics'] += 1
         
         db.commit()
@@ -293,10 +337,11 @@ def calculate_account_statistics(ch_db, vos_id: int, vos_uuid: str, start_date: 
 
 
 def calculate_gateway_statistics(ch_db, vos_id: int, vos_uuid: str, start_date: date, end_date: date, stat_date: date, period_type: str):
-    """统计网关级别的话单数据"""
+    """统计网关级别的话单数据（同时统计对接网关和落地网关）"""
     stats_dict = {}
     try:
-        query = f"""
+        # 统计落地网关（callee_gateway）
+        callee_query = f"""
             SELECT 
                 callee_gateway,
                 count() as total_calls,
@@ -312,7 +357,7 @@ def calculate_gateway_statistics(ch_db, vos_id: int, vos_uuid: str, start_date: 
             GROUP BY callee_gateway
         """
         
-        result = ch_db.execute(query)
+        result = ch_db.execute(callee_query)
         if result:
             for row in result:
                 gateway_name = row[0] or ''
@@ -326,7 +371,54 @@ def calculate_gateway_statistics(ch_db, vos_id: int, vos_uuid: str, start_date: 
                 
                 connection_rate = calculate_connection_rate(total_calls, connected_calls)
                 
-                stats_dict[gateway_name] = {
+                # 使用 (gateway_name, gateway_type) 作为键
+                key = (gateway_name, 'callee')
+                stats_dict[key] = {
+                    'gateway_name': gateway_name,
+                    'gateway_type': 'callee',
+                    'total_calls': total_calls,
+                    'connected_calls': connected_calls,
+                    'total_duration': total_duration,
+                    'total_fee': total_fee,
+                    'connection_rate': connection_rate
+                }
+        
+        # 统计对接网关（caller_gateway）
+        caller_query = f"""
+            SELECT 
+                caller_gateway,
+                count() as total_calls,
+                countIf(hold_time > 0) as connected_calls,
+                sumIf(hold_time, hold_time > 0) as total_duration,
+                sum(fee) as total_fee
+            FROM cdrs
+            WHERE vos_id = {vos_id}
+              AND vos_uuid = '{vos_uuid}'
+              AND toDate(start) >= toDate('{start_date}')
+              AND toDate(start) < toDate('{end_date}')
+              AND caller_gateway != ''
+            GROUP BY caller_gateway
+        """
+        
+        result = ch_db.execute(caller_query)
+        if result:
+            for row in result:
+                gateway_name = row[0] or ''
+                if not gateway_name:
+                    continue
+                
+                total_calls = row[1] or 0
+                connected_calls = row[2] or 0
+                total_duration = row[3] or 0
+                total_fee = float(row[4] or 0)
+                
+                connection_rate = calculate_connection_rate(total_calls, connected_calls)
+                
+                # 使用 (gateway_name, gateway_type) 作为键
+                key = (gateway_name, 'caller')
+                stats_dict[key] = {
+                    'gateway_name': gateway_name,
+                    'gateway_type': 'caller',
                     'total_calls': total_calls,
                     'connected_calls': connected_calls,
                     'total_duration': total_duration,
@@ -405,12 +497,13 @@ def save_account_statistics(db, vos_id: int, vos_uuid: str, account_name: str, s
         db.add(existing)
 
 
-def save_gateway_statistics(db, vos_id: int, vos_uuid: str, gateway_name: str, stat_date: date, period_type: str, stats: dict):
-    """保存网关统计"""
+def save_gateway_statistics(db, vos_id: int, vos_uuid: str, gateway_name: str, gateway_type: str, stat_date: date, period_type: str, stats: dict):
+    """保存网关统计（支持对接网关和落地网关）"""
     existing = db.query(GatewayCdrStatistics).filter(
         GatewayCdrStatistics.vos_id == vos_id,
         GatewayCdrStatistics.vos_uuid == vos_uuid,
-        GatewayCdrStatistics.callee_gateway == gateway_name,
+        GatewayCdrStatistics.gateway_name == gateway_name,
+        GatewayCdrStatistics.gateway_type == gateway_type,
         GatewayCdrStatistics.statistic_date == stat_date,
         GatewayCdrStatistics.period_type == period_type
     ).first()
@@ -427,7 +520,8 @@ def save_gateway_statistics(db, vos_id: int, vos_uuid: str, gateway_name: str, s
         existing = GatewayCdrStatistics(
             vos_id=vos_id,
             vos_uuid=uuid.UUID(vos_uuid),
-            callee_gateway=gateway_name,
+            gateway_name=gateway_name,
+            gateway_type=gateway_type,
             statistic_date=stat_date,
             period_type=period_type,
             total_fee=Decimal(str(stats['total_fee'])),
@@ -507,8 +601,8 @@ def get_period_types_to_calculate(stat_date: date):
     return period_types, additional_periods
 
 
-@celery.task
-def calculate_all_instances_statistics():
+@celery.task(bind=True)
+def calculate_all_instances_statistics(self):
     """
     为所有启用的VOS实例计算统计（每天凌晨2点30分执行）
     智能判断需要统计的周期类型：
@@ -522,31 +616,42 @@ def calculate_all_instances_statistics():
     - 每季度第一天：额外统计上一季度的完整数据
     - 每年1月1日：额外统计上一年的完整数据
     """
+    logger.info("=" * 80)
+    logger.info("📊 开始执行统计任务: calculate_all_instances_statistics")
+    logger.info("=" * 80)
+    
     db = SessionLocal()
     try:
         instances = db.query(VOSInstance).filter(VOSInstance.enabled == True).all()
+        logger.info(f"查询到 {len(instances)} 个启用的VOS实例")
+        
         if not instances:
-            logger.info('没有启用的VOS实例，跳过统计任务')
+            logger.warning('⚠️ 没有启用的VOS实例，跳过统计任务')
             return {'success': True, 'message': '没有VOS实例需要统计', 'instances_count': 0}
         
         yesterday = date.today() - timedelta(days=1)
-        logger.info(f"开始为所有VOS实例计算统计，日期={yesterday}")
+        logger.info(f"📅 统计日期: {yesterday}")
         
         # 智能判断需要统计的周期类型
         period_types, additional_periods = get_period_types_to_calculate(yesterday)
-        logger.info(f"本次统计将计算以下周期类型: {period_types}")
+        logger.info(f"📈 本次统计将计算以下周期类型: {period_types}")
         if additional_periods:
-            logger.info(f"额外统计完整周期: {[p['description'] for p in additional_periods]}")
+            logger.info(f"📊 额外统计完整周期: {[p['description'] for p in additional_periods]}")
         
         results = []
+        skipped_count = 0
         
         for inst in instances:
+            logger.info(f"处理VOS实例: {inst.name} (ID={inst.id}, UUID={inst.vos_uuid})")
+            
             if not inst.vos_uuid:
-                logger.warning(f"VOS实例 {inst.name} (ID={inst.id}) 没有UUID，跳过统计")
+                logger.warning(f"⚠️ VOS实例 {inst.name} (ID={inst.id}) 没有UUID，跳过统计")
+                skipped_count += 1
                 continue
             
             try:
                 # 1. 统计进行中的周期（当月/当季/当年）
+                logger.info(f"  创建统计任务: {inst.name}, 日期={yesterday}, 周期={period_types}")
                 result = calculate_cdr_statistics.delay(inst.id, yesterday, period_types)
                 results.append({
                     'instance_id': inst.id,
@@ -556,7 +661,7 @@ def calculate_all_instances_statistics():
                     'period_types': period_types,
                     'type': 'current_periods'
                 })
-                logger.info(f"✅ 已创建统计任务: {inst.name} (ID={inst.id}), 日期={yesterday}, 周期={period_types}")
+                logger.info(f"  ✅ 已创建统计任务: {inst.name} (ID={inst.id}), 任务ID={result.id}")
                 
                 # 2. 统计额外完整周期（如果有）
                 for additional_period in additional_periods:
@@ -579,32 +684,32 @@ def calculate_all_instances_statistics():
                         'type': 'complete_period',
                         'description': additional_period['description']
                     })
-                    logger.info(f"✅ 已创建完整周期统计任务: {inst.name} (ID={inst.id}), {additional_period['description']}")
-                    
+                    logger.info(f"  ✅ 已创建额外统计任务: {inst.name} (ID={inst.id}), 任务ID={result.id}")
+            
             except Exception as e:
-                logger.error(f"❌ 为实例 {inst.name} (ID={inst.id}) 创建统计任务失败: {e}", exc_info=True)
-                results.append({
-                    'instance_id': inst.id,
-                    'instance_name': inst.name,
-                    'success': False,
-                    'error': str(e)
-                })
+                logger.error(f"  ❌ 为VOS实例 {inst.name} (ID={inst.id}) 创建统计任务失败: {e}", exc_info=True)
+                skipped_count += 1
+                continue
         
-        success_count = sum(1 for r in results if 'task_id' in r)
-        logger.info(f"✅ 统计任务创建完成: 成功 {success_count}/{len(instances) * (1 + len(additional_periods))} 个任务")
+        logger.info("=" * 80)
+        logger.info(f"✅ 统计任务创建完成:")
+        logger.info(f"   - 总实例数: {len(instances)}")
+        logger.info(f"   - 成功创建任务: {len(results)}")
+        logger.info(f"   - 跳过实例数: {skipped_count}")
+        logger.info("=" * 80)
         
         return {
-            'success': True,
+            'success': True, 
+            'results': results, 
             'instances_count': len(instances),
-            'success_count': success_count,
-            'failed_count': len(instances) - success_count,
-            'statistic_date': str(yesterday),
-            'period_types': period_types,
-            'additional_periods': [p['description'] for p in additional_periods],
-            'results': results
+            'tasks_created': len(results),
+            'skipped_count': skipped_count
         }
+        
     except Exception as e:
-        logger.error(f"❌ 创建统计任务失败: {e}", exc_info=True)
+        logger.error("=" * 80)
+        logger.error(f"❌ 统计任务执行失败: {e}", exc_info=True)
+        logger.error("=" * 80)
         return {'success': False, 'error': str(e)}
     finally:
         db.close()

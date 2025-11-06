@@ -924,7 +924,9 @@ async def get_instance_statistics(
         ],
         'gateway_statistics': [
             {
-                'gateway_name': stat.callee_gateway,
+                'gateway_name': stat.gateway_name,
+                'gateway_type': stat.gateway_type,
+                'gateway_type_label': '对接网关' if stat.gateway_type == 'caller' else '落地网关',
                 'date': str(stat.statistic_date),
                 'total_fee': float(stat.total_fee),
                 'total_duration': stat.total_duration,

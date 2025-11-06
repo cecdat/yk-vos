@@ -40,7 +40,8 @@ CREATE TABLE IF NOT EXISTS cdrs
     end_direction UInt8 COMMENT '挂断方向（0主叫 1被叫 2服务器）',
     
     -- 网关和IP
-    callee_gateway String COMMENT '主叫经由路由',
+    caller_gateway String COMMENT '对接网关（主叫网关）',
+    callee_gateway String COMMENT '落地网关（被叫网关）',
     callee_ip String COMMENT '被叫IP地址',
     
     -- 原始数据
@@ -60,7 +61,8 @@ COMMENT '话单记录表 - 按月分区，自动去重';
 ALTER TABLE cdrs ADD INDEX IF NOT EXISTS idx_account account TYPE minmax GRANULARITY 4;
 ALTER TABLE cdrs ADD INDEX IF NOT EXISTS idx_caller caller_e164 TYPE minmax GRANULARITY 4;
 ALTER TABLE cdrs ADD INDEX IF NOT EXISTS idx_callee callee_access_e164 TYPE minmax GRANULARITY 4;
-ALTER TABLE cdrs ADD INDEX IF NOT EXISTS idx_gateway callee_gateway TYPE minmax GRANULARITY 4;
+ALTER TABLE cdrs ADD INDEX IF NOT EXISTS idx_caller_gateway caller_gateway TYPE minmax GRANULARITY 4;
+ALTER TABLE cdrs ADD INDEX IF NOT EXISTS idx_callee_gateway callee_gateway TYPE minmax GRANULARITY 4;
 ALTER TABLE cdrs ADD INDEX IF NOT EXISTS idx_vos_uuid vos_uuid TYPE minmax GRANULARITY 4;
 
 -- 创建物化视图 - 按天统计（包含 vos_uuid）
@@ -97,8 +99,8 @@ AS SELECT
 FROM cdrs
 GROUP BY vos_id, vos_uuid, account;
 
--- 创建物化视图 - 网关统计（包含 vos_uuid）
-CREATE MATERIALIZED VIEW IF NOT EXISTS cdrs_gateway_stats
+-- 创建物化视图 - 落地网关统计（包含 vos_uuid）
+CREATE MATERIALIZED VIEW IF NOT EXISTS cdrs_callee_gateway_stats
 ENGINE = SummingMergeTree()
 PARTITION BY toYYYYMM(call_date)
 ORDER BY (vos_id, vos_uuid, call_date, callee_gateway)
@@ -113,4 +115,21 @@ AS SELECT
     sum(fee) AS total_fee
 FROM cdrs
 GROUP BY vos_id, vos_uuid, call_date, callee_gateway;
+
+-- 创建物化视图 - 对接网关统计（包含 vos_uuid）
+CREATE MATERIALIZED VIEW IF NOT EXISTS cdrs_caller_gateway_stats
+ENGINE = SummingMergeTree()
+PARTITION BY toYYYYMM(call_date)
+ORDER BY (vos_id, vos_uuid, call_date, caller_gateway)
+POPULATE
+AS SELECT
+    vos_id,
+    vos_uuid,
+    toDate(start) AS call_date,
+    caller_gateway,
+    count() AS call_count,
+    sum(hold_time) AS total_duration,
+    sum(fee) AS total_fee
+FROM cdrs
+GROUP BY vos_id, vos_uuid, call_date, caller_gateway;
 
