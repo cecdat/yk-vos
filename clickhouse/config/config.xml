@@ -1,0 +1,34 @@
+<?xml version="1.0"?>
+<clickhouse>
+    <!-- 只监听 IPv4 地址，避免 IPv6 监听失败 -->
+    <listen_host>0.0.0.0</listen_host>
+    
+    <!-- 日志配置 -->
+    <logger>
+        <level>information</level>
+        <log>/var/log/clickhouse-server/clickhouse-server.log</log>
+        <errorlog>/var/log/clickhouse-server/clickhouse-server.err.log</errorlog>
+        <size>1000M</size>
+        <count>10</count>
+    </logger>
+    
+    <!-- 数据路径 -->
+    <path>/var/lib/clickhouse/</path>
+    <tmp_path>/var/lib/clickhouse/tmp/</tmp_path>
+    
+    <!-- 用户配置 -->
+    <users_config>users.xml</users_config>
+    
+    <!-- 时区 -->
+    <timezone>Asia/Shanghai</timezone>
+    
+    <!-- 最大连接数 -->
+    <max_connections>4096</max_connections>
+    
+    <!-- 查询超时 -->
+    <max_execution_time>300</max_execution_time>
+    
+    <!-- 内存限制 -->
+    <max_server_memory_usage_to_ram_ratio>0.9</max_server_memory_usage_to_ram_ratio>
+</clickhouse>
+

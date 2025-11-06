@@ -14,6 +14,7 @@ services:
     volumes:
       - ./data/clickhouse:/var/lib/clickhouse
       - ./clickhouse/init:/docker-entrypoint-initdb.d
+      - ./clickhouse/config:/etc/clickhouse-server/config.d
     ports:
       - "8123:8123"  # HTTP 接口
       - "9000:9000"  # Native 接口
