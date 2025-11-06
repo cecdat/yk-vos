@@ -495,7 +495,7 @@ export default function StatisticsPage() {
                   </div>
 
                   {/* 网关统计表格（拆分为对接网关和落地网关两个独立表格） */}
-                  {gatewayStats.length > 0 && (() => {
+                  {(() => {
                     // 按网关名称和类型汇总数据
                     const gatewayMap = new Map<string, {
                       gateway_name: string
@@ -561,8 +561,14 @@ export default function StatisticsPage() {
                         return (
                           <div className='mb-6'>
                             <h3 className='text-lg font-bold mb-4'>{title}（{periodLabels[periodType]}）</h3>
-                            <div className='text-center py-8 bg-gray-50 rounded-lg'>
-                              <p className='text-gray-500'>暂无{title}数据</p>
+                            <div className='overflow-x-auto'>
+                              <div className='text-center py-12 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300'>
+                                <svg className='mx-auto h-12 w-12 text-gray-400 mb-4' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
+                                  <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z' />
+                                </svg>
+                                <p className='text-gray-500 text-lg font-medium'>暂无{title}数据</p>
+                                <p className='text-gray-400 text-sm mt-2'>请先计算统计数据或检查数据范围</p>
+                              </div>
                             </div>
                           </div>
                         )
