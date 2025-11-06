@@ -494,7 +494,7 @@ export default function StatisticsPage() {
                     )}
                   </div>
 
-                  {/* 网关统计表格（对接网关和落地网关，按网关汇总） */}
+                  {/* 网关统计表格（拆分为对接网关和落地网关两个独立表格） */}
                   {gatewayStats.length > 0 && (() => {
                     // 按网关名称和类型汇总数据
                     const gatewayMap = new Map<string, {
@@ -551,96 +551,114 @@ export default function StatisticsPage() {
                       }
                     }).sort((a, b) => b.total_fee - a.total_fee) // 按费用降序排序
                     
-                    return (
-                      <div className='mb-6'>
-                        <h3 className='text-lg font-bold mb-4'>网关统计汇总（{periodLabels[periodType]}）</h3>
-                        <div className='overflow-x-auto'>
-                          <table className='min-w-full divide-y divide-gray-200'>
-                            <thead className='bg-gray-50'>
-                              <tr>
-                                <th className='px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase'>网关名称</th>
-                                <th className='px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase'>网关类型</th>
-                                <th className='px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase'>费用总计</th>
-                                <th className='px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase'>通话时长总计</th>
-                                <th className='px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase'>总通话数</th>
-                                <th className='px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase'>接通数</th>
-                                <th className='px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase'>接通率</th>
-                                <th className='px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase'>平均通话时长</th>
-                              </tr>
-                            </thead>
-                            <tbody className='bg-white divide-y divide-gray-200'>
-                              {aggregatedStats.map((gateway, idx) => (
-                                <tr key={idx} className='hover:bg-gray-50'>
-                                  <td className='px-6 py-4 whitespace-nowrap text-sm font-medium'>{gateway.gateway_name}</td>
-                                  <td className='px-6 py-4 whitespace-nowrap text-sm'>
-                                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                                      gateway.gateway_type === 'caller' 
-                                        ? 'bg-blue-100 text-blue-800' 
-                                        : 'bg-green-100 text-green-800'
-                                    }`}>
-                                      {gateway.gateway_type_label}
-                                    </span>
+                    // 拆分为对接网关和落地网关
+                    const callerGateways = aggregatedStats.filter(g => g.gateway_type === 'caller')
+                    const calleeGateways = aggregatedStats.filter(g => g.gateway_type === 'callee')
+                    
+                    // 渲染单个网关表格的辅助函数
+                    const renderGatewayTable = (gateways: typeof aggregatedStats, title: string, type: 'caller' | 'callee') => {
+                      if (gateways.length === 0) {
+                        return (
+                          <div className='mb-6'>
+                            <h3 className='text-lg font-bold mb-4'>{title}（{periodLabels[periodType]}）</h3>
+                            <div className='text-center py-8 bg-gray-50 rounded-lg'>
+                              <p className='text-gray-500'>暂无{title}数据</p>
+                            </div>
+                          </div>
+                        )
+                      }
+                      
+                      return (
+                        <div className='mb-6'>
+                          <h3 className='text-lg font-bold mb-4'>{title}（{periodLabels[periodType]}）</h3>
+                          <div className='overflow-x-auto'>
+                            <table className='min-w-full divide-y divide-gray-200'>
+                              <thead className='bg-gray-50'>
+                                <tr>
+                                  <th className='px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase'>网关名称</th>
+                                  <th className='px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase'>费用总计</th>
+                                  <th className='px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase'>通话时长总计</th>
+                                  <th className='px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase'>总通话数</th>
+                                  <th className='px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase'>接通数</th>
+                                  <th className='px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase'>接通率</th>
+                                  <th className='px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase'>平均通话时长</th>
+                                </tr>
+                              </thead>
+                              <tbody className='bg-white divide-y divide-gray-200'>
+                                {gateways.map((gateway, idx) => (
+                                  <tr key={idx} className='hover:bg-gray-50'>
+                                    <td className='px-6 py-4 whitespace-nowrap text-sm font-medium'>{gateway.gateway_name}</td>
+                                    <td className='px-6 py-4 whitespace-nowrap text-sm font-medium text-green-600 text-right'>
+                                      {formatFee(gateway.total_fee)}
+                                    </td>
+                                    <td className='px-6 py-4 whitespace-nowrap text-sm text-right'>
+                                      {formatDuration(gateway.total_duration)}
+                                    </td>
+                                    <td className='px-6 py-4 whitespace-nowrap text-sm text-right'>
+                                      {gateway.total_calls.toLocaleString()}
+                                    </td>
+                                    <td className='px-6 py-4 whitespace-nowrap text-sm text-right'>
+                                      {gateway.connected_calls.toLocaleString()}
+                                    </td>
+                                    <td className='px-6 py-4 whitespace-nowrap text-sm font-medium text-right'>
+                                      {gateway.connection_rate.toFixed(2)}%
+                                    </td>
+                                    <td className='px-6 py-4 whitespace-nowrap text-sm text-right'>
+                                      {formatDuration(gateway.avg_duration)}
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                              <tfoot className='bg-gray-50'>
+                                <tr>
+                                  <td className='px-6 py-3 text-sm font-bold text-gray-700'>合计</td>
+                                  <td className='px-6 py-3 text-sm font-bold text-green-600 text-right'>
+                                    {formatFee(gateways.reduce((sum, g) => sum + g.total_fee, 0))}
                                   </td>
-                                  <td className='px-6 py-4 whitespace-nowrap text-sm font-medium text-green-600 text-right'>
-                                    {formatFee(gateway.total_fee)}
+                                  <td className='px-6 py-3 text-sm font-bold text-right'>
+                                    {formatDuration(gateways.reduce((sum, g) => sum + g.total_duration, 0))}
                                   </td>
-                                  <td className='px-6 py-4 whitespace-nowrap text-sm text-right'>
-                                    {formatDuration(gateway.total_duration)}
+                                  <td className='px-6 py-3 text-sm font-bold text-right'>
+                                    {gateways.reduce((sum, g) => sum + g.total_calls, 0).toLocaleString()}
                                   </td>
-                                  <td className='px-6 py-4 whitespace-nowrap text-sm text-right'>
-                                    {gateway.total_calls.toLocaleString()}
+                                  <td className='px-6 py-3 text-sm font-bold text-right'>
+                                    {gateways.reduce((sum, g) => sum + g.connected_calls, 0).toLocaleString()}
                                   </td>
-                                  <td className='px-6 py-4 whitespace-nowrap text-sm text-right'>
-                                    {gateway.connected_calls.toLocaleString()}
+                                  <td className='px-6 py-3 text-sm font-bold text-right'>
+                                    {(() => {
+                                      const totalCalls = gateways.reduce((sum, g) => sum + g.total_calls, 0)
+                                      const connectedCalls = gateways.reduce((sum, g) => sum + g.connected_calls, 0)
+                                      const overallRate = totalCalls > 0 ? (connectedCalls / totalCalls) * 100 : 0
+                                      return overallRate.toFixed(2) + '%'
+                                    })()}
                                   </td>
-                                  <td className='px-6 py-4 whitespace-nowrap text-sm font-medium text-right'>
-                                    {gateway.connection_rate.toFixed(2)}%
-                                  </td>
-                                  <td className='px-6 py-4 whitespace-nowrap text-sm text-right'>
-                                    {formatDuration(gateway.avg_duration)}
+                                  <td className='px-6 py-3 text-sm font-bold text-right'>
+                                    {(() => {
+                                      const totalDuration = gateways.reduce((sum, g) => sum + g.total_duration, 0)
+                                      const connectedCalls = gateways.reduce((sum, g) => sum + g.connected_calls, 0)
+                                      const avgDuration = connectedCalls > 0 ? totalDuration / connectedCalls : 0
+                                      return formatDuration(Math.round(avgDuration))
+                                    })()}
                                   </td>
                                 </tr>
-                              ))}
-                            </tbody>
-                            <tfoot className='bg-gray-50'>
-                              <tr>
-                                <td colSpan={2} className='px-6 py-3 text-sm font-bold text-gray-700'>合计</td>
-                                <td className='px-6 py-3 text-sm font-bold text-green-600 text-right'>
-                                  {formatFee(aggregatedStats.reduce((sum, g) => sum + g.total_fee, 0))}
-                                </td>
-                                <td className='px-6 py-3 text-sm font-bold text-right'>
-                                  {formatDuration(aggregatedStats.reduce((sum, g) => sum + g.total_duration, 0))}
-                                </td>
-                                <td className='px-6 py-3 text-sm font-bold text-right'>
-                                  {aggregatedStats.reduce((sum, g) => sum + g.total_calls, 0).toLocaleString()}
-                                </td>
-                                <td className='px-6 py-3 text-sm font-bold text-right'>
-                                  {aggregatedStats.reduce((sum, g) => sum + g.connected_calls, 0).toLocaleString()}
-                                </td>
-                                <td className='px-6 py-3 text-sm font-bold text-right'>
-                                  {(() => {
-                                    const totalCalls = aggregatedStats.reduce((sum, g) => sum + g.total_calls, 0)
-                                    const connectedCalls = aggregatedStats.reduce((sum, g) => sum + g.connected_calls, 0)
-                                    const overallRate = totalCalls > 0 ? (connectedCalls / totalCalls) * 100 : 0
-                                    return overallRate.toFixed(2) + '%'
-                                  })()}
-                                </td>
-                                <td className='px-6 py-3 text-sm font-bold text-right'>
-                                  {(() => {
-                                    const totalDuration = aggregatedStats.reduce((sum, g) => sum + g.total_duration, 0)
-                                    const connectedCalls = aggregatedStats.reduce((sum, g) => sum + g.connected_calls, 0)
-                                    const avgDuration = connectedCalls > 0 ? totalDuration / connectedCalls : 0
-                                    return formatDuration(Math.round(avgDuration))
-                                  })()}
-                                </td>
-                              </tr>
-                            </tfoot>
-                          </table>
+                              </tfoot>
+                            </table>
+                          </div>
+                          <p className='mt-2 text-sm text-gray-500 text-center'>
+                            共 {gateways.length} 个{title}
+                          </p>
                         </div>
-                        <p className='mt-2 text-sm text-gray-500 text-center'>
-                          共 {aggregatedStats.length} 个网关（对接网关: {aggregatedStats.filter(g => g.gateway_type === 'caller').length}，落地网关: {aggregatedStats.filter(g => g.gateway_type === 'callee').length}）
-                        </p>
-                      </div>
+                      )
+                    }
+                    
+                    return (
+                      <>
+                        {/* 对接网关统计 */}
+                        {renderGatewayTable(callerGateways, '对接网关统计', 'caller')}
+                        
+                        {/* 落地网关统计 */}
+                        {renderGatewayTable(calleeGateways, '落地网关统计', 'callee')}
+                      </>
                     )
                   })()}
                 </div>
