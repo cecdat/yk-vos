@@ -352,11 +352,37 @@ export default function StatisticsPage() {
             const accountStats = instanceStats.account_statistics || []
             const gatewayStats = instanceStats.gateway_statistics || []
             
-            // 费用趋势图数据
-            const feeChartData = vosStats.slice(0, 30).reverse().map((stat: Statistics) => ({
-              name: stat.date.substring(5),
-              value: stat.total_fee
-            }))
+            // 费用趋势图数据（根据周期类型格式化日期）
+            const formatDateForChart = (dateStr: string, periodType: string) => {
+              const date = new Date(dateStr)
+              if (periodType === 'day') {
+                // 日统计：显示月-日
+                return dateStr.substring(5)
+              } else if (periodType === 'month') {
+                // 月统计：显示年-月
+                return dateStr.substring(0, 7)
+              } else if (periodType === 'quarter') {
+                // 季度统计：显示年-Q季度
+                const year = date.getFullYear()
+                const month = date.getMonth() + 1
+                const quarter = Math.ceil(month / 3)
+                return `${year}-Q${quarter}`
+              } else if (periodType === 'year') {
+                // 年度统计：显示年份
+                return dateStr.substring(0, 4)
+              }
+              return dateStr.substring(5)
+            }
+            
+            // 根据周期类型决定显示的数据量
+            const maxChartDataPoints = periodType === 'day' ? 30 : periodType === 'month' ? 12 : periodType === 'quarter' ? 8 : 5
+            const feeChartData = vosStats
+              .slice(0, maxChartDataPoints)
+              .reverse()
+              .map((stat: Statistics) => ({
+                name: formatDateForChart(stat.date, periodType),
+                value: stat.total_fee
+              }))
             
             // 账户费用分布（Top 10）
             const accountMap = new Map<string, number>()
@@ -383,31 +409,8 @@ export default function StatisticsPage() {
             
             return (
               <Card key={instanceStats.instance_id} className='overflow-hidden'>
-                {/* 实例头部 */}
-                <div className='p-5 bg-blue-50'>
-                  <div className='flex items-center justify-between'>
-                    <div className='flex items-center gap-3'>
-                      <h2 className='text-xl font-bold text-gray-800'>{instanceStats.instance_name}</h2>
-                      <span className='px-2 py-0.5 bg-blue-500 text-white text-xs rounded-full'>当前节点</span>
-                    </div>
-                    <div className='flex items-center gap-4'>
-                      {vosStats.length > 0 && (
-                        <div className='text-right'>
-                          <p className='text-xs text-gray-500'>总费用</p>
-                          <p className='text-lg font-bold text-green-600'>
-                            {formatFee(vosStats.reduce((sum, s) => sum + s.total_fee, 0))}
-                          </p>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                  {currentVOS?.base_url && (
-                    <p className='text-sm text-gray-500 mt-2'>{currentVOS.base_url}</p>
-                  )}
-                </div>
-                
                 {/* 统计数据内容 */}
-                <div className='border-t border-gray-200 p-5'>
+                <div className='p-5'>
                   {/* 概览卡片 */}
                   <div className='grid grid-cols-1 md:grid-cols-3 gap-4 mb-6'>
                     <div className='bg-gradient-to-br from-green-50 to-green-100 rounded-lg p-4'>
