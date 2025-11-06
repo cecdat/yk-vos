@@ -59,7 +59,14 @@ export default function StatisticsPage() {
 
   useEffect(() => {
     if (currentVOS && currentVOS.vos_uuid && startDate && endDate) {
-      fetchInstanceStatistics(currentVOS.id)
+      // 确保日期格式正确且开始日期不晚于结束日期
+      if (startDate <= endDate) {
+        fetchInstanceStatistics(currentVOS.id)
+      } else {
+        console.warn('开始日期不能晚于结束日期')
+        setInstanceStats(null)
+        setLoading(false)
+      }
     } else {
       setInstanceStats(null)
       setLoading(false)
@@ -67,6 +74,11 @@ export default function StatisticsPage() {
   }, [currentVOS, periodType, startDate, endDate])
 
   async function fetchInstanceStatistics(instanceId: number) {
+    if (!startDate || !endDate) {
+      console.warn('开始日期或结束日期为空，无法获取统计数据')
+      return
+    }
+
     setLoading(true)
     setInstanceStats(prev => prev ? ({ ...prev, loading: true, error: undefined } as InstanceStatistics) : null)
 
@@ -76,6 +88,7 @@ export default function StatisticsPage() {
       if (endDate) params.end_date = endDate
 
       const res = await api.get(`/vos/instances/${instanceId}/statistics`, { params })
+      
       setInstanceStats({
         instance_id: instanceId,
         instance_name: res.data?.instance_name || '',
@@ -87,6 +100,7 @@ export default function StatisticsPage() {
       })
     } catch (e: any) {
       console.error(`获取实例 ${instanceId} 统计数据失败:`, e)
+      console.error('错误详情:', e.response?.data)
       setInstanceStats({
         instance_id: instanceId,
         instance_name: currentVOS?.name || '',
@@ -117,14 +131,6 @@ export default function StatisticsPage() {
     return `¥${fee.toFixed(2)}`
   }
 
-  // 快速选择日期范围
-  function setQuickDateRange(days: number) {
-    const today = new Date()
-    const start = new Date(today)
-    start.setDate(today.getDate() - days)
-    setStartDate(start.toISOString().split('T')[0])
-    setEndDate(today.toISOString().split('T')[0])
-  }
 
   // 根据周期类型获取日期选择器的类型
   function getDateInputType(): 'date' | 'month' | undefined {
@@ -275,37 +281,31 @@ export default function StatisticsPage() {
               <input
                 type='date'
                 value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
+                onChange={(e) => {
+                  const newStartDate = e.target.value
+                  setStartDate(newStartDate)
+                  // 如果结束日期早于开始日期，自动调整结束日期
+                  if (endDate && newStartDate > endDate) {
+                    setEndDate(newStartDate)
+                  }
+                }}
                 className='px-3 py-2 border rounded-lg bg-white'
               />
               <span className='text-gray-500'>至</span>
               <input
                 type='date'
                 value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
+                onChange={(e) => {
+                  const newEndDate = e.target.value
+                  setEndDate(newEndDate)
+                  // 如果开始日期晚于结束日期，自动调整开始日期
+                  if (startDate && newEndDate < startDate) {
+                    setStartDate(newEndDate)
+                  }
+                }}
+                min={startDate || undefined}
                 className='px-3 py-2 border rounded-lg bg-white'
               />
-              {/* 快速选择 */}
-              <div className='flex items-center gap-1 ml-2'>
-                <button
-                  onClick={() => setQuickDateRange(7)}
-                  className='px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded transition'
-                >
-                  最近7天
-                </button>
-                <button
-                  onClick={() => setQuickDateRange(30)}
-                  className='px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded transition'
-                >
-                  最近30天
-                </button>
-                <button
-                  onClick={() => setQuickDateRange(90)}
-                  className='px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded transition'
-                >
-                  最近90天
-                </button>
-              </div>
             </div>
           )}
 
