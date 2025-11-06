@@ -8,6 +8,9 @@ Create Date: 2025-11-05 10:00:00.000000
 from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
+import logging
+
+logger = logging.getLogger(__name__)
 
 # revision identifiers, used by Alembic.
 revision = '0016_gateway_type'
@@ -17,6 +20,38 @@ depends_on = None
 
 
 def upgrade():
+    # 检查表是否存在以及当前结构
+    conn = op.get_bind()
+    
+    # 检查表是否存在
+    result = conn.execute(sa.text("""
+        SELECT EXISTS (
+            SELECT FROM information_schema.tables 
+            WHERE table_schema = 'public' 
+            AND table_name = 'gateway_cdr_statistics'
+        )
+    """))
+    table_exists = result.scalar()
+    
+    if not table_exists:
+        logger.warning("表 gateway_cdr_statistics 不存在，跳过迁移")
+        return
+    
+    # 检查是否已经有 gateway_name 字段（说明已经迁移过了）
+    result = conn.execute(sa.text("""
+        SELECT EXISTS (
+            SELECT FROM information_schema.columns 
+            WHERE table_schema = 'public' 
+            AND table_name = 'gateway_cdr_statistics'
+            AND column_name = 'gateway_name'
+        )
+    """))
+    has_gateway_name = result.scalar()
+    
+    if has_gateway_name:
+        logger.info("表 gateway_cdr_statistics 已经包含 gateway_name 字段，跳过迁移")
+        return
+    
     # 1. 添加新字段
     op.add_column('gateway_cdr_statistics', sa.Column('gateway_name', sa.String(length=256), nullable=True, comment='网关名称'))
     op.add_column('gateway_cdr_statistics', sa.Column('gateway_type', sa.String(length=20), nullable=True, comment='网关类型：caller（对接网关）或callee（落地网关）'))
@@ -33,12 +68,23 @@ def upgrade():
     op.alter_column('gateway_cdr_statistics', 'gateway_name', nullable=False)
     op.alter_column('gateway_cdr_statistics', 'gateway_type', nullable=False)
     
-    # 4. 删除旧字段callee_gateway
-    op.drop_column('gateway_cdr_statistics', 'callee_gateway')
+    # 4. 删除旧字段callee_gateway（如果存在）
+    result = conn.execute(sa.text("""
+        SELECT EXISTS (
+            SELECT FROM information_schema.columns 
+            WHERE table_schema = 'public' 
+            AND table_name = 'gateway_cdr_statistics'
+            AND column_name = 'callee_gateway'
+        )
+    """))
+    has_callee_gateway = result.scalar()
     
-    # 5. 删除旧的唯一约束和索引
-    op.drop_constraint('uq_gateway_cdr_statistics', 'gateway_cdr_statistics', type_='unique')
-    op.drop_index('idx_gateway_cdr_statistics_composite', table_name='gateway_cdr_statistics')
+    if has_callee_gateway:
+        op.drop_column('gateway_cdr_statistics', 'callee_gateway')
+    
+    # 5. 删除旧的唯一约束和索引（如果存在，使用 IF EXISTS 避免错误）
+    op.execute(sa.text("ALTER TABLE gateway_cdr_statistics DROP CONSTRAINT IF EXISTS uq_gateway_cdr_statistics"))
+    op.execute(sa.text("DROP INDEX IF EXISTS idx_gateway_cdr_statistics_composite"))
     
     # 6. 创建新的唯一约束和索引
     op.create_unique_constraint(
