@@ -11,7 +11,7 @@ from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision = '0016_gateway_type'
-down_revision = '0015_create_app_configs_table'
+down_revision = '0015_app_configs'  # 注意：这里应该匹配 0015_create_app_configs_table.py 中的 revision ID
 branch_labels = None
 depends_on = None
 
