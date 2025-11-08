@@ -12,7 +12,7 @@ from sqlalchemy.sql import func
 
 # revision identifiers, used by Alembic.
 revision = '0017_account_detail_reports'
-down_revision = '0016_add_gateway_type_to_statistics'
+down_revision = '0016_gateway_type'
 branch_labels = None
 depends_on = None
 
