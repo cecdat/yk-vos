@@ -21,6 +21,7 @@ interface SyncConfig {
   cdr_sync_days: number
   gateway_sync_time?: string
   account_detail_report_sync_time?: string
+  account_detail_report_sync_days?: number
 }
 
 interface SyncProgress {
@@ -42,14 +43,10 @@ export default function SyncManagementPage() {
     customer_sync_time: '01:00',
     cdr_sync_days: 1,
     gateway_sync_time: '02:00',
-    account_detail_report_sync_time: '03:00'
+    account_detail_report_sync_time: '03:00',
+    account_detail_report_sync_days: 1
   })
-  const [accountReportSyncDate, setAccountReportSyncDate] = useState<string>(() => {
-    // 默认昨天
-    const yesterday = new Date()
-    yesterday.setDate(yesterday.getDate() - 1)
-    return yesterday.toISOString().split('T')[0]
-  })
+  const [accountReportSyncDays, setAccountReportSyncDays] = useState<number>(1)
   const [loading, setLoading] = useState(false)
   const [syncProgress, setSyncProgress] = useState<SyncProgress>({ is_syncing: false })
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null)
@@ -172,10 +169,10 @@ export default function SyncManagementPage() {
       }
     } else if (type === 'account-detail-report') {
       if (selectedInstance === 'all') {
-        confirmMessage = `确定要同步所有VOS节点的账户明细报表吗？${accountReportSyncDate ? `（日期: ${accountReportSyncDate}）` : ''}`
+        confirmMessage = `确定要同步所有VOS节点的账户明细报表吗？${accountReportSyncDays > 1 ? `（最近${accountReportSyncDays}天）` : '（最近1天）'}`
       } else {
         const inst = instances.find(i => i.id === selectedInstance)
-        confirmMessage = `确定要同步 ${inst?.name} 的账户明细报表吗？${accountReportSyncDate ? `（日期: ${accountReportSyncDate}）` : ''}`
+        confirmMessage = `确定要同步 ${inst?.name} 的账户明细报表吗？${accountReportSyncDays > 1 ? `（最近${accountReportSyncDays}天）` : '（最近1天）'}`
       }
     }
     
@@ -216,7 +213,7 @@ export default function SyncManagementPage() {
         endpoint = '/sync/manual/account-detail-report'
         payload = {
           instance_id: selectedInstance === 'all' ? null : selectedInstance,
-          target_date: accountReportSyncDate || null
+          days: accountReportSyncDays
         }
       }
 
@@ -584,7 +581,39 @@ export default function SyncManagementPage() {
                   className='w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent'
                 />
                 <p className='text-xs text-gray-500 mt-1'>
-                  每天在此时间自动同步所有节点的账户明细报表（同步前一天的数据）
+                  每天在此时间自动同步所有节点的账户明细报表
+                </p>
+              </div>
+
+              <div>
+                <label className='block text-sm font-medium text-gray-700 mb-2'>
+                  同步天数
+                </label>
+                <input
+                  type='number'
+                  min='1'
+                  max='30'
+                  value={syncConfig.account_detail_report_sync_days || 1}
+                  onChange={e => {
+                    const value = e.target.value
+                    const numValue = parseInt(value, 10)
+                    if (value === '') {
+                      setSyncConfig({ ...syncConfig, account_detail_report_sync_days: 1 })
+                    } else if (!isNaN(numValue) && numValue >= 1 && numValue <= 30) {
+                      setSyncConfig({ ...syncConfig, account_detail_report_sync_days: numValue })
+                    }
+                  }}
+                  onBlur={e => {
+                    const value = e.target.value
+                    const numValue = parseInt(value, 10)
+                    if (value === '' || isNaN(numValue) || numValue < 1 || numValue > 30) {
+                      setSyncConfig({ ...syncConfig, account_detail_report_sync_days: 1 })
+                    }
+                  }}
+                  className='w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent'
+                />
+                <p className='text-xs text-gray-500 mt-1'>
+                  每次同步最近N天的数据（1-30天）
                 </p>
               </div>
             </div>
@@ -626,16 +655,33 @@ export default function SyncManagementPage() {
 
               <div>
                 <label className='block text-sm font-medium text-gray-700 mb-2'>
-                  目标日期（可选，默认昨天）
+                  同步天数
                 </label>
                 <input
-                  type='date'
-                  value={accountReportSyncDate}
-                  onChange={e => setAccountReportSyncDate(e.target.value)}
+                  type='number'
+                  min='1'
+                  max='30'
+                  value={accountReportSyncDays}
+                  onChange={e => {
+                    const value = e.target.value
+                    const numValue = parseInt(value, 10)
+                    if (value === '') {
+                      setAccountReportSyncDays(1)
+                    } else if (!isNaN(numValue) && numValue >= 1 && numValue <= 30) {
+                      setAccountReportSyncDays(numValue)
+                    }
+                  }}
+                  onBlur={e => {
+                    const value = e.target.value
+                    const numValue = parseInt(value, 10)
+                    if (value === '' || isNaN(numValue) || numValue < 1 || numValue > 30) {
+                      setAccountReportSyncDays(1)
+                    }
+                  }}
                   className='w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent'
                 />
                 <p className='text-xs text-gray-500 mt-1'>
-                  指定要同步的日期（默认昨天）
+                  同步最近N天的数据（1-30天，默认1天即昨天）
                 </p>
               </div>
 

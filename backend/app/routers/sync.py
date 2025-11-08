@@ -31,6 +31,7 @@ class SyncConfig(BaseModel):
     cdr_sync_days: int  # 同步天数
     gateway_sync_time: Optional[str] = None  # HH:MM 格式
     account_detail_report_sync_time: Optional[str] = None  # HH:MM 格式
+    account_detail_report_sync_days: Optional[int] = 1  # 账户明细报表同步天数
 
 
 class ManualCDRSync(BaseModel):
@@ -81,7 +82,8 @@ async def get_sync_config(
         'customer_sync_time': get_config_value('customer_sync_time', '01:00'),
         'cdr_sync_days': get_config_int('cdr_sync_days', 1),
         'gateway_sync_time': get_config_value('gateway_sync_time', '02:00'),
-        'account_detail_report_sync_time': get_config_value('account_detail_report_sync_time', '03:00')
+        'account_detail_report_sync_time': get_config_value('account_detail_report_sync_time', '03:00'),
+        'account_detail_report_sync_days': get_config_int('account_detail_report_sync_days', 1)
     }
 
 
@@ -123,6 +125,8 @@ async def save_sync_config(
         save_config('gateway_sync_time', config.gateway_sync_time, '网关数据同步时间（HH:MM格式）')
     if config.account_detail_report_sync_time:
         save_config('account_detail_report_sync_time', config.account_detail_report_sync_time, '账户明细报表同步时间（HH:MM格式）')
+    if config.account_detail_report_sync_days is not None:
+        save_config('account_detail_report_sync_days', str(config.account_detail_report_sync_days), '账户明细报表同步天数（1-30天）')
     
     db.commit()
     
@@ -367,7 +371,7 @@ async def manual_gateway_sync(
 class ManualAccountDetailReportSync(BaseModel):
     """手动触发账户明细报表同步"""
     instance_id: Optional[int] = None  # None表示全部节点
-    target_date: Optional[str] = None  # 目标日期（YYYY-MM-DD格式，默认昨天）
+    days: int = 1  # 同步天数（默认1天，即昨天）
 
 
 @router.post('/manual/account-detail-report')
@@ -382,18 +386,29 @@ async def manual_account_detail_report_sync(
     支持两种模式：
     1. 全部节点：instance_id=None
     2. 指定节点：instance_id=X
+    
+    支持多天同步：days参数指定同步最近N天的数据（类似历史话单同步）
     """
     try:
-        # 解析目标日期
-        target_date_obj = None
-        if params.target_date:
-            try:
-                target_date_obj = datetime.strptime(params.target_date, '%Y-%m-%d').date()
-            except ValueError:
-                raise HTTPException(status_code=400, detail='Invalid target_date format, should be YYYY-MM-DD')
-        else:
-            # 默认昨天
-            target_date_obj = date.today() - timedelta(days=1)
+        # 验证同步天数
+        if params.days < 1 or params.days > 30:
+            raise HTTPException(status_code=400, detail='同步天数必须在1-30天之间')
+        
+        # 验证节点是否存在
+        if params.instance_id is not None:
+            instance = db.query(VOSInstance).filter(
+                VOSInstance.id == params.instance_id
+            ).first()
+            
+            if not instance:
+                raise HTTPException(status_code=404, detail='VOS节点不存在')
+            
+            if not instance.enabled:
+                raise HTTPException(status_code=400, detail='VOS节点未启用')
+        
+        # 计算需要同步的日期列表
+        today = date.today()
+        sync_dates = [today - timedelta(days=i) for i in range(params.days)]
         
         if params.instance_id is None:
             # 全部节点
@@ -404,22 +419,29 @@ async def manual_account_detail_report_sync(
                     'message': '没有启用的VOS节点'
                 }
             
-            # 调用全部节点同步任务，但需要传递目标日期
-            # 注意：sync_account_detail_reports_daily 默认同步昨天，我们需要修改它支持自定义日期
-            # 这里先简化处理，直接为每个实例创建任务
+            # 为每个实例和每天创建任务
             tasks = []
+            task_count = 0
             for inst in instances:
-                task = sync_single_instance_account_detail_reports.apply_async(
-                    args=[inst.id, target_date_obj]
-                )
-                tasks.append(str(task.id))
+                for i, sync_date in enumerate(sync_dates):
+                    # 延迟执行，避免对VOS服务器造成压力
+                    countdown = task_count * 5  # 每5秒创建一个任务
+                    task = sync_single_instance_account_detail_reports.apply_async(
+                        args=[inst.id, sync_date],
+                        countdown=countdown
+                    )
+                    tasks.append(str(task.id))
+                    task_count += 1
             
-            logger.info(f'用户 {current_user.username} 触发全部节点账户明细报表同步，日期: {target_date_obj}')
+            logger.info(f'用户 {current_user.username} 触发全部节点账户明细报表同步，{params.days}天，共{len(instances)}个节点，将创建{len(tasks)}个任务')
             return {
                 'success': True,
-                'message': f'已启动全部节点的账户明细报表同步（共{len(instances)}个节点，日期: {target_date_obj}）',
+                'message': f'已启动全部节点的账户明细报表同步（最近{params.days}天，共{len(instances)}个节点），系统将创建{len(tasks)}个任务按计划延迟执行',
                 'task_ids': tasks,
-                'target_date': target_date_obj.isoformat()
+                'days': params.days,
+                'instances_count': len(instances),
+                'tasks_count': len(tasks),
+                'note': '此任务会创建多个子任务，每个实例每天一个任务，任务将按计划延迟执行以避免VOS卡死'
             }
         
         else:
@@ -434,17 +456,41 @@ async def manual_account_detail_report_sync(
             if not instance.enabled:
                 raise HTTPException(status_code=400, detail='VOS节点未启用')
             
-            task = sync_single_instance_account_detail_reports.apply_async(
-                args=[params.instance_id, target_date_obj]
-            )
-            
-            logger.info(f'用户 {current_user.username} 触发节点 {params.instance_id} ({instance.name}) 账户明细报表同步，日期: {target_date_obj}')
-            return {
-                'success': True,
-                'message': f'已启动节点 {instance.name} 的账户明细报表同步（日期: {target_date_obj}）',
-                'task_id': str(task.id),
-                'target_date': target_date_obj.isoformat()
-            }
+            if params.days == 1:
+                # 单天同步，直接执行
+                sync_date = today - timedelta(days=1)
+                task = sync_single_instance_account_detail_reports.apply_async(
+                    args=[params.instance_id, sync_date]
+                )
+                
+                logger.info(f'用户 {current_user.username} 触发节点 {params.instance_id} ({instance.name}) 账户明细报表同步，日期: {sync_date}')
+                return {
+                    'success': True,
+                    'message': f'已启动节点 {instance.name} 的账户明细报表同步（日期: {sync_date}）',
+                    'task_id': str(task.id),
+                    'target_date': sync_date.isoformat()
+                }
+            else:
+                # 多天同步，创建多个任务
+                tasks = []
+                for i, sync_date in enumerate(sync_dates):
+                    # 延迟执行，避免对VOS服务器造成压力
+                    countdown = i * 5  # 每5秒创建一个任务
+                    task = sync_single_instance_account_detail_reports.apply_async(
+                        args=[params.instance_id, sync_date],
+                        countdown=countdown
+                    )
+                    tasks.append(str(task.id))
+                
+                logger.info(f'用户 {current_user.username} 触发节点 {params.instance_id} ({instance.name}) 账户明细报表同步，{params.days}天，将创建{len(tasks)}个任务')
+                return {
+                    'success': True,
+                    'message': f'已启动节点 {instance.name} 的账户明细报表同步（最近{params.days}天），系统将创建{len(tasks)}个任务按计划延迟执行',
+                    'task_ids': tasks,
+                    'days': params.days,
+                    'tasks_count': len(tasks),
+                    'note': f'多天同步时会创建{params.days}个任务，任务将按计划延迟执行以避免VOS卡死'
+                }
     
     except HTTPException:
         raise

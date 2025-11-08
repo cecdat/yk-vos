@@ -54,9 +54,11 @@ celery.conf.beat_schedule = {
     },
     
     # 账户明细报表同步（每天凌晨3点执行，在CDR统计之后）
+    # 注意：sync_days参数为None时，任务会从数据库读取配置
     'sync-account-detail-reports-daily': {
         'task': 'app.tasks.account_detail_report_tasks.sync_account_detail_reports_daily',
         'schedule': crontab(minute=0, hour=3),  # 每天凌晨3点
+        'args': [None],  # sync_days=None，从数据库读取配置
     },
 }
 
