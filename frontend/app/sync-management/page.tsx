@@ -19,6 +19,8 @@ interface SyncConfig {
   cdr_sync_time: string
   customer_sync_time: string
   cdr_sync_days: number
+  gateway_sync_time?: string
+  account_detail_report_sync_time?: string
 }
 
 interface SyncProgress {
@@ -30,7 +32,7 @@ interface SyncProgress {
 }
 
 export default function SyncManagementPage() {
-  const [activeTab, setActiveTab] = useState<'cdr' | 'customer' | 'gateway'>('cdr')
+  const [activeTab, setActiveTab] = useState<'cdr' | 'customer' | 'gateway' | 'account-detail-report'>('cdr')
   const [instances, setInstances] = useState<VOSInstance[]>([])
   const [customers, setCustomers] = useState<Customer[]>([])
   const [selectedInstance, setSelectedInstance] = useState<number | 'all'>('all')
@@ -38,13 +40,21 @@ export default function SyncManagementPage() {
   const [syncConfig, setSyncConfig] = useState<SyncConfig>({
     cdr_sync_time: '01:30',
     customer_sync_time: '01:00',
-    cdr_sync_days: 1
+    cdr_sync_days: 1,
+    gateway_sync_time: '02:00',
+    account_detail_report_sync_time: '03:00'
+  })
+  const [accountReportSyncDate, setAccountReportSyncDate] = useState<string>(() => {
+    // 默认昨天
+    const yesterday = new Date()
+    yesterday.setDate(yesterday.getDate() - 1)
+    return yesterday.toISOString().split('T')[0]
   })
   const [loading, setLoading] = useState(false)
   const [syncProgress, setSyncProgress] = useState<SyncProgress>({ is_syncing: false })
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null)
   const [showConfirmDialog, setShowConfirmDialog] = useState(false)
-  const [confirmAction, setConfirmAction] = useState<{ type: 'cdr' | 'customer' | 'gateway', message: string } | null>(null)
+  const [confirmAction, setConfirmAction] = useState<{ type: 'cdr' | 'customer' | 'gateway' | 'account-detail-report', message: string } | null>(null)
 
   useEffect(() => {
     fetchInstances()
@@ -134,7 +144,7 @@ export default function SyncManagementPage() {
     }
   }
 
-  function showConfirm(type: 'cdr' | 'customer' | 'gateway') {
+  function showConfirm(type: 'cdr' | 'customer' | 'gateway' | 'account-detail-report') {
     let confirmMessage = ''
     
     if (type === 'cdr' && selectedInstance === 'all') {
@@ -159,6 +169,13 @@ export default function SyncManagementPage() {
       } else {
         const inst = instances.find(i => i.id === selectedInstance)
         confirmMessage = `确定要同步 ${inst?.name} 的网关数据吗？`
+      }
+    } else if (type === 'account-detail-report') {
+      if (selectedInstance === 'all') {
+        confirmMessage = `确定要同步所有VOS节点的账户明细报表吗？${accountReportSyncDate ? `（日期: ${accountReportSyncDate}）` : ''}`
+      } else {
+        const inst = instances.find(i => i.id === selectedInstance)
+        confirmMessage = `确定要同步 ${inst?.name} 的账户明细报表吗？${accountReportSyncDate ? `（日期: ${accountReportSyncDate}）` : ''}`
       }
     }
     
@@ -194,6 +211,12 @@ export default function SyncManagementPage() {
         payload = {
           instance_id: selectedInstance === 'all' ? null : selectedInstance,
           gateway_type: 'both'
+        }
+      } else if (confirmAction.type === 'account-detail-report') {
+        endpoint = '/sync/manual/account-detail-report'
+        payload = {
+          instance_id: selectedInstance === 'all' ? null : selectedInstance,
+          target_date: accountReportSyncDate || null
         }
       }
 
@@ -449,22 +472,30 @@ export default function SyncManagementPage() {
               自动同步配置
             </h2>
             
-            <div className='bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg p-4 border border-blue-200'>
-              <div className='flex items-center gap-3 mb-2'>
-                <svg className='w-5 h-5 text-blue-600' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
-                  <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z' />
-                </svg>
-                <span className='font-semibold text-gray-800'>网关自动同步</span>
-              </div>
-              <p className='text-sm text-gray-600'>
-                系统已配置网关自动同步任务，每分钟同步一次网关数据（对接网关 + 落地网关）
-              </p>
-              <div className='mt-3 text-xs text-gray-500'>
-                <p>• 对接网关：每分钟同步配置和在线状态</p>
-                <p>• 落地网关：每分钟同步配置和在线状态</p>
-                <p>• 数据存储：同时更新缓存表和专用网关表</p>
+            <div className='grid grid-cols-1 md:grid-cols-2 gap-6'>
+              <div>
+                <label className='block text-sm font-medium text-gray-700 mb-2'>
+                  每日同步时间
+                </label>
+                <input
+                  type='time'
+                  value={syncConfig.gateway_sync_time || '02:00'}
+                  onChange={e => setSyncConfig({ ...syncConfig, gateway_sync_time: e.target.value })}
+                  className='w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent'
+                />
+                <p className='text-xs text-gray-500 mt-1'>
+                  每天在此时间自动同步所有节点的网关数据
+                </p>
               </div>
             </div>
+
+            <button
+              onClick={handleSaveConfig}
+              disabled={loading}
+              className='mt-6 px-6 py-2 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg hover:from-blue-700 hover:to-purple-700 transition disabled:opacity-50'
+            >
+              {loading ? '保存中...' : '保存配置'}
+            </button>
           </div>
 
           {/* 手动触发同步 */}
@@ -493,6 +524,7 @@ export default function SyncManagementPage() {
                 </select>
               </div>
 
+
               <button
                 onClick={() => showConfirm('gateway')}
                 disabled={syncProgress.is_syncing || instances.length === 0}
@@ -506,6 +538,110 @@ export default function SyncManagementPage() {
                     同步中...
                   </span>
                 ) : '立即同步网关数据'}
+              </button>
+
+              {instances.length === 0 && (
+                <p className='text-sm text-gray-500 text-center'>
+                  暂无VOS节点，请先添加节点
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 账户明细报表同步 */}
+      {activeTab === 'account-detail-report' && (
+        <div className='space-y-6'>
+          {/* 自动同步配置 */}
+          <div className='bg-white rounded-xl p-6 shadow-lg border border-gray-200'>
+            <h2 className='text-xl font-bold mb-4 flex items-center gap-2'>
+              <svg className='w-6 h-6 text-blue-600' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
+                <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z' />
+              </svg>
+              自动同步配置
+            </h2>
+            
+            <div className='grid grid-cols-1 md:grid-cols-2 gap-6'>
+              <div>
+                <label className='block text-sm font-medium text-gray-700 mb-2'>
+                  每日同步时间
+                </label>
+                <input
+                  type='time'
+                  value={syncConfig.account_detail_report_sync_time || '03:00'}
+                  onChange={e => setSyncConfig({ ...syncConfig, account_detail_report_sync_time: e.target.value })}
+                  className='w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent'
+                />
+                <p className='text-xs text-gray-500 mt-1'>
+                  每天在此时间自动同步所有节点的账户明细报表（同步前一天的数据）
+                </p>
+              </div>
+            </div>
+
+            <button
+              onClick={handleSaveConfig}
+              disabled={loading}
+              className='mt-6 px-6 py-2 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg hover:from-blue-700 hover:to-purple-700 transition disabled:opacity-50'
+            >
+              {loading ? '保存中...' : '保存配置'}
+            </button>
+          </div>
+
+          {/* 手动触发同步 */}
+          <div className='bg-white rounded-xl p-6 shadow-lg border border-gray-200'>
+            <h2 className='text-xl font-bold mb-4 flex items-center gap-2'>
+              <svg className='w-6 h-6 text-purple-600' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
+                <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M13 10V3L4 14h7v7l9-11h-7z' />
+              </svg>
+              手动触发同步
+            </h2>
+
+            <div className='space-y-4'>
+              <div>
+                <label className='block text-sm font-medium text-gray-700 mb-2'>
+                  选择VOS节点
+                </label>
+                <select
+                  value={selectedInstance}
+                  onChange={e => setSelectedInstance(e.target.value === 'all' ? 'all' : parseInt(e.target.value))}
+                  className='w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent'
+                >
+                  <option value='all'>全部节点</option>
+                  {instances.filter(i => i.enabled).map(inst => (
+                    <option key={inst.id} value={inst.id}>{inst.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className='block text-sm font-medium text-gray-700 mb-2'>
+                  目标日期（可选，默认昨天）
+                </label>
+                <input
+                  type='date'
+                  value={accountReportSyncDate}
+                  onChange={e => setAccountReportSyncDate(e.target.value)}
+                  className='w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent'
+                />
+                <p className='text-xs text-gray-500 mt-1'>
+                  指定要同步的日期（默认昨天）
+                </p>
+              </div>
+
+              <button
+                onClick={() => showConfirm('account-detail-report')}
+                disabled={syncProgress.is_syncing || instances.length === 0}
+                className='w-full px-6 py-3 bg-gradient-to-r from-green-600 to-teal-600 text-white rounded-lg hover:from-green-700 hover:to-teal-700 transition disabled:opacity-50 font-medium'
+              >
+                {syncProgress.is_syncing ? (
+                  <span className='flex items-center justify-center gap-2'>
+                    <svg className='w-5 h-5 animate-spin' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
+                      <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15' />
+                    </svg>
+                    同步中...
+                  </span>
+                ) : '立即同步账户明细报表'}
               </button>
 
               {instances.length === 0 && (

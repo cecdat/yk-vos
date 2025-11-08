@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
-from app.routers import auth, vos, cdr, vos_api, sync_config, tasks, sync
+from app.routers import auth, vos, cdr, vos_api, sync_config, tasks, sync, account_detail_reports
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
@@ -28,6 +28,7 @@ app.include_router(vos_api.router, prefix=settings.API_V1_PREFIX)
 app.include_router(sync_config.router, prefix=settings.API_V1_PREFIX)
 app.include_router(sync.router, prefix=f'{settings.API_V1_PREFIX}/sync', tags=['同步管理'])
 app.include_router(tasks.router, prefix=settings.API_V1_PREFIX)
+app.include_router(account_detail_reports.router, prefix=settings.API_V1_PREFIX)
 
 @app.get('/')
 async def root():

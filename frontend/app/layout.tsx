@@ -70,6 +70,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                       </svg>
                       <span className='font-medium'>数据统计</span>
                     </a>
+                    <a href='/account-detail-reports' className='flex items-center gap-3 text-gray-700 hover:bg-gradient-to-r hover:from-blue-50 hover:to-purple-50 p-3 rounded-lg transition group'>
+                      <svg className='w-5 h-5 text-gray-500 group-hover:text-blue-600' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
+                        <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z' />
+                      </svg>
+                      <span className='font-medium'>账户明细报表</span>
+                    </a>
                     <a href='/sync-management' className='flex items-center gap-3 text-gray-700 hover:bg-gradient-to-r hover:from-blue-50 hover:to-purple-50 p-3 rounded-lg transition group'>
                       <svg className='w-5 h-5 text-gray-500 group-hover:text-blue-600' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
                         <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15' />

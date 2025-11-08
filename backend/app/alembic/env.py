@@ -15,6 +15,7 @@ from app.models.phone import Phone
 from app.models.cdr import CDR
 from app.models.cdr_statistics import VOSCdrStatistics, AccountCdrStatistics, GatewayCdrStatistics
 from app.models.app_config import AppConfig
+from app.models.account_detail_report import AccountDetailReport
 
 # this is the Alembic Config object
 config = context.config

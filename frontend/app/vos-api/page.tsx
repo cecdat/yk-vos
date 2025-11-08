@@ -53,6 +53,17 @@ const VOS_APIS = [
           { name: 'account', type: 'string' as const, required: true, description: '账户账号' }
         ]
       },
+      { 
+        name: 'GetReportCustomerFee', 
+        label: '查询账户明细报表', 
+        description: '查询账户明细报表，包含话单数、费用、时长等统计信息',
+        params: [
+          { name: 'accounts', type: 'array' as const, required: true, description: '账户列表' },
+          { name: 'period', type: 'integer' as const, required: true, description: '周期类型（1=天，-2=月）', default: 1 },
+          { name: 'beginTime', type: 'date' as const, required: true, description: '开始时间（yyyyMMdd格式）' },
+          { name: 'endTime', type: 'date' as const, required: true, description: '结束时间（yyyyMMdd格式）' }
+        ]
+      },
     ]
   },
   {

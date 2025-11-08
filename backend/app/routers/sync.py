@@ -17,7 +17,8 @@ from app.models.app_config import AppConfig
 from app.tasks.sync_tasks import sync_all_instances_cdrs, sync_customers_for_instance, sync_instance_gateways_enhanced, sync_all_instances_gateways
 from app.tasks.initial_sync_tasks import sync_cdrs_for_single_day
 from app.tasks.manual_sync_tasks import sync_single_customer_cdrs
-from datetime import datetime, timedelta
+from app.tasks.account_detail_report_tasks import sync_account_detail_reports_daily, sync_single_instance_account_detail_reports
+from datetime import datetime, timedelta, date
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -28,6 +29,8 @@ class SyncConfig(BaseModel):
     cdr_sync_time: str  # HH:MM 格式
     customer_sync_time: str  # HH:MM 格式
     cdr_sync_days: int  # 同步天数
+    gateway_sync_time: Optional[str] = None  # HH:MM 格式
+    account_detail_report_sync_time: Optional[str] = None  # HH:MM 格式
 
 
 class ManualCDRSync(BaseModel):
@@ -76,7 +79,9 @@ async def get_sync_config(
     return {
         'cdr_sync_time': get_config_value('cdr_sync_time', '01:30'),
         'customer_sync_time': get_config_value('customer_sync_time', '01:00'),
-        'cdr_sync_days': get_config_int('cdr_sync_days', 1)
+        'cdr_sync_days': get_config_int('cdr_sync_days', 1),
+        'gateway_sync_time': get_config_value('gateway_sync_time', '02:00'),
+        'account_detail_report_sync_time': get_config_value('account_detail_report_sync_time', '03:00')
     }
 
 
@@ -113,6 +118,11 @@ async def save_sync_config(
     save_config('cdr_sync_time', config.cdr_sync_time, 'CDR同步时间（HH:MM格式）')
     save_config('customer_sync_time', config.customer_sync_time, '客户数据同步时间（HH:MM格式）')
     save_config('cdr_sync_days', str(config.cdr_sync_days), 'CDR同步天数（1-30天）')
+    
+    if config.gateway_sync_time:
+        save_config('gateway_sync_time', config.gateway_sync_time, '网关数据同步时间（HH:MM格式）')
+    if config.account_detail_report_sync_time:
+        save_config('account_detail_report_sync_time', config.account_detail_report_sync_time, '账户明细报表同步时间（HH:MM格式）')
     
     db.commit()
     
@@ -351,5 +361,94 @@ async def manual_gateway_sync(
         raise
     except Exception as e:
         logger.exception(f'手动触发网关同步失败: {e}')
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class ManualAccountDetailReportSync(BaseModel):
+    """手动触发账户明细报表同步"""
+    instance_id: Optional[int] = None  # None表示全部节点
+    target_date: Optional[str] = None  # 目标日期（YYYY-MM-DD格式，默认昨天）
+
+
+@router.post('/manual/account-detail-report')
+async def manual_account_detail_report_sync(
+    params: ManualAccountDetailReportSync,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Session = Depends(get_db)
+):
+    """
+    手动触发账户明细报表同步
+    
+    支持两种模式：
+    1. 全部节点：instance_id=None
+    2. 指定节点：instance_id=X
+    """
+    try:
+        # 解析目标日期
+        target_date_obj = None
+        if params.target_date:
+            try:
+                target_date_obj = datetime.strptime(params.target_date, '%Y-%m-%d').date()
+            except ValueError:
+                raise HTTPException(status_code=400, detail='Invalid target_date format, should be YYYY-MM-DD')
+        else:
+            # 默认昨天
+            target_date_obj = date.today() - timedelta(days=1)
+        
+        if params.instance_id is None:
+            # 全部节点
+            instances = db.query(VOSInstance).filter(VOSInstance.enabled == True).all()
+            if not instances:
+                return {
+                    'success': False,
+                    'message': '没有启用的VOS节点'
+                }
+            
+            # 调用全部节点同步任务，但需要传递目标日期
+            # 注意：sync_account_detail_reports_daily 默认同步昨天，我们需要修改它支持自定义日期
+            # 这里先简化处理，直接为每个实例创建任务
+            tasks = []
+            for inst in instances:
+                task = sync_single_instance_account_detail_reports.apply_async(
+                    args=[inst.id, target_date_obj]
+                )
+                tasks.append(str(task.id))
+            
+            logger.info(f'用户 {current_user.username} 触发全部节点账户明细报表同步，日期: {target_date_obj}')
+            return {
+                'success': True,
+                'message': f'已启动全部节点的账户明细报表同步（共{len(instances)}个节点，日期: {target_date_obj}）',
+                'task_ids': tasks,
+                'target_date': target_date_obj.isoformat()
+            }
+        
+        else:
+            # 指定节点
+            instance = db.query(VOSInstance).filter(
+                VOSInstance.id == params.instance_id
+            ).first()
+            
+            if not instance:
+                raise HTTPException(status_code=404, detail='VOS节点不存在')
+            
+            if not instance.enabled:
+                raise HTTPException(status_code=400, detail='VOS节点未启用')
+            
+            task = sync_single_instance_account_detail_reports.apply_async(
+                args=[params.instance_id, target_date_obj]
+            )
+            
+            logger.info(f'用户 {current_user.username} 触发节点 {params.instance_id} ({instance.name}) 账户明细报表同步，日期: {target_date_obj}')
+            return {
+                'success': True,
+                'message': f'已启动节点 {instance.name} 的账户明细报表同步（日期: {target_date_obj}）',
+                'task_id': str(task.id),
+                'target_date': target_date_obj.isoformat()
+            }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f'手动触发账户明细报表同步失败: {e}')
         raise HTTPException(status_code=500, detail=str(e))
 

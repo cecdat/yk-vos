@@ -14,6 +14,7 @@ from app.models.phone import Phone
 from app.models.customer import Customer
 from app.models.vos_health import VOSHealthCheck
 from app.models.cdr_statistics import VOSCdrStatistics, AccountCdrStatistics, GatewayCdrStatistics
+from app.models.account_detail_report import AccountDetailReport
 from datetime import date, datetime
 from sqlalchemy import and_, func, Integer
 from app.routers.auth import get_current_user

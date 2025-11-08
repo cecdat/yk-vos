@@ -52,6 +52,12 @@ celery.conf.beat_schedule = {
         'task': 'app.tasks.sync_tasks.refresh_dashboard_statistics_view',
         'schedule': crontab(minute=0),  # 每小时的第0分钟执行
     },
+    
+    # 账户明细报表同步（每天凌晨3点执行，在CDR统计之后）
+    'sync-account-detail-reports-daily': {
+        'task': 'app.tasks.account_detail_report_tasks.sync_account_detail_reports_daily',
+        'schedule': crontab(minute=0, hour=3),  # 每天凌晨3点
+    },
 }
 
 # 导入任务模块以注册任务
@@ -59,3 +65,4 @@ from app.tasks import sync_tasks  # noqa: E402, F401
 from app.tasks import initial_sync_tasks  # noqa: E402, F401
 from app.tasks import manual_sync_tasks  # noqa: E402, F401
 from app.tasks import cdr_statistics_tasks  # noqa: E402, F401
+from app.tasks import account_detail_report_tasks  # noqa: E402, F401

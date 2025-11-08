@@ -136,9 +136,9 @@ class GetPhoneCardRequest(BaseModel):
 class GetReportCustomerFeeRequest(BaseModel):
     """查询账户明细报表"""
     accounts: List[str]
-    period: int = Field(..., description="-2: 按月统计")
-    beginTime: str
-    endTime: str
+    period: int = Field(..., description="1: 按天统计, -2: 按月统计")
+    beginTime: str = Field(..., description="开始时间（yyyyMMdd格式）")
+    endTime: str = Field(..., description="结束时间（yyyyMMdd格式）")
 
 class GetReportPhoneFeeRequest(BaseModel):
     """查询话机明细报表"""
