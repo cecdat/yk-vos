@@ -314,6 +314,16 @@ export default function SyncManagementPage() {
         >
           网关数据同步
         </button>
+        <button
+          onClick={() => setActiveTab('account-detail-report')}
+          className={`px-6 py-3 font-medium transition ${
+            activeTab === 'account-detail-report'
+              ? 'text-blue-600 border-b-2 border-blue-600'
+              : 'text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          账户明细报表同步
+        </button>
       </div>
 
       {/* 历史话单同步 */}
