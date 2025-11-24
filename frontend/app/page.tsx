@@ -506,15 +506,20 @@ export default function Page(){
                       <span className='text-xs font-bold text-blue-700'>{gatewayStats.mapping_gateway_count || 0}</span>
                     </div>
                     
-                    {/* 在线网关数 */}
+                    {/* 历史话单数 */}
                     <div 
                       className='flex flex-col items-center justify-center p-2 bg-green-50 rounded-lg hover:bg-green-100 transition cursor-help'
-                      title='在线网关数'
+                      title='历史话单数'
                     >
                       <svg className='w-5 h-5 text-green-600 mb-1' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
-                        <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z' />
+                        <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z' />
                       </svg>
-                      <span className='text-xs font-bold text-green-700'>{gatewayStats.online_gateway_count || 0}</span>
+                      <span className='text-xs font-bold text-green-700'>
+                        {(() => {
+                          const instanceStatus = cdrSyncStatus?.instances?.find(status => status.instance_id === inst.instance_id);
+                          return instanceStatus?.total_cdrs || 0;
+                        })()}
+                      </span>
                     </div>
                   </div>
                   

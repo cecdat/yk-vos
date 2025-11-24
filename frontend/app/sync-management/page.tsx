@@ -32,6 +32,33 @@ interface SyncProgress {
   message?: string
 }
 
+interface SyncTask {
+  task_type: string
+  task_name: string
+  status: string
+  progress_percent: number
+  current_instance?: string
+  current_customer?: string
+  current_account?: string
+  current_customer_index?: number
+  total_customers?: number
+  total_tasks?: number
+  completed_tasks?: number
+  synced_count?: number
+  sync_date?: string
+  days?: number
+  instances_count?: number
+  start_time?: string
+  message?: string
+}
+
+interface SyncTasksProgress {
+  success: boolean
+  has_active_tasks: boolean
+  tasks: SyncTask[]
+  tasks_count: number
+}
+
 export default function SyncManagementPage() {
   const [activeTab, setActiveTab] = useState<'cdr' | 'customer' | 'gateway' | 'account-detail-report'>('cdr')
   const [instances, setInstances] = useState<VOSInstance[]>([])
@@ -49,6 +76,8 @@ export default function SyncManagementPage() {
   const [accountReportSyncDays, setAccountReportSyncDays] = useState<number>(1)
   const [loading, setLoading] = useState(false)
   const [syncProgress, setSyncProgress] = useState<SyncProgress>({ is_syncing: false })
+  const [syncTasks, setSyncTasks] = useState<SyncTask[]>([])
+  const [hasActiveTasks, setHasActiveTasks] = useState(false)
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null)
   const [showConfirmDialog, setShowConfirmDialog] = useState(false)
   const [confirmAction, setConfirmAction] = useState<{ type: 'cdr' | 'customer' | 'gateway' | 'account-detail-report', message: string } | null>(null)
@@ -67,7 +96,32 @@ export default function SyncManagementPage() {
     }
   }, [selectedInstance])
 
-  // 定时轮询同步进度
+  // 定时轮询同步任务进度
+  useEffect(() => {
+    const fetchSyncTasksProgress = async () => {
+      try {
+        const res = await api.get<SyncTasksProgress>('/tasks/sync-tasks-progress')
+        if (res.data.success) {
+          setHasActiveTasks(res.data.has_active_tasks)
+          setSyncTasks(res.data.tasks || [])
+        }
+      } catch (e) {
+        console.error('获取同步任务进度失败:', e)
+      }
+    }
+
+    // 立即获取一次
+    fetchSyncTasksProgress()
+
+    // 每3秒轮询一次
+    const interval = setInterval(fetchSyncTasksProgress, 3000)
+    
+    return () => {
+      clearInterval(interval)
+    }
+  }, [])
+
+  // 定时轮询同步进度（保留旧逻辑，用于兼容）
   useEffect(() => {
     let interval: NodeJS.Timeout | null = null
     if (syncProgress.is_syncing) {
@@ -265,27 +319,92 @@ export default function SyncManagementPage() {
         </div>
       )}
 
-      {/* 同步进度卡片 */}
-      {syncProgress.is_syncing && (
-        <div className='mb-6 bg-gradient-to-r from-blue-500 to-purple-600 rounded-xl p-6 text-white shadow-lg'>
-          <div className='flex items-center gap-3 mb-3'>
-            <svg className='w-6 h-6 animate-spin' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
-              <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15' />
-            </svg>
-            <h3 className='text-xl font-bold'>正在同步...</h3>
-          </div>
-          <div className='space-y-2'>
-            {syncProgress.current_instance && (
-              <p className='text-sm'>📍 当前节点: {syncProgress.current_instance}</p>
-            )}
-            {syncProgress.current_customer && (
-              <p className='text-sm'>👤 当前客户: {syncProgress.current_customer}</p>
-            )}
-            {syncProgress.synced_count !== undefined && (
-              <p className='text-sm'>📊 已同步: {syncProgress.synced_count} 条</p>
-            )}
-            <p className='text-sm opacity-90'>{syncProgress.message}</p>
-          </div>
+      {/* 同步任务进度卡片 */}
+      {hasActiveTasks && syncTasks.length > 0 && (
+        <div className='mb-6 space-y-4'>
+          {syncTasks.map((task, index) => (
+            <div key={`${task.task_type}-${index}`} className='bg-gradient-to-r from-blue-50 to-purple-50 border border-blue-200 rounded-xl p-6 shadow-lg'>
+              <div className='flex items-center justify-between mb-4'>
+                <div className='flex items-center gap-3'>
+                  <div className='w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center'>
+                    <svg className='w-6 h-6 text-white animate-spin' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
+                      <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15' />
+                    </svg>
+                  </div>
+                  <div>
+                    <h3 className='text-lg font-bold text-gray-800'>{task.task_name}</h3>
+                    <p className='text-sm text-gray-600'>{task.message || '正在同步中...'}</p>
+                  </div>
+                </div>
+                <div className='text-right'>
+                  <p className='text-2xl font-bold text-blue-600'>{task.progress_percent.toFixed(1)}%</p>
+                  <p className='text-xs text-gray-500'>进度</p>
+                </div>
+              </div>
+
+              {/* 进度条 */}
+              <div className='mb-4'>
+                <div className='w-full bg-gray-200 rounded-full h-3 overflow-hidden'>
+                  <div
+                    className='bg-gradient-to-r from-blue-500 to-purple-600 h-3 rounded-full transition-all duration-300'
+                    style={{ width: `${task.progress_percent}%` }}
+                  />
+                </div>
+              </div>
+
+              {/* 详细信息 */}
+              <div className='grid grid-cols-2 md:grid-cols-4 gap-4 text-sm'>
+                {task.current_instance && (
+                  <div>
+                    <p className='text-gray-500 mb-1'>当前节点</p>
+                    <p className='font-medium text-gray-800'>{task.current_instance}</p>
+                  </div>
+                )}
+                {task.current_customer && (
+                  <div>
+                    <p className='text-gray-500 mb-1'>当前客户</p>
+                    <p className='font-medium text-gray-800'>{task.current_customer}</p>
+                  </div>
+                )}
+                {task.current_account && (
+                  <div>
+                    <p className='text-gray-500 mb-1'>当前账户</p>
+                    <p className='font-medium text-gray-800'>{task.current_account}</p>
+                  </div>
+                )}
+                {task.sync_date && (
+                  <div>
+                    <p className='text-gray-500 mb-1'>同步日期</p>
+                    <p className='font-medium text-gray-800'>{task.sync_date}</p>
+                  </div>
+                )}
+                {task.current_customer_index !== undefined && task.total_customers && (
+                  <div>
+                    <p className='text-gray-500 mb-1'>客户进度</p>
+                    <p className='font-medium text-gray-800'>{task.current_customer_index} / {task.total_customers}</p>
+                  </div>
+                )}
+                {task.completed_tasks !== undefined && task.total_tasks && (
+                  <div>
+                    <p className='text-gray-500 mb-1'>任务进度</p>
+                    <p className='font-medium text-gray-800'>{task.completed_tasks} / {task.total_tasks}</p>
+                  </div>
+                )}
+                {task.synced_count !== undefined && (
+                  <div>
+                    <p className='text-gray-500 mb-1'>已同步数量</p>
+                    <p className='font-medium text-gray-800'>{task.synced_count.toLocaleString()}</p>
+                  </div>
+                )}
+                {task.start_time && (
+                  <div>
+                    <p className='text-gray-500 mb-1'>开始时间</p>
+                    <p className='font-medium text-gray-800'>{new Date(task.start_time).toLocaleString('zh-CN')}</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
         </div>
       )}
 
