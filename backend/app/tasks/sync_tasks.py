@@ -110,66 +110,94 @@ def sync_all_instances_cdrs(days=None):
             else:
                 logger.info(f'  ✅ 实例 {inst.name} 客户信息同步完成')
         
-        # 3. 按天、按实例创建多个任务
+        # 3. 按天、按实例顺序同步（不再拆分任务，确保逻辑简单可靠）
         today = datetime.now().date()
-        task_count = 0
-        task_ids = []
+        total_synced_count = 0
         
-        logger.info(f'📞 步骤2: 创建按天同步任务（避免一次性查询所有天导致VOS卡死）...')
+        logger.info(f'📞 步骤2: 开始顺序同步历史话单...')
         
+        # 初始化进度信息
+        if r:
+            progress_key = 'cdr_sync_progress'
+            r.setex(
+                progress_key,
+                3600 * 2,
+                json.dumps({
+                    'status': 'running',
+                    'total_days': days,
+                    'total_instances': len(instances),
+                    'current_day_index': 0,
+                    'current_instance_index': 0,
+                    'start_time': datetime.now().isoformat(),
+                    'message': f'正在同步最近{days}天的话单...'
+                }, ensure_ascii=False)
+            )
+
         for day_offset in range(days):
             sync_date = today - timedelta(days=day_offset)
             date_str = sync_date.strftime('%Y%m%d')
             
-            # 为每个实例创建当天的同步任务
-            for inst_idx, inst in enumerate(instances, 1):
-                # 计算延迟时间：每个实例间隔5秒，每天间隔30秒
-                delay_seconds = day_offset * 30 + inst_idx * 5
-                
-                task = sync_cdrs_for_single_day.apply_async(
-                    args=[inst.id, date_str],
-                    countdown=delay_seconds
-                )
-                task_ids.append(str(task.id))
-                task_count += 1
-                
-                logger.info(f'  📅 已创建任务: {inst.name} - {date_str} (将在{delay_seconds}秒后执行)')
-        
-        logger.info(f'✅ 已创建 {task_count} 个同步任务（{len(instances)}个实例 × {days}天）')
-        
-        # 更新同步进度：任务已创建
-        if r:
-            # 初始化总进度信息
-            progress_key = 'cdr_sync_progress'
-            completed_tasks_key = 'cdr_sync_completed_tasks'
+            logger.info(f'  📅 处理日期: {date_str} (第 {day_offset+1}/{days} 天)')
             
-            # 设置总任务数和总进度信息
+            # 为每个实例执行同步
+            for inst_idx, inst in enumerate(instances, 1):
+                logger.info(f'    🔄 同步实例: {inst.name} ({inst_idx}/{len(instances)})')
+                
+                # 更新进度
+                if r:
+                    try:
+                        progress_data = json.loads(r.get('cdr_sync_progress') or '{}')
+                        progress_data.update({
+                            'current_day_index': day_offset + 1,
+                            'current_instance_index': inst_idx,
+                            'current_date': date_str,
+                            'current_instance': inst.name
+                        })
+                        r.setex('cdr_sync_progress', 3600 * 2, json.dumps(progress_data, ensure_ascii=False))
+                    except:
+                        pass
+
+                # 直接调用同步函数（同步执行）
+                try:
+                    # 注意：这里直接调用函数，而不是 apply_async
+                    result = sync_cdrs_for_single_day(inst.id, date_str)
+                    
+                    if result.get('success'):
+                        count = result.get('total', 0)
+                        total_synced_count += count
+                        logger.info(f'      ✅ 同步成功: {count} 条记录')
+                    else:
+                        logger.error(f'      ❌ 同步失败: {result.get("message")}')
+                except Exception as e:
+                    logger.exception(f'      ❌ 执行同步出错: {e}')
+                
+                # 实例之间短暂休眠，避免压力过大
+                time.sleep(1)
+            
+            # 天与天之间短暂休眠
+            time.sleep(2)
+        
+        logger.info(f'✅ 所有同步任务完成，共同步 {total_synced_count} 条话单')
+        
+        # 更新最终进度
+        if r:
             r.setex(
-                progress_key,
-                3600 * 2,  # 2小时过期（多天同步可能需要更长时间）
+                'cdr_sync_progress',
+                3600 * 2,
                 json.dumps({
-                    'status': 'task_created',
-                    'total_tasks': task_count,
-                    'completed_tasks': 0,
-                    'instances_count': len(instances),
-                    'days': days,
-                    'task_ids': task_ids,
-                    'start_time': datetime.now().isoformat(),
-                    'message': f'已创建{task_count}个同步任务，正在按计划执行...'
+                    'status': 'completed',
+                    'total_synced': total_synced_count,
+                    'end_time': datetime.now().isoformat(),
+                    'message': f'同步完成，共同步 {total_synced_count} 条话单'
                 }, ensure_ascii=False)
             )
-            
-            # 初始化已完成任务计数器
-            r.set(completed_tasks_key, 0)
-            r.expire(completed_tasks_key, 3600 * 2)
         
         return {
             'success': True,
             'instances_count': len(instances),
             'days': days,
-            'total_tasks': task_count,
-            'task_ids': task_ids,
-            'message': f'已创建{task_count}个同步任务（{len(instances)}个实例 × {days}天），任务将按计划执行'
+            'total_synced': total_synced_count,
+            'message': f'同步完成（{len(instances)}个实例 × {days}天），共 {total_synced_count} 条'
         }
         
     except Exception as e:
