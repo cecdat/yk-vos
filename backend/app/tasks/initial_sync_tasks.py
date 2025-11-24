@@ -272,12 +272,21 @@ def sync_cdrs_for_single_day(instance_id: int, date_str: str):
                     json.dumps(progress_data, ensure_ascii=False)
                 )
             
+            # 计算结束时间（下一天），确保查询范围覆盖全天
+            try:
+                current_date = datetime.strptime(date_str, '%Y%m%d')
+                next_date = current_date + timedelta(days=1)
+                end_date_str = next_date.strftime('%Y%m%d')
+            except Exception as e:
+                logger.error(f'日期格式解析失败: {date_str}, error: {e}')
+                end_date_str = date_str  # 降级处理
+
             # 查询该客户的话单
             try:
                 result = client.call_api('/external/server/GetCdr', {
                     'accounts': [account],
                     'beginTime': date_str,
-                    'endTime': date_str
+                    'endTime': end_date_str  # 使用下一天作为结束时间
                 })
                 
                 # VOS API可能返回数组或对象
