@@ -141,57 +141,100 @@ def sync_single_customer_cdrs(instance_id: int, customer_id: int, days: int = 1)
                     'customer': customer.account
                 }
         else:
-            # 多天同步：按天创建多个任务
-            from app.tasks.initial_sync_tasks import sync_cdrs_for_single_day
-            from app.models.customer import Customer as CustomerModel
-            
-            # 创建一个专门的任务来同步单个客户的单天数据
-            # 我们需要创建一个新的任务函数，或者修改现有的 sync_cdrs_for_single_day 来支持单个客户
-            
-            # 临时方案：为每天创建一个任务，但任务中只同步该客户
-            # 我们需要修改 sync_cdrs_for_single_day 来支持可选的 customer_account 参数
-            # 或者创建一个新的任务函数
-            
-            # 这里先使用简单方案：按天循环，每天创建一个任务同步该客户
+            # 多天同步：顺序执行（不再拆分任务）
             today = datetime.now().date()
-            task_count = 0
-            task_ids = []
+            total_synced = 0
             
-            logger.info(f'📅 为客户 {customer.account} 创建 {days} 天的同步任务（避免一次性查询导致VOS卡死）')
+            logger.info(f'📅 开始顺序同步客户 {customer.account} 最近 {days} 天的话单...')
+            
+            client = VOSClient(inst.base_url)
             
             for day_offset in range(days):
                 sync_date = today - timedelta(days=day_offset)
                 date_str = sync_date.strftime('%Y%m%d')
                 
-                # 创建任务：同步该客户当天的话单
-                # 注意：这里需要创建一个新的任务函数来支持单个客户同步
-                # 暂时使用 sync_cdrs_for_single_day，但需要修改它以支持单个客户过滤
-                # 或者创建一个新的任务函数 sync_single_customer_single_day
+                logger.info(f'  📅 处理日期: {date_str} (第 {day_offset+1}/{days} 天)')
                 
-                # 临时方案：创建一个任务，传入 customer_account 参数
-                # 我们需要先创建一个新的任务函数
-                delay_seconds = day_offset * 10  # 每天间隔10秒
+                # 更新同步进度
+                if r:
+                    r.setex(
+                        'cdr_sync_progress',
+                        3600,
+                        json.dumps({
+                            'status': 'syncing',
+                            'current_instance': inst.name,
+                            'current_instance_id': inst.id,
+                            'current_customer': customer.account,
+                            'current_day': day_offset + 1,
+                            'total_days': days,
+                            'synced_count': total_synced,
+                            'start_time': datetime.now().isoformat(),
+                            'sync_date': date_str
+                        }, ensure_ascii=False)
+                    )
                 
-                # 调用单个客户单天同步任务
-                task = sync_single_customer_single_day.apply_async(
-                    args=[instance_id, customer_id, date_str],
-                    countdown=delay_seconds
-                )
-                task_ids.append(str(task.id))
-                task_count += 1
+                # 计算开始时间和结束时间 (begin=date-1, end=date)
+                try:
+                    end_date = datetime.strptime(date_str, '%Y%m%d')
+                    start_date = end_date - timedelta(days=1)
+                    
+                    begin_time = start_date.strftime('%Y%m%d')
+                    end_time = date_str
+                except Exception as e:
+                    logger.error(f'日期格式解析失败: {date_str}, error: {e}')
+                    begin_time = date_str
+                    end_time = (datetime.now() + timedelta(days=1)).strftime('%Y%m%d')
                 
-                logger.info(f'  📅 已创建任务: {customer.account} - {date_str} (将在{delay_seconds}秒后执行)')
+                # 查询该客户当天的话单
+                payload = {
+                    'accounts': [customer.account],
+                    'callerE164': None,
+                    'calleeE164': None,
+                    'callerGateway': None,
+                    'calleeGateway': None,
+                    'beginTime': begin_time,
+                    'endTime': end_time
+                }
+                
+                try:
+                    res = client.post('/external/server/GetCdr', payload=payload)
+                    
+                    if not isinstance(res, dict) or res.get('retCode') != 0:
+                        error_msg = res.get('exception', 'Unknown error') if isinstance(res, dict) else 'Invalid response'
+                        logger.warning(f'    ❌ 客户 {customer.account} ({date_str}) 话单查询失败: {error_msg}')
+                        continue
+                    
+                    # 提取话单列表
+                    cdrs = res.get('infoCdrs') or res.get('cdrs') or res.get('CDRList') or []
+                    if not isinstance(cdrs, list):
+                        for v in res.values():
+                            if isinstance(v, list):
+                                cdrs = v
+                                break
+                    
+                    if cdrs:
+                        inserted = ClickHouseCDR.insert_cdrs(cdrs, vos_id=inst.id, vos_uuid=str(inst.vos_uuid))
+                        total_synced += inserted
+                        logger.info(f'    ✅ 同步成功: {inserted} 条话单')
+                    else:
+                        logger.info(f'    ℹ️  无话单数据')
+                        
+                except Exception as e:
+                    logger.exception(f'    ❌ 同步失败: {e}')
+                    continue
             
-            logger.info(f'✅ 已为客户 {customer.account} 创建 {task_count} 个同步任务')
+            logger.info(f'✅ 客户 {customer.account} 同步完成，共 {total_synced} 条话单')
+            
+            if r:
+                r.delete('cdr_sync_progress')
             
             return {
                 'success': True,
                 'customer': customer.account,
                 'instance': inst.name,
                 'days': days,
-                'total_tasks': task_count,
-                'task_ids': task_ids,
-                'message': f'已创建{task_count}个同步任务，任务将按计划执行'
+                'total_synced': total_synced,
+                'message': f'同步完成，共 {total_synced} 条话单'
             }
     
     except Exception as e:
@@ -263,6 +306,18 @@ def sync_single_customer_single_day(instance_id: int, customer_id: int, date_str
                 }, ensure_ascii=False)
             )
         
+        # 计算开始时间和结束时间 (begin=date-1, end=date)
+        try:
+            end_date = datetime.strptime(date_str, '%Y%m%d')
+            start_date = end_date - timedelta(days=1)
+            
+            begin_time = start_date.strftime('%Y%m%d')
+            end_time = date_str
+        except Exception as e:
+            logger.error(f'日期格式解析失败: {date_str}, error: {e}')
+            begin_time = date_str
+            end_time = (datetime.now() + timedelta(days=1)).strftime('%Y%m%d')
+        
         # 查询该客户当天的话单
         payload = {
             'accounts': [customer.account],
@@ -270,8 +325,8 @@ def sync_single_customer_single_day(instance_id: int, customer_id: int, date_str
             'calleeE164': None,
             'callerGateway': None,
             'calleeGateway': None,
-            'beginTime': date_str,
-            'endTime': date_str
+            'beginTime': begin_time,
+            'endTime': end_time
         }
         
         try:
