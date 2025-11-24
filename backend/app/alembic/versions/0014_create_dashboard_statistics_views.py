@@ -31,7 +31,7 @@ def upgrade():
             COALESCE(SUM(CASE WHEN c.is_in_debt = TRUE THEN 1 ELSE 0 END), 0) AS debt_count
         FROM vos_instances vi
         LEFT JOIN customers c ON c.vos_instance_id = vi.id
-        WHERE vi.enabled = TRUE
+        -- WHERE vi.enabled = TRUE  <-- Removed to include disabled instances
         GROUP BY vi.id, vi.name, vi.vos_uuid, vi.enabled;
     """)
     
