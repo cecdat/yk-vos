@@ -184,7 +184,7 @@ async def get_mapping_daily_report(
     db: Session = Depends(get_db)
 ):
     """
-    获取对接账户每日明细 (Mapping/Caller Gateway)
+    获取对接账户明细 (Mapping/Caller Gateway)
     """
     return await _get_gateway_daily_report(db, 'caller', start_date, end_date, vos_id, gateway_name, page, page_size)
 
@@ -201,7 +201,7 @@ async def get_routing_daily_report(
     db: Session = Depends(get_db)
 ):
     """
-    获取落地账户每日明细 (Routing/Callee Gateway)
+    获取落地账户明细 (Routing/Callee Gateway)
     """
     return await _get_gateway_daily_report(db, 'callee', start_date, end_date, vos_id, gateway_name, page, page_size)
 

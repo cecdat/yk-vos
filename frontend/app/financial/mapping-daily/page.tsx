@@ -98,7 +98,7 @@ export default function MappingDailyPage() {
     return (
         <div className='max-w-7xl mx-auto'>
             <div className='flex flex-col md:flex-row md:items-center justify-between mb-6 gap-4'>
-                <h1 className='text-2xl font-bold text-gray-800'>对接账户日明细</h1>
+                <h1 className='text-2xl font-bold text-gray-800'>对接账户明细</h1>
                 <div className='flex flex-wrap gap-3'>
                     <input
                         type='text'
