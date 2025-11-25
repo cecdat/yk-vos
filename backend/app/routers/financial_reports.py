@@ -56,16 +56,16 @@ async def get_income_expense_report(
         # 根据 period_type 确定分组字段
         if period_type == 'month':
             date_group = "toStartOfMonth(start)"
-            date_format = "formatDateTime(toStartOfMonth(start), '%Y-%m')"
+            date_format = "toString(toStartOfMonth(start))"  # 使用 toString 代替 formatDateTime
         elif period_type == 'quarter':
             date_group = "toStartOfQuarter(start)"
-            date_format = "formatDateTime(toStartOfQuarter(start), '%Y-Q%Q')"
+            date_format = "concat(toString(toYear(toStartOfQuarter(start))), '-Q', toString(toQuarter(start)))"
         elif period_type == 'year':
             date_group = "toStartOfYear(start)"
-            date_format = "formatDateTime(toStartOfYear(start), '%Y')"
+            date_format = "toString(toYear(toStartOfYear(start)))"
         else:  # day
             date_group = "toDate(start)"
-            date_format = "formatDateTime(toDate(start), '%Y-%m-%d')"
+            date_format = "toString(toDate(start))"
         
         # 查询收入（对接网关）和支出（落地网关）
         # 使用 UNION ALL 合并两个查询，然后再聚合
