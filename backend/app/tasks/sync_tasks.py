@@ -116,6 +116,23 @@ def sync_all_instances_cdrs(days=None):
         
         logger.info(f'📞 步骤2: 开始顺序同步历史话单...')
         
+        # 预先统计所有实例的总客户数（用于计算总体进度）
+        total_accounts = 0
+        for inst in instances:
+            from app.models.customer import Customer
+            from app.models.gateway import Gateway
+            
+            customers = db.query(Customer).filter(Customer.vos_instance_id == inst.id).count()
+            gateways = db.query(Gateway).filter(
+                Gateway.vos_instance_id == inst.id,
+                Gateway.gateway_type == 'routing',
+                Gateway.account != None,
+                Gateway.account != ''
+            ).count()
+            total_accounts += max(customers, gateways)  # 粗略估计，实际可能有重复
+        
+        logger.info(f'  📊 预计需要同步约 {total_accounts} 个账户 × {days} 天')
+        
         # 初始化进度信息
         if r:
             progress_key = 'cdr_sync_progress'
@@ -124,12 +141,18 @@ def sync_all_instances_cdrs(days=None):
                 3600 * 2,
                 json.dumps({
                     'status': 'running',
+                    'is_syncing': True,
                     'total_days': days,
                     'total_instances': len(instances),
+                    'total_accounts': total_accounts,
                     'current_day_index': 0,
                     'current_instance_index': 0,
+                    'current_customer_index': 0,
+                    'total_customers': 0,
+                    'synced_count': 0,
                     'start_time': datetime.now().isoformat(),
-                    'message': f'正在同步最近{days}天的话单...'
+                    'progress_percent': 0.0,
+                    'message': f'开始自动同步最近{days}天的话单...'
                 }, ensure_ascii=False)
             )
 
@@ -143,19 +166,29 @@ def sync_all_instances_cdrs(days=None):
             for inst_idx, inst in enumerate(instances, 1):
                 logger.info(f'    🔄 同步实例: {inst.name} ({inst_idx}/{len(instances)})')
                 
-                # 更新进度
+                # 计算总体进度百分比
+                # 进度 = (已完成天数 + 当前天内已完成实例数/总实例数) / 总天数
+                base_progress = (day_offset * 100.0 / days)
+                instance_progress = (inst_idx - 1) * 100.0 / days / len(instances)
+                overall_progress = base_progress + instance_progress
+                
+                # 更新进度（在调用 sync_cdrs_for_single_day 前）
                 if r:
                     try:
                         progress_data = json.loads(r.get('cdr_sync_progress') or '{}')
                         progress_data.update({
                             'current_day_index': day_offset + 1,
                             'current_instance_index': inst_idx,
+                            'current_instance': inst.name,
+                            'current_instance_id': inst.id,
                             'current_date': date_str,
-                            'current_instance': inst.name
+                            'progress_percent': round(overall_progress, 2),
+                            'message': f'正在同步 {inst.name} 的 {date_str} 话单数据...'
                         })
                         r.setex('cdr_sync_progress', 3600 * 2, json.dumps(progress_data, ensure_ascii=False))
-                    except:
-                        pass
+                        logger.info(f'      📊 总体进度: {overall_progress:.1f}%')
+                    except Exception as e:
+                        logger.warning(f'更新进度失败: {e}')
 
                 # 直接调用同步函数（同步执行）
                 try:
@@ -166,6 +199,15 @@ def sync_all_instances_cdrs(days=None):
                         count = result.get('total', 0)
                         total_synced_count += count
                         logger.info(f'      ✅ 同步成功: {count} 条记录')
+                        
+                        # 更新已同步总数
+                        if r:
+                            try:
+                                progress_data = json.loads(r.get('cdr_sync_progress') or '{}')
+                                progress_data['synced_count'] = total_synced_count
+                                r.setex('cdr_sync_progress', 3600 * 2, json.dumps(progress_data, ensure_ascii=False))
+                            except:
+                                pass
                     else:
                         logger.error(f'      ❌ 同步失败: {result.get("message")}')
                 except Exception as e:
@@ -186,9 +228,11 @@ def sync_all_instances_cdrs(days=None):
                 3600 * 2,
                 json.dumps({
                     'status': 'completed',
+                    'is_syncing': False,
                     'total_synced': total_synced_count,
+                    'progress_percent': 100.0,
                     'end_time': datetime.now().isoformat(),
-                    'message': f'同步完成，共同步 {total_synced_count} 条话单'
+                    'message': f'自动同步完成，共同步 {total_synced_count} 条话单'
                 }, ensure_ascii=False)
             )
         
