@@ -265,8 +265,8 @@ export default function Page() {
         </div>
 
         <div className={`bg-gradient-to-br ${cdrSyncStatus?.is_syncing ? 'from-blue-500 to-blue-600' :
-            cdrSyncStatus?.total_cdrs > 0 ? 'from-teal-500 to-teal-600' :
-              'from-gray-500 to-gray-600'
+          cdrSyncStatus?.total_cdrs > 0 ? 'from-teal-500 to-teal-600' :
+            'from-gray-500 to-gray-600'
           } rounded-xl p-5 text-white shadow-lg`}>
           <div className='flex items-center justify-between'>
             <div className='flex-1'>
@@ -428,10 +428,10 @@ export default function Page() {
                 <div
                   key={inst.instance_id}
                   className={`p-5 rounded-xl shadow-lg border transition-all ${!isEnabled
-                      ? 'bg-gray-100 border-gray-300 opacity-60' // 未启用：灰色
-                      : isCurrentVOS
-                        ? 'bg-gradient-to-br from-blue-50 to-purple-50 border-blue-300 border-2 ring-2 ring-blue-300'
-                        : 'bg-white bg-opacity-90 backdrop-filter backdrop-blur-lg border-white border-opacity-30'
+                    ? 'bg-gray-100 border-gray-300 opacity-60' // 未启用：灰色
+                    : isCurrentVOS
+                      ? 'bg-gradient-to-br from-blue-50 to-purple-50 border-blue-300 border-2 ring-2 ring-blue-300'
+                      : 'bg-white bg-opacity-90 backdrop-filter backdrop-blur-lg border-white border-opacity-30'
                     }`}
                 >
                   <div className='flex items-center justify-between mb-4'>
@@ -512,7 +512,7 @@ export default function Page() {
                       <svg className='w-5 h-5 text-green-600 mb-1' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
                         <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z' />
                       </svg>
-                      <span className='text-xs font-bold text-green-700'>
+                      <span className='text-xs font-bold text-green-700 whitespace-nowrap'>
                         {(() => {
                           const instanceStatus = cdrSyncStatus?.instances?.find(status => status.instance_id === inst.instance_id);
                           const totalCdrs = instanceStatus?.total_cdrs || 0;
