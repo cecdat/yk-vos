@@ -222,19 +222,44 @@ def sync_cdrs_for_single_day(instance_id: int, date_str: str):
             Customer.vos_instance_id == inst.id
         ).all()
         
-        if not customers:
-            logger.warning(f'VOS {inst.name} 没有客户数据，跳过话单同步')
-            return {'success': True, 'total': 0, 'new': 0, 'date': date_str, 'message': '没有客户数据'}
+        # 获取落地网关对应的账户列表（用于计算成本）
+        from app.models.gateway import Gateway
+        gateways = db.query(Gateway).filter(
+            Gateway.vos_instance_id == inst.id,
+            Gateway.gateway_type == 'routing',
+            Gateway.account != None,
+            Gateway.account != ''
+        ).all()
         
-        logger.info(f'  按客户同步 (共 {len(customers)} 个客户)...')
+        # 合并账户列表（去重）
+        # 使用字典存储，key为账号，value为来源类型（customer/gateway）
+        # 如果既是客户又是网关，优先标记为客户（通常不会发生）
+        accounts_to_sync = {}
         
-        # 按客户循环同步
+        for cust in customers:
+            if cust.account:
+                accounts_to_sync[cust.account] = {'type': 'customer', 'obj': cust}
+                
+        for gw in gateways:
+            if gw.account:
+                if gw.account not in accounts_to_sync:
+                    accounts_to_sync[gw.account] = {'type': 'gateway', 'obj': gw}
+        
+        if not accounts_to_sync:
+            logger.warning(f'VOS {inst.name} 没有客户或网关账户数据，跳过话单同步')
+            return {'success': True, 'total': 0, 'new': 0, 'date': date_str, 'message': '没有账户数据'}
+        
+        logger.info(f'  准备同步 {len(accounts_to_sync)} 个账户 (客户: {len(customers)}, 落地网关: {len(gateways)})...')
+        
+        # 按账户循环同步
         total_synced = 0
         client = VOSClient(inst.base_url)
         
-        for idx, customer in enumerate(customers, 1):
-            account = customer.account
-            logger.info(f'    [{idx}/{len(customers)}] 同步客户: {account}')
+        # 转换为列表以便遍历
+        account_list = list(accounts_to_sync.items())
+        
+        for idx, (account, info) in enumerate(account_list, 1):
+            logger.info(f'    [{idx}/{len(account_list)}] 同步账户: {account} (类型: {info["type"]})')
             
             # 更新同步进度（保留总任务数信息）
             if r:
@@ -255,7 +280,7 @@ def sync_cdrs_for_single_day(instance_id: int, date_str: str):
                     'current_instance_id': inst.id,
                     'current_customer': account,
                     'current_customer_index': idx,
-                    'total_customers': len(customers),
+                    'total_customers': len(account_list),
                     'synced_count': total_synced,
                     'start_time': base_progress.get('start_time', datetime.now().isoformat()),
                     'sync_date': date_str,
@@ -287,7 +312,7 @@ def sync_cdrs_for_single_day(instance_id: int, date_str: str):
                 begin_time = date_str
                 end_time = (datetime.now() + timedelta(days=1)).strftime('%Y%m%d')
 
-            # 查询该客户的话单
+            # 查询该账户的话单
             try:
                 result = client.call_api('/external/server/GetCdr', {
                     'accounts': [account],
@@ -300,9 +325,9 @@ def sync_cdrs_for_single_day(instance_id: int, date_str: str):
                     result = result[0]
                 
                 if not isinstance(result, dict) or result.get('retCode') != 0:
-                    logger.warning(f'      客户 {account} 话单查询失败')
+                    logger.warning(f'      账户 {account} 话单查询失败')
                     # 即使失败也延迟，避免请求过快
-                    if idx < len(customers):
+                    if idx < len(account_list):
                         time.sleep(2)
                     continue
                 
@@ -317,18 +342,18 @@ def sync_cdrs_for_single_day(instance_id: int, date_str: str):
                 if cdrs:
                     inserted = ClickHouseCDR.insert_cdrs(cdrs, vos_id=inst.id, vos_uuid=str(inst.vos_uuid))
                     total_synced += inserted
-                    logger.info(f'      ✅ 客户 {account}: 同步 {inserted} 条话单')
+                    logger.info(f'      ✅ 账户 {account}: 同步 {inserted} 条话单')
                 
             except Exception as e:
-                logger.exception(f'      ❌ 客户 {account} 同步失败: {e}')
+                logger.exception(f'      ❌ 账户 {account} 同步失败: {e}')
                 # 即使失败也延迟，避免请求过快
-                if idx < len(customers):
+                if idx < len(account_list):
                     time.sleep(2)
                 continue
             
-            # 每个客户之间延迟2秒，避免请求过于频繁导致VOS卡死
-            # 最后一个客户不需要延迟
-            if idx < len(customers):
+            # 每个账户之间延迟2秒，避免请求过于频繁导致VOS卡死
+            # 最后一个账户不需要延迟
+            if idx < len(account_list):
                 time.sleep(2)
         
         # 更新已完成任务数（不删除进度，保留总进度信息）
@@ -365,7 +390,7 @@ def sync_cdrs_for_single_day(instance_id: int, date_str: str):
             'new': total_synced,
             'date': date_str,
             'instance_name': inst.name,
-            'customers_count': len(customers)
+            'accounts_count': len(account_list)
         }
     
     except Exception as e:
