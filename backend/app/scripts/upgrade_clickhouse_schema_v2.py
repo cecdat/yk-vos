@@ -8,16 +8,11 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(
 from app.core.config import settings
 
 def upgrade_schema():
-    # Fallback to localhost if running locally
-    host = settings.CLICKHOUSE_HOST
-    if host == 'clickhouse':
-        host = 'localhost'
-        
-    print(f"Connecting to ClickHouse at {host}:{settings.CLICKHOUSE_PORT}...")
+    print(f"Connecting to ClickHouse at {settings.CLICKHOUSE_HOST}:{settings.CLICKHOUSE_PORT}...")
     
     try:
         client = Client(
-            host=host,
+            host=settings.CLICKHOUSE_HOST,
             port=settings.CLICKHOUSE_PORT,
             user=settings.CLICKHOUSE_USER,
             password=settings.CLICKHOUSE_PASSWORD,
