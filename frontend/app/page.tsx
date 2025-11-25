@@ -1,5 +1,5 @@
 'use client'
-import React, {useEffect, useState} from 'react'
+import React, { useEffect, useState } from 'react'
 import api from '../lib/api'
 import StatCard from '../components/ui/StatCard'
 import Card from '../components/ui/Card'
@@ -48,7 +48,7 @@ interface CDRSyncProgress {
   message?: string
 }
 
-export default function Page(){
+export default function Page() {
   const { currentVOS } = useVOS()
   const [instances, setInstances] = useState<any[]>([])
   const [customerSummary, setCustomerSummary] = useState<CustomerSummary | null>(null)
@@ -60,14 +60,14 @@ export default function Page(){
 
   useEffect(() => {
     fetchData()
-    
+
     // 如果正在同步，定时刷新进度
     const interval = setInterval(() => {
       if (cdrSyncStatus?.is_syncing) {
         fetchCDRSyncProgress()
       }
     }, 3000) // 每3秒刷新一次
-    
+
     return () => clearInterval(interval)
   }, [cdrSyncStatus?.is_syncing])
 
@@ -82,7 +82,7 @@ export default function Page(){
         fetchGatewaySummary(),
         fetchCDRSyncStatus()
       ])
-      
+
       // 记录失败的请求
       results.forEach((result, index) => {
         if (result.status === 'rejected') {
@@ -96,7 +96,7 @@ export default function Page(){
       setLoading(false)
     }
   }
-  
+
   async function fetchGatewaySummary() {
     try {
       const res = await api.get('/vos/gateways/summary')
@@ -145,7 +145,7 @@ export default function Page(){
     try {
       const res = await api.get('/tasks/cdr-sync-status')
       setCdrSyncStatus(res.data)
-      
+
       // 如果正在同步，立即获取进度
       if (res.data.is_syncing) {
         fetchCDRSyncProgress()
@@ -164,7 +164,7 @@ export default function Page(){
       })
     }
   }
-  
+
   async function fetchCDRSyncProgress() {
     try {
       const res = await api.get('/tasks/cdr-sync-progress')
@@ -174,7 +174,7 @@ export default function Page(){
       setCdrSyncProgress(null)
     }
   }
-  
+
   function formatNumber(num: number): string {
     if (num >= 100000000) {
       return (num / 100000000).toFixed(1) + '亿'
@@ -183,7 +183,7 @@ export default function Page(){
     }
     return num.toString()
   }
-  
+
   function formatDateTime(dateStr: string | null): string {
     if (!dateStr) return '暂无数据'
     try {
@@ -264,17 +264,16 @@ export default function Page(){
           </div>
         </div>
 
-        <div className={`bg-gradient-to-br ${
-          cdrSyncStatus?.is_syncing ? 'from-blue-500 to-blue-600' :
-          cdrSyncStatus?.total_cdrs > 0 ? 'from-teal-500 to-teal-600' :
-          'from-gray-500 to-gray-600'
-        } rounded-xl p-5 text-white shadow-lg`}>
+        <div className={`bg-gradient-to-br ${cdrSyncStatus?.is_syncing ? 'from-blue-500 to-blue-600' :
+            cdrSyncStatus?.total_cdrs > 0 ? 'from-teal-500 to-teal-600' :
+              'from-gray-500 to-gray-600'
+          } rounded-xl p-5 text-white shadow-lg`}>
           <div className='flex items-center justify-between'>
             <div className='flex-1'>
               <p className='text-white text-opacity-90 text-xs mb-1'>话单同步</p>
               <p className='text-2xl font-bold'>
-                {cdrSyncStatus?.is_syncing ? '同步中' : 
-                 cdrSyncStatus?.total_cdrs ? formatNumber(cdrSyncStatus.total_cdrs) : '0'}
+                {cdrSyncStatus?.is_syncing ? '同步中' :
+                  cdrSyncStatus?.total_cdrs ? formatNumber(cdrSyncStatus.total_cdrs) : '0'}
               </p>
               <p className='text-xs text-white text-opacity-75 mt-0.5 truncate' title={cdrSyncStatus?.last_sync_time || ''}>
                 {cdrSyncStatus?.last_sync_time ? formatDateTime(cdrSyncStatus.last_sync_time) : '暂无记录'}
@@ -286,14 +285,14 @@ export default function Page(){
                   <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15' />
                 </svg>
               ) : (
-              <svg className='w-5 h-5' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
+                <svg className='w-5 h-5' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
                   <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z' />
-              </svg>
+                </svg>
               )}
             </div>
           </div>
         </div>
-        
+
         {/* 新增网关统计卡片 */}
         <div className='bg-gradient-to-br from-indigo-500 to-indigo-600 rounded-xl p-5 text-white shadow-lg'>
           <div className='flex items-center justify-between'>
@@ -347,12 +346,12 @@ export default function Page(){
               <h2 className='text-lg font-bold flex items-center gap-2'>
                 <svg className='w-5 h-5 animate-spin' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
                   <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15' />
-            </svg>
+                </svg>
                 正在同步话单数据
               </h2>
               <span className='text-sm opacity-90'>
                 进度: {cdrSyncProgress.progress_percent?.toFixed(1)}%
-            </span>
+              </span>
             </div>
 
             <div className='grid grid-cols-1 md:grid-cols-3 gap-3 mb-3'>
@@ -360,7 +359,7 @@ export default function Page(){
                 <p className='text-xs opacity-75 mb-1'>当前节点</p>
                 <p className='text-base font-semibold'>{cdrSyncProgress.current_instance || '准备中...'}</p>
               </div>
-              
+
               <div className='bg-white bg-opacity-20 rounded-lg p-3'>
                 <p className='text-xs opacity-75 mb-1'>当前客户</p>
                 <p className='text-base font-semibold'>
@@ -372,7 +371,7 @@ export default function Page(){
                   )}
                 </p>
               </div>
-              
+
               <div className='bg-white bg-opacity-20 rounded-lg p-3'>
                 <p className='text-xs opacity-75 mb-1'>已同步数据</p>
                 <p className='text-base font-semibold'>{formatNumber(cdrSyncProgress.synced_count || 0)} 条</p>
@@ -381,7 +380,7 @@ export default function Page(){
 
             {/* 进度条 */}
             <div className='bg-white bg-opacity-20 rounded-full h-2 overflow-hidden'>
-              <div 
+              <div
                 className='bg-white h-full transition-all duration-300 ease-out'
                 style={{ width: `${cdrSyncProgress.progress_percent || 0}%` }}
               />
@@ -408,12 +407,12 @@ export default function Page(){
                 routing_gateway_count: 0,
                 online_gateway_count: 0
               }
-              
+
               // 获取该实例的完整信息（包括健康状态和启用状态）
               const instanceInfo = instances.find((i: any) => i.id === inst.instance_id)
               const healthStatus = instanceInfo?.health_status || 'unknown'
               const isEnabled = instanceInfo?.enabled !== false // 默认为true
-              
+
               // 健康状态图标：健康/可达=绿色灯泡，异常=红色灯泡
               const healthIcon = healthStatus === 'healthy' ? (
                 <svg className='w-5 h-5 text-green-500' fill='currentColor' viewBox='0 0 20 20' title='健康'>
@@ -424,17 +423,16 @@ export default function Page(){
                   <path d='M11 3a1 1 0 10-2 0v1a1 1 0 002 0V3zM15.657 5.757a1 1 0 00-1.414-1.414l-.707.707a1 1 0 001.414 1.414l.707-.707zM18 10a1 1 0 01-1 1h-1a1 1 0 110-2h1a1 1 0 011 1zM5.05 6.464A1 1 0 106.464 5.05l-.707-.707a1 1 0 00-1.414 1.414l.707.707zM5 10a1 1 0 01-1 1H3a1 1 0 110-2h1a1 1 0 011 1zM8 16v-1h4v1a2 2 0 11-4 0zM12 14c.015-.34.208-.646.477-.859a4 4 0 10-4.954 0c.27.213.462.519.477.859h4z' />
                 </svg>
               )
-              
+
               return (
-                <div 
-                  key={inst.instance_id} 
-                  className={`p-5 rounded-xl shadow-lg border transition-all ${
-                    !isEnabled
+                <div
+                  key={inst.instance_id}
+                  className={`p-5 rounded-xl shadow-lg border transition-all ${!isEnabled
                       ? 'bg-gray-100 border-gray-300 opacity-60' // 未启用：灰色
-                      : isCurrentVOS 
-                        ? 'bg-gradient-to-br from-blue-50 to-purple-50 border-blue-300 border-2 ring-2 ring-blue-300' 
+                      : isCurrentVOS
+                        ? 'bg-gradient-to-br from-blue-50 to-purple-50 border-blue-300 border-2 ring-2 ring-blue-300'
                         : 'bg-white bg-opacity-90 backdrop-filter backdrop-blur-lg border-white border-opacity-30'
-                  }`}
+                    }`}
                 >
                   <div className='flex items-center justify-between mb-4'>
                     <div className='flex items-center gap-2'>
@@ -459,11 +457,11 @@ export default function Page(){
                       )}
                     </div>
                   </div>
-                  
+
                   {/* 统计信息图标 */}
                   <div className='grid grid-cols-5 gap-3 mb-3'>
                     {/* 全部用户数 */}
-                    <div 
+                    <div
                       className='flex flex-col items-center justify-center p-2 bg-gray-50 rounded-lg hover:bg-gray-100 transition cursor-help'
                       title='全部用户数'
                     >
@@ -472,9 +470,9 @@ export default function Page(){
                       </svg>
                       <span className='text-xs font-bold text-gray-700'>{inst.customer_count || 0}</span>
                     </div>
-                    
+
                     {/* 欠费用户数 */}
-                    <div 
+                    <div
                       className='flex flex-col items-center justify-center p-2 bg-red-50 rounded-lg hover:bg-red-100 transition cursor-help'
                       title='欠费用户数'
                     >
@@ -483,9 +481,9 @@ export default function Page(){
                       </svg>
                       <span className='text-xs font-bold text-red-700'>{inst.debt_customer_count || 0}</span>
                     </div>
-                    
+
                     {/* 落地网关数 */}
-                    <div 
+                    <div
                       className='flex flex-col items-center justify-center p-2 bg-purple-50 rounded-lg hover:bg-purple-100 transition cursor-help'
                       title='落地网关数'
                     >
@@ -494,9 +492,9 @@ export default function Page(){
                       </svg>
                       <span className='text-xs font-bold text-purple-700'>{gatewayStats.routing_gateway_count || 0}</span>
                     </div>
-                    
+
                     {/* 对接网关数 */}
-                    <div 
+                    <div
                       className='flex flex-col items-center justify-center p-2 bg-blue-50 rounded-lg hover:bg-blue-100 transition cursor-help'
                       title='对接网关数'
                     >
@@ -505,9 +503,9 @@ export default function Page(){
                       </svg>
                       <span className='text-xs font-bold text-blue-700'>{gatewayStats.mapping_gateway_count || 0}</span>
                     </div>
-                    
+
                     {/* 历史话单数 */}
-                    <div 
+                    <div
                       className='flex flex-col items-center justify-center p-2 bg-green-50 rounded-lg hover:bg-green-100 transition cursor-help'
                       title='历史话单数'
                     >
@@ -517,12 +515,17 @@ export default function Page(){
                       <span className='text-xs font-bold text-green-700'>
                         {(() => {
                           const instanceStatus = cdrSyncStatus?.instances?.find(status => status.instance_id === inst.instance_id);
-                          return instanceStatus?.total_cdrs || 0;
+                          const totalCdrs = instanceStatus?.total_cdrs || 0;
+                          // 超过1万用万表示，保留2位小数
+                          if (totalCdrs >= 10000) {
+                            return (totalCdrs / 10000).toFixed(2) + '万';
+                          }
+                          return totalCdrs.toLocaleString();
                         })()}
                       </span>
                     </div>
                   </div>
-                  
+
                   {inst.error && (
                     <p className='text-xs text-red-600 mt-2'>⚠️ {inst.error}</p>
                   )}
