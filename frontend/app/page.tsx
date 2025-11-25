@@ -278,6 +278,18 @@ export default function Page() {
               <p className='text-xs text-white text-opacity-75 mt-0.5 truncate' title={cdrSyncStatus?.last_sync_time || ''}>
                 {cdrSyncStatus?.last_sync_time ? formatDateTime(cdrSyncStatus.last_sync_time) : '暂无记录'}
               </p>
+              {/* 最近同步数量 */}
+              {cdrSyncProgress?.synced_count !== undefined && cdrSyncProgress.synced_count > 0 && (
+                <p className='text-xs text-white text-opacity-75 mt-0.5 whitespace-nowrap'>
+                  最近同步: {(() => {
+                    const count = cdrSyncProgress.synced_count;
+                    if (count >= 10000) {
+                      return (count / 10000).toFixed(2) + '万';
+                    }
+                    return count.toLocaleString();
+                  })()}
+                </p>
+              )}
             </div>
             <div className='w-10 h-10 bg-white bg-opacity-20 rounded-lg flex items-center justify-center'>
               {cdrSyncStatus?.is_syncing ? (
