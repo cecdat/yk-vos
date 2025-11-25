@@ -13,6 +13,14 @@ interface GatewayRecord {
     connection_rate: number
 }
 
+interface ApiResponse {
+    data: GatewayRecord[]
+    total: number
+    page: number
+    page_size: number
+    total_pages: number
+}
+
 export default function RoutingDailyPage() {
     const { currentVOS } = useVOS()
     const [data, setData] = useState<GatewayRecord[]>([])
@@ -20,6 +28,10 @@ export default function RoutingDailyPage() {
     const [startDate, setStartDate] = useState('')
     const [endDate, setEndDate] = useState('')
     const [searchName, setSearchName] = useState('')
+    const [page, setPage] = useState(1)
+    const [pageSize] = useState(25)
+    const [total, setTotal] = useState(0)
+    const [totalPages, setTotalPages] = useState(0)
 
     useEffect(() => {
         const end = new Date()
@@ -31,16 +43,25 @@ export default function RoutingDailyPage() {
 
     useEffect(() => {
         if (startDate && endDate) {
+            setPage(1)
             fetchData()
         }
-    }, [startDate, endDate, currentVOS])
+    }, [startDate, endDate, currentVOS, searchName])
+
+    useEffect(() => {
+        if (startDate && endDate) {
+            fetchData()
+        }
+    }, [page])
 
     async function fetchData() {
         setLoading(true)
         try {
             const params: any = {
                 start_date: startDate,
-                end_date: endDate
+                end_date: endDate,
+                page,
+                page_size: pageSize
             }
             if (currentVOS) {
                 params.vos_id = currentVOS.id
@@ -49,8 +70,10 @@ export default function RoutingDailyPage() {
                 params.gateway_name = searchName
             }
 
-            const res = await api.get('/financial/routing-daily', { params })
+            const res = await api.get<ApiResponse>('/financial/routing-daily', { params })
             setData(res.data.data)
+            setTotal(res.data.total)
+            setTotalPages(res.data.total_pages)
         } catch (e) {
             console.error('获取落地账户报表失败:', e)
         } finally {
@@ -147,8 +170,8 @@ export default function RoutingDailyPage() {
                                         </td>
                                         <td className='px-6 py-4 text-right'>
                                             <span className={`px-2 py-1 rounded text-xs font-semibold ${row.connection_rate > 50 ? 'bg-green-100 text-green-800' :
-                                                    row.connection_rate > 20 ? 'bg-yellow-100 text-yellow-800' :
-                                                        'bg-red-100 text-red-800'
+                                                row.connection_rate > 20 ? 'bg-yellow-100 text-yellow-800' :
+                                                    'bg-red-100 text-red-800'
                                                 }`}>
                                                 {row.connection_rate}%
                                             </span>
@@ -159,6 +182,31 @@ export default function RoutingDailyPage() {
                         </tbody>
                     </table>
                 </div>
+
+                {/* 分页 */}
+                {totalPages > 1 && (
+                    <div className='flex items-center justify-between px-6 py-4 border-t border-gray-100'>
+                        <div className='text-sm text-gray-600'>
+                            共 {total} 条记录，第 {page} / {totalPages} 页
+                        </div>
+                        <div className='flex gap-2'>
+                            <button
+                                onClick={() => setPage(Math.max(1, page - 1))}
+                                disabled={page === 1}
+                                className='px-3 py-1 border rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed'
+                            >
+                                上一页
+                            </button>
+                            <button
+                                onClick={() => setPage(Math.min(totalPages, page + 1))}
+                                disabled={page === totalPages}
+                                className='px-3 py-1 border rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed'
+                            >
+                                下一页
+                            </button>
+                        </div>
+                    </div>
+                )}
             </div>
         </div>
     )

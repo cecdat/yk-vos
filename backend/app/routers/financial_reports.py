@@ -22,46 +22,30 @@ async def get_income_expense_report(
     start_date: Optional[date] = Query(None, description='开始日期'),
     end_date: Optional[date] = Query(None, description='结束日期'),
     vos_id: Optional[int] = Query(None, description='VOS实例ID'),
+    period_type: str = Query('day', description='聚合类型: day/month/quarter/year'),
+    page: int = Query(1, ge=1, description='页码'),
+    page_size: int = Query(25, ge=1, le=100, description='每页数量'),
     current_user: Annotated[User, Depends(get_current_user)] = None,
     db: Session = Depends(get_db)
 ):
     """
-    获取财务明细收支报表 (按天汇总)
-    目前主要展示收入 (Total Fee)
+    获取财务明细收支报表
+    收入 = 对接网关（caller_gateway）消耗
+    支出 = 落地网关（callee_gateway）消耗
+    利润 = 收入 - 支出
     """
-    # 默认查询最近30天
+    # 默认查询最近7天
     if not start_date:
-        start_date = date.today() - timedelta(days=30)
+        start_date = date.today() - timedelta(days=7)
     if not end_date:
         end_date = date.today()
         
-    cache_key = f'financial_income_expense_{start_date}_{end_date}_{vos_id}'
+    cache_key = f'financial_income_expense_{start_date}_{end_date}_{vos_id}_{period_type}_{page}_{page_size}'
     cached_data = RedisCache.get(cache_key)
     if cached_data:
         return cached_data
         
     try:
-        # 1. 获取所有客户账号（用于计算收入）
-        customer_query = db.query(Customer.account).filter(Customer.account != None)
-        if vos_id:
-            customer_query = customer_query.filter(Customer.vos_instance_id == vos_id)
-        customer_accounts = [r[0] for r in customer_query.all()]
-        
-        # 2. 获取所有落地网关账号（用于计算支出）
-        gateway_query = db.query(Gateway.account).filter(
-            Gateway.gateway_type == 'routing',
-            Gateway.account != None
-        )
-        if vos_id:
-            gateway_query = gateway_query.filter(Gateway.vos_instance_id == vos_id)
-        gateway_accounts = [r[0] for r in gateway_query.all()]
-        
-        # 3. 查询每日统计数据
-        # 由于 ClickHouse 的 cdrs_daily_stats 已经按账户聚合，我们可以直接查询
-        # 但为了区分收入和支出，我们需要分别查询或一次性查询后在内存处理
-        # 考虑到数据量，我们在 SQL 中做区分可能更高效，但 ClickHouse 不直接支持 IN (大列表)
-        # 所以我们分别查询收入和支出
-        
         from app.core.clickhouse_db import get_clickhouse_db
         ch_db = get_clickhouse_db()
         
@@ -69,81 +53,118 @@ async def get_income_expense_report(
         start_str = start_date.strftime('%Y-%m-%d')
         end_str = end_date.strftime('%Y-%m-%d')
         
-        # 查询收入 (Income) - 匹配客户账号
-        income_data = {}
-        if customer_accounts:
-            # 处理账号列表，转义单引号
-            cust_acc_str = "', '".join([acc.replace("'", "\\'") for acc in customer_accounts])
-            income_sql = f"""
-                SELECT 
-                    call_date,
-                    sum(total_fee) as income,
-                    sum(total_duration) as duration,
-                    sum(call_count) as calls
-                FROM cdrs_daily_stats
-                WHERE call_date >= '{start_str}' AND call_date <= '{end_str}'
-                  AND account IN ('{cust_acc_str}')
-                {f"AND vos_id = {vos_id}" if vos_id else ""}
-                GROUP BY call_date
-            """
-            try:
-                income_rows = ch_db.execute(income_sql)
-                for row in income_rows:
-                    date_key = row[0].strftime('%Y-%m-%d')
-                    income_data[date_key] = {
-                        'income': float(row[1]),
-                        'duration': row[2],
-                        'calls': row[3]
-                    }
-            except Exception as e:
-                logger.error(f"查询收入失败: {e}")
-
-        # 查询支出 (Expense) - 匹配落地网关账号
-        expense_data = {}
-        if gateway_accounts:
-            # 处理账号列表，转义单引号
-            gw_acc_str = "', '".join([acc.replace("'", "\\'") for acc in gateway_accounts])
-            expense_sql = f"""
-                SELECT 
-                    call_date,
-                    sum(total_fee) as expense
-                FROM cdrs_daily_stats
-                WHERE call_date >= '{start_str}' AND call_date <= '{end_str}'
-                  AND account IN ('{gw_acc_str}')
-                {f"AND vos_id = {vos_id}" if vos_id else ""}
-                GROUP BY call_date
-            """
-            try:
-                expense_rows = ch_db.execute(expense_sql)
-                for row in expense_rows:
-                    date_key = row[0].strftime('%Y-%m-%d')
-                    expense_data[date_key] = float(row[1])
-            except Exception as e:
-                logger.error(f"查询支出失败: {e}")
+        # 根据 period_type 确定分组字段
+        if period_type == 'month':
+            date_group = "toStartOfMonth(start)"
+            date_format = "formatDateTime(toStartOfMonth(start), '%Y-%m')"
+        elif period_type == 'quarter':
+            date_group = "toStartOfQuarter(start)"
+            date_format = "formatDateTime(toStartOfQuarter(start), '%Y-Q%Q')"
+        elif period_type == 'year':
+            date_group = "toStartOfYear(start)"
+            date_format = "formatDateTime(toStartOfYear(start), '%Y')"
+        else:  # day
+            date_group = "toDate(start)"
+            date_format = "formatDateTime(toDate(start), '%Y-%m-%d')"
         
-        # 合并数据
-        data = []
-        # 生成日期范围
-        current = start_date
-        while current <= end_date:
-            date_key = current.strftime('%Y-%m-%d')
-            inc_info = income_data.get(date_key, {'income': 0, 'duration': 0, 'calls': 0})
-            exp_val = expense_data.get(date_key, 0)
+        # 查询收入（对接网关）和支出（落地网关）
+        # 使用 UNION ALL 合并两个查询，然后再聚合
+        sql = f"""
+            WITH income_data AS (
+                SELECT 
+                    {date_group} as period,
+                    {date_format} as period_str,
+                    account,
+                    account_name,
+                    caller_gateway as gateway,
+                    sum(fee) as amount,
+                    sum(hold_time) as duration,
+                    count(*) as cdr_count
+                FROM cdrs
+                WHERE start >= '{start_str}' AND start < '{end_str} 23:59:59'
+                  AND caller_gateway != ''
+                  {f"AND vos_id = {vos_id}" if vos_id else ""}
+                GROUP BY period, period_str, account, account_name, gateway
+            ),
+            expense_data AS (
+                SELECT 
+                    {date_group} as period,
+                    {date_format} as period_str,
+                    account,
+                    account_name,
+                    callee_gateway as gateway,
+                    sum(fee) as amount,
+                    sum(hold_time) as duration,
+                    count(*) as cdr_count
+                FROM cdrs
+                WHERE start >= '{start_str}' AND start < '{end_str} 23:59:59'
+                  AND callee_gateway != ''
+                  {f"AND vos_id = {vos_id}" if vos_id else ""}
+                GROUP BY period, period_str, account, account_name, gateway
+            )
+            SELECT 
+                period_str,
+                sum(CASE WHEN type = 'income' THEN amount ELSE 0 END) as income,
+                sum(CASE WHEN type = 'expense' THEN amount ELSE 0 END) as expense,
+                sum(CASE WHEN type = 'income' THEN duration ELSE 0 END) as income_duration,
+                sum(CASE WHEN type = 'expense' THEN duration ELSE 0 END) as expense_duration,
+                sum(CASE WHEN type = 'income' THEN cdr_count ELSE 0 END) as income_cdr_count,
+                sum(CASE WHEN type = 'expense' THEN cdr_count ELSE 0 END) as expense_cdr_count,
+                groupArray(CASE WHEN type = 'income' THEN account ELSE NULL END) as income_accounts,
+                groupArray(CASE WHEN type = 'income' THEN account_name ELSE NULL END) as income_account_names,
+                groupArray(CASE WHEN type = 'expense' THEN account ELSE NULL END) as expense_accounts,
+                groupArray(CASE WHEN type = 'expense' THEN account_name ELSE NULL END) as expense_account_names
+            FROM (
+                SELECT period, period_str, account, account_name, gateway, amount, duration, cdr_count, 'income' as type
+                FROM income_data
+                UNION ALL
+                SELECT period, period_str, account, account_name, gateway, amount, duration, cdr_count, 'expense' as type
+                FROM expense_data
+            )
+            GROUP BY period_str
+            ORDER BY period_str DESC
+        """
+        
+        rows = ch_db.execute(sql)
+        
+        # 处理数据
+        all_data = []
+        for row in rows:
+            # 过滤掉 None 值
+            income_accounts = [acc for acc in row[7] if acc]
+            income_account_names = [name for name in row[8] if name]
+            expense_accounts = [acc for acc in row[9] if acc]
+            expense_account_names = [name for name in row[10] if name]
             
-            data.append({
-                'date': date_key,
-                'income': inc_info['income'],
-                'expense': exp_val,
-                'profit': inc_info['income'] - exp_val,
-                'duration': inc_info['duration'],
-                'calls': inc_info['calls']
+            all_data.append({
+                'date': row[0],
+                'income': float(row[1]),
+                'expense': float(row[2]),
+                'profit': float(row[1]) - float(row[2]),
+                'income_duration': row[3],
+                'expense_duration': row[4],
+                'income_cdr_count': row[5],
+                'expense_cdr_count': row[6],
+                'total_cdr_count': row[5] + row[6],
+                'income_accounts': ', '.join(set(income_accounts)),  # 去重并合并
+                'income_account_names': ', '.join(set(income_account_names)),
+                'expense_accounts': ', '.join(set(expense_accounts)),
+                'expense_account_names': ', '.join(set(expense_account_names))
             })
-            current += timedelta(days=1)
+        
+        # 分页
+        total = len(all_data)
+        start_idx = (page - 1) * page_size
+        end_idx = start_idx + page_size
+        data = all_data[start_idx:end_idx]
             
-        # 按日期倒序
-        data.sort(key=lambda x: x['date'], reverse=True)
-            
-        response = {'data': data}
+        response = {
+            'data': data,
+            'total': total,
+            'page': page,
+            'page_size': page_size,
+            'total_pages': (total + page_size - 1) // page_size
+        }
         RedisCache.set(cache_key, response, ttl=300)
         return response
         
@@ -157,13 +178,16 @@ async def get_mapping_daily_report(
     end_date: Optional[date] = Query(None, description='结束日期'),
     vos_id: Optional[int] = Query(None, description='VOS实例ID'),
     gateway_name: Optional[str] = Query(None, description='网关名称'),
+    page: int = Query(1, ge=1, description='页码'),
+    page_size: int = Query(25, ge=1, le=100, description='每页数量'),
     current_user: Annotated[User, Depends(get_current_user)] = None,
     db: Session = Depends(get_db)
 ):
     """
     获取对接账户每日明细 (Mapping/Caller Gateway)
     """
-    return await _get_gateway_daily_report(db, 'caller', start_date, end_date, vos_id, gateway_name)
+    return await _get_gateway_daily_report(db, 'caller', start_date, end_date, vos_id, gateway_name, page, page_size)
+
 
 @router.get('/routing-daily')
 async def get_routing_daily_report(
@@ -171,13 +195,16 @@ async def get_routing_daily_report(
     end_date: Optional[date] = Query(None, description='结束日期'),
     vos_id: Optional[int] = Query(None, description='VOS实例ID'),
     gateway_name: Optional[str] = Query(None, description='网关名称'),
+    page: int = Query(1, ge=1, description='页码'),
+    page_size: int = Query(25, ge=1, le=100, description='每页数量'),
     current_user: Annotated[User, Depends(get_current_user)] = None,
     db: Session = Depends(get_db)
 ):
     """
     获取落地账户每日明细 (Routing/Callee Gateway)
     """
-    return await _get_gateway_daily_report(db, 'callee', start_date, end_date, vos_id, gateway_name)
+    return await _get_gateway_daily_report(db, 'callee', start_date, end_date, vos_id, gateway_name, page, page_size)
+
 
 async def _get_gateway_daily_report(
     db: Session,
@@ -185,7 +212,9 @@ async def _get_gateway_daily_report(
     start_date: Optional[date],
     end_date: Optional[date],
     vos_id: Optional[int],
-    gateway_name: Optional[str]
+    gateway_name: Optional[str],
+    page: int = 1,
+    page_size: int = 25
 ):
     # 默认查询最近30天
     if not start_date:
@@ -193,7 +222,7 @@ async def _get_gateway_daily_report(
     if not end_date:
         end_date = date.today()
         
-    cache_key = f'financial_gateway_{gateway_type}_{start_date}_{end_date}_{vos_id}_{gateway_name}'
+    cache_key = f'financial_gateway_{gateway_type}_{start_date}_{end_date}_{vos_id}_{gateway_name}_{page}_{page_size}'
     cached_data = RedisCache.get(cache_key)
     if cached_data:
         return cached_data
@@ -211,11 +240,14 @@ async def _get_gateway_daily_report(
         if gateway_name:
             query = query.filter(GatewayCdrStatistics.gateway_name.ilike(f"%{gateway_name}%"))
             
-        # 按日期和网关名排序
+        # 获取总数
+        total = query.count()
+        
+        # 按日期和网关名排序，并分页
         results = query.order_by(
             desc(GatewayCdrStatistics.statistic_date),
             GatewayCdrStatistics.gateway_name
-        ).limit(2000).all() # 限制返回数量防止过大
+        ).offset((page - 1) * page_size).limit(page_size).all()
         
         data = []
         for row in results:
@@ -229,7 +261,13 @@ async def _get_gateway_daily_report(
                 'connection_rate': float(row.connection_rate or 0)
             })
             
-        response = {'data': data}
+        response = {
+            'data': data,
+            'total': total,
+            'page': page,
+            'page_size': page_size,
+            'total_pages': (total + page_size - 1) // page_size
+        }
         RedisCache.set(cache_key, response, ttl=300)
         return response
         

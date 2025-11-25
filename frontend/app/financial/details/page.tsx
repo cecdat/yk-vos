@@ -8,8 +8,23 @@ interface FinancialRecord {
     income: number
     expense: number
     profit: number
-    duration: number
-    calls: number
+    income_duration: number
+    expense_duration: number
+    income_cdr_count: number
+    expense_cdr_count: number
+    total_cdr_count: number
+    income_accounts: string
+    income_account_names: string
+    expense_accounts: string
+    expense_account_names: string
+}
+
+interface ApiResponse {
+    data: FinancialRecord[]
+    total: number
+    page: number
+    page_size: number
+    total_pages: number
 }
 
 export default function FinancialDetailsPage() {
@@ -18,35 +33,52 @@ export default function FinancialDetailsPage() {
     const [loading, setLoading] = useState(false)
     const [startDate, setStartDate] = useState('')
     const [endDate, setEndDate] = useState('')
+    const [periodType, setPeriodType] = useState('day')
+    const [page, setPage] = useState(1)
+    const [pageSize] = useState(25)
+    const [total, setTotal] = useState(0)
+    const [totalPages, setTotalPages] = useState(0)
 
     useEffect(() => {
-        // 默认最近30天
+        // 默认最近7天
         const end = new Date()
         const start = new Date()
-        start.setDate(end.getDate() - 30)
+        start.setDate(end.getDate() - 7)
         setStartDate(start.toISOString().split('T')[0])
         setEndDate(end.toISOString().split('T')[0])
     }, [])
 
     useEffect(() => {
         if (startDate && endDate) {
+            setPage(1) // 重置页码
             fetchData()
         }
-    }, [startDate, endDate, currentVOS])
+    }, [startDate, endDate, currentVOS, periodType])
+
+    useEffect(() => {
+        if (startDate && endDate) {
+            fetchData()
+        }
+    }, [page])
 
     async function fetchData() {
         setLoading(true)
         try {
             const params: any = {
                 start_date: startDate,
-                end_date: endDate
+                end_date: endDate,
+                period_type: periodType,
+                page,
+                page_size: pageSize
             }
             if (currentVOS) {
                 params.vos_id = currentVOS.id
             }
 
-            const res = await api.get('/financial/income-expense', { params })
+            const res = await api.get<ApiResponse>('/financial/income-expense', { params })
             setData(res.data.data)
+            setTotal(res.data.total)
+            setTotalPages(res.data.total_pages)
         } catch (e) {
             console.error('获取财务报表失败:', e)
         } finally {
@@ -69,10 +101,20 @@ export default function FinancialDetailsPage() {
     }
 
     return (
-        <div className='max-w-7xl mx-auto'>
-            <div className='flex items-center justify-between mb-6'>
+        <div className='max-w-full mx-auto px-4'>
+            <div className='flex items-center justify-between mb-6 flex-wrap gap-4'>
                 <h1 className='text-2xl font-bold text-gray-800'>财务明细收支</h1>
-                <div className='flex gap-4'>
+                <div className='flex gap-4 flex-wrap'>
+                    <select
+                        value={periodType}
+                        onChange={(e) => setPeriodType(e.target.value)}
+                        className='border rounded-lg px-3 py-2'
+                    >
+                        <option value='day'>按日统计</option>
+                        <option value='month'>按月统计</option>
+                        <option value='quarter'>按季度统计</option>
+                        <option value='year'>按年统计</option>
+                    </select>
                     <input
                         type='date'
                         value={startDate}
@@ -98,71 +140,86 @@ export default function FinancialDetailsPage() {
 
             <div className='bg-white rounded-xl shadow-sm overflow-hidden border border-gray-100'>
                 <div className='overflow-x-auto'>
-                    <table className='w-full text-left'>
+                    <table className='w-full text-left text-sm'>
                         <thead className='bg-gray-50 border-b border-gray-100'>
                             <tr>
-                                <th className='px-6 py-4 font-semibold text-gray-700'>日期</th>
-                                <th className='px-6 py-4 font-semibold text-gray-700 text-right'>收入 (元)</th>
-                                <th className='px-6 py-4 font-semibold text-gray-700 text-right'>支出 (元)</th>
-                                <th className='px-6 py-4 font-semibold text-gray-700 text-right'>利润 (元)</th>
-                                <th className='px-6 py-4 font-semibold text-gray-700 text-right'>通话时长</th>
-                                <th className='px-6 py-4 font-semibold text-gray-700 text-right'>通话次数</th>
+                                <th className='px-4 py-3 font-semibold text-gray-700'>日期</th>
+                                <th className='px-4 py-3 font-semibold text-gray-700'>账户号码</th>
+                                <th className='px-4 py-3 font-semibold text-gray-700'>账户名称</th>
+                                <th className='px-4 py-3 font-semibold text-gray-700 text-right'>话单数量</th>
+                                <th className='px-4 py-3 font-semibold text-gray-700 text-right'>收入 (元)</th>
+                                <th className='px-4 py-3 font-semibold text-gray-700 text-right'>支出 (元)</th>
+                                <th className='px-4 py-3 font-semibold text-gray-700 text-right'>利润 (元)</th>
+                                <th className='px-4 py-3 font-semibold text-gray-700'>结算账户号码</th>
+                                <th className='px-4 py-3 font-semibold text-gray-700'>结算账户名称</th>
                             </tr>
                         </thead>
                         <tbody className='divide-y divide-gray-50'>
                             {data.length === 0 ? (
                                 <tr>
-                                    <td colSpan={6} className='px-6 py-8 text-center text-gray-500'>
+                                    <td colSpan={9} className='px-6 py-8 text-center text-gray-500'>
                                         暂无数据
                                     </td>
                                 </tr>
                             ) : (
                                 data.map((row, index) => (
                                     <tr key={index} className='hover:bg-gray-50 transition'>
-                                        <td className='px-6 py-4 text-gray-800'>{row.date}</td>
-                                        <td className='px-6 py-4 text-right font-medium text-green-600'>
+                                        <td className='px-4 py-3 text-gray-800'>{row.date}</td>
+                                        <td className='px-4 py-3 text-gray-600 text-xs max-w-xs truncate' title={row.income_accounts}>
+                                            {row.income_accounts || '-'}
+                                        </td>
+                                        <td className='px-4 py-3 text-gray-600 text-xs max-w-xs truncate' title={row.income_account_names}>
+                                            {row.income_account_names || '-'}
+                                        </td>
+                                        <td className='px-4 py-3 text-right text-gray-600'>
+                                            {row.total_cdr_count.toLocaleString()}
+                                        </td>
+                                        <td className='px-4 py-3 text-right font-medium text-green-600'>
                                             {formatMoney(row.income)}
                                         </td>
-                                        <td className='px-6 py-4 text-right font-medium text-red-600'>
+                                        <td className='px-4 py-3 text-right font-medium text-red-600'>
                                             {formatMoney(row.expense)}
                                         </td>
-                                        <td className='px-6 py-4 text-right font-bold text-blue-600'>
+                                        <td className='px-4 py-3 text-right font-bold text-blue-600'>
                                             {formatMoney(row.profit)}
                                         </td>
-                                        <td className='px-6 py-4 text-right text-gray-600'>
-                                            {formatDuration(row.duration)}
+                                        <td className='px-4 py-3 text-gray-600 text-xs max-w-xs truncate' title={row.expense_accounts}>
+                                            {row.expense_accounts || '-'}
                                         </td>
-                                        <td className='px-6 py-4 text-right text-gray-600'>
-                                            {row.calls.toLocaleString()}
+                                        <td className='px-4 py-3 text-gray-600 text-xs max-w-xs truncate' title={row.expense_account_names}>
+                                            {row.expense_account_names || '-'}
                                         </td>
                                     </tr>
                                 ))
                             )}
                         </tbody>
-                        {data.length > 0 && (
-                            <tfoot className='bg-gray-50 font-bold'>
-                                <tr>
-                                    <td className='px-6 py-4'>合计</td>
-                                    <td className='px-6 py-4 text-right text-green-700'>
-                                        {formatMoney(data.reduce((sum, row) => sum + row.income, 0))}
-                                    </td>
-                                    <td className='px-6 py-4 text-right text-red-700'>
-                                        {formatMoney(data.reduce((sum, row) => sum + row.expense, 0))}
-                                    </td>
-                                    <td className='px-6 py-4 text-right text-blue-700'>
-                                        {formatMoney(data.reduce((sum, row) => sum + row.profit, 0))}
-                                    </td>
-                                    <td className='px-6 py-4 text-right'>
-                                        {formatDuration(data.reduce((sum, row) => sum + row.duration, 0))}
-                                    </td>
-                                    <td className='px-6 py-4 text-right'>
-                                        {data.reduce((sum, row) => sum + row.calls, 0).toLocaleString()}
-                                    </td>
-                                </tr>
-                            </tfoot>
-                        )}
                     </table>
                 </div>
+
+                {/* 分页 */}
+                {totalPages > 1 && (
+                    <div className='flex items-center justify-between px-6 py-4 border-t border-gray-100'>
+                        <div className='text-sm text-gray-600'>
+                            共 {total} 条记录，第 {page} / {totalPages} 页
+                        </div>
+                        <div className='flex gap-2'>
+                            <button
+                                onClick={() => setPage(Math.max(1, page - 1))}
+                                disabled={page === 1}
+                                className='px-3 py-1 border rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed'
+                            >
+                                上一页
+                            </button>
+                            <button
+                                onClick={() => setPage(Math.min(totalPages, page + 1))}
+                                disabled={page === totalPages}
+                                className='px-3 py-1 border rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed'
+                            >
+                                下一页
+                            </button>
+                        </div>
+                    </div>
+                )}
             </div>
         </div>
     )
