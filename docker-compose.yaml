@@ -7,6 +7,7 @@ services:
     image: docker.1ms.run/clickhouse/clickhouse-server:latest
     container_name: yk_vos_clickhouse
     environment:
+      TZ: Asia/Shanghai
       CLICKHOUSE_DB: vos_cdrs
       CLICKHOUSE_USER: ${CLICKHOUSE_USER:-vosadmin}
       CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-Ykxx@2025}
@@ -38,6 +39,7 @@ services:
     image: docker.1ms.run/postgres:15
     container_name: yk_vos_postgres
     environment:
+      TZ: Asia/Shanghai
       POSTGRES_USER: ${POSTGRES_USER:-vosadmin}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-Ykxx@2025}
       POSTGRES_DB: ${POSTGRES_DB:-vosadmin}
@@ -57,6 +59,8 @@ services:
   redis:
     image: docker.1ms.run/redis:7
     container_name: yk_vos_redis
+    environment:
+      TZ: Asia/Shanghai
     ports:
       - "6379:6379"
     networks:
@@ -76,6 +80,7 @@ services:
     ports:
       - "3001:3001"
     environment:
+      TZ: Asia/Shanghai
       # PostgreSQL 连接（配置数据）
       DATABASE_URL: postgresql://${POSTGRES_USER:-vosadmin}:${POSTGRES_PASSWORD:-Ykxx@2025}@postgres:5432/${POSTGRES_DB:-vosadmin}
       # ClickHouse 连接（话单数据）
@@ -121,6 +126,7 @@ services:
     ports:
       - "3000:3000"
     environment:
+      TZ: Asia/Shanghai
       NEXT_PUBLIC_API_BASE: /api/v1
       BACKEND_API_URL: http://backend:3001
     volumes:
@@ -139,6 +145,7 @@ services:
     working_dir: /srv
     command: celery -A app.tasks.celery_app worker -l info
     environment:
+      TZ: Asia/Shanghai
       DATABASE_URL: postgresql://${POSTGRES_USER:-vosadmin}:${POSTGRES_PASSWORD:-Ykxx@2025}@postgres:5432/${POSTGRES_DB:-vosadmin}
       CLICKHOUSE_HOST: clickhouse
       CLICKHOUSE_PORT: 9000
@@ -169,6 +176,7 @@ services:
     working_dir: /srv
     command: celery -A app.tasks.celery_app beat -l info
     environment:
+      TZ: Asia/Shanghai
       DATABASE_URL: postgresql://${POSTGRES_USER:-vosadmin}:${POSTGRES_PASSWORD:-Ykxx@2025}@postgres:5432/${POSTGRES_DB:-vosadmin}
       CLICKHOUSE_HOST: clickhouse
       CLICKHOUSE_PORT: 9000
