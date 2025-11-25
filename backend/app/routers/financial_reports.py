@@ -68,7 +68,7 @@ async def get_income_expense_report(
             date_format = "toString(toDate(start))"
         
         # 查询收入（对接网关）和支出（落地网关）
-        # 使用 UNION ALL 合并两个查询，然后再聚合
+        # 按账户号码分组，每个账户一条记录
         sql = f"""
             WITH income_data AS (
                 SELECT 
@@ -76,7 +76,6 @@ async def get_income_expense_report(
                     {date_format} as period_str,
                     account,
                     account_name,
-                    caller_gateway as gateway,
                     sum(fee) as amount,
                     sum(hold_time) as duration,
                     count(*) as cdr_count
@@ -84,7 +83,7 @@ async def get_income_expense_report(
                 WHERE start >= '{start_str}' AND start < '{end_str} 23:59:59'
                   AND caller_gateway != ''
                   {f"AND vos_id = {vos_id}" if vos_id else ""}
-                GROUP BY period, period_str, account, account_name, gateway
+                GROUP BY period, period_str, account, account_name
             ),
             expense_data AS (
                 SELECT 
@@ -92,7 +91,6 @@ async def get_income_expense_report(
                     {date_format} as period_str,
                     account,
                     account_name,
-                    callee_gateway as gateway,
                     sum(fee) as amount,
                     sum(hold_time) as duration,
                     count(*) as cdr_count
@@ -100,29 +98,25 @@ async def get_income_expense_report(
                 WHERE start >= '{start_str}' AND start < '{end_str} 23:59:59'
                   AND callee_gateway != ''
                   {f"AND vos_id = {vos_id}" if vos_id else ""}
-                GROUP BY period, period_str, account, account_name, gateway
+                GROUP BY period, period_str, account, account_name
             )
             SELECT 
                 period_str,
+                account,
+                account_name,
                 sum(CASE WHEN type = 'income' THEN amount ELSE 0 END) as income,
                 sum(CASE WHEN type = 'expense' THEN amount ELSE 0 END) as expense,
-                sum(CASE WHEN type = 'income' THEN duration ELSE 0 END) as income_duration,
-                sum(CASE WHEN type = 'expense' THEN duration ELSE 0 END) as expense_duration,
                 sum(CASE WHEN type = 'income' THEN cdr_count ELSE 0 END) as income_cdr_count,
-                sum(CASE WHEN type = 'expense' THEN cdr_count ELSE 0 END) as expense_cdr_count,
-                groupArray(CASE WHEN type = 'income' THEN account ELSE NULL END) as income_accounts,
-                groupArray(CASE WHEN type = 'income' THEN account_name ELSE NULL END) as income_account_names,
-                groupArray(CASE WHEN type = 'expense' THEN account ELSE NULL END) as expense_accounts,
-                groupArray(CASE WHEN type = 'expense' THEN account_name ELSE NULL END) as expense_account_names
+                sum(CASE WHEN type = 'expense' THEN cdr_count ELSE 0 END) as expense_cdr_count
             FROM (
-                SELECT period, period_str, account, account_name, gateway, amount, duration, cdr_count, 'income' as type
+                SELECT period, period_str, account, account_name, amount, duration, cdr_count, 'income' as type
                 FROM income_data
                 UNION ALL
-                SELECT period, period_str, account, account_name, gateway, amount, duration, cdr_count, 'expense' as type
+                SELECT period, period_str, account, account_name, amount, duration, cdr_count, 'expense' as type
                 FROM expense_data
             )
-            GROUP BY period_str
-            ORDER BY period_str DESC
+            GROUP BY period_str, account, account_name
+            ORDER BY period_str DESC, account
         """
         
         rows = ch_db.execute(sql)
@@ -130,26 +124,16 @@ async def get_income_expense_report(
         # 处理数据
         all_data = []
         for row in rows:
-            # 过滤掉 None 值
-            income_accounts = [acc for acc in row[7] if acc]
-            income_account_names = [name for name in row[8] if name]
-            expense_accounts = [acc for acc in row[9] if acc]
-            expense_account_names = [name for name in row[10] if name]
-            
             all_data.append({
                 'date': row[0],
-                'income': float(row[1]),
-                'expense': float(row[2]),
-                'profit': float(row[1]) - float(row[2]),
-                'income_duration': row[3],
-                'expense_duration': row[4],
+                'account': row[1] or '',
+                'account_name': row[2] or '',
+                'income': float(row[3]),
+                'expense': float(row[4]),
+                'profit': float(row[3]) - float(row[4]),
                 'income_cdr_count': row[5],
                 'expense_cdr_count': row[6],
-                'total_cdr_count': row[5] + row[6],
-                'income_accounts': ', '.join(set(income_accounts)),  # 去重并合并
-                'income_account_names': ', '.join(set(income_account_names)),
-                'expense_accounts': ', '.join(set(expense_accounts)),
-                'expense_account_names': ', '.join(set(expense_account_names))
+                'total_cdr_count': row[5] + row[6]
             })
         
         # 分页

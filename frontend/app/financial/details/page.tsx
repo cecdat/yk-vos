@@ -5,18 +5,14 @@ import { useVOS } from '../../../contexts/VOSContext'
 
 interface FinancialRecord {
     date: string
+    account: string
+    account_name: string
     income: number
     expense: number
     profit: number
-    income_duration: number
-    expense_duration: number
     income_cdr_count: number
     expense_cdr_count: number
     total_cdr_count: number
-    income_accounts: string
-    income_account_names: string
-    expense_accounts: string
-    expense_account_names: string
 }
 
 interface ApiResponse {
@@ -150,14 +146,12 @@ export default function FinancialDetailsPage() {
                                 <th className='px-4 py-3 font-semibold text-gray-700 text-right'>收入 (元)</th>
                                 <th className='px-4 py-3 font-semibold text-gray-700 text-right'>支出 (元)</th>
                                 <th className='px-4 py-3 font-semibold text-gray-700 text-right'>利润 (元)</th>
-                                <th className='px-4 py-3 font-semibold text-gray-700'>结算账户号码</th>
-                                <th className='px-4 py-3 font-semibold text-gray-700'>结算账户名称</th>
                             </tr>
                         </thead>
                         <tbody className='divide-y divide-gray-50'>
                             {data.length === 0 ? (
                                 <tr>
-                                    <td colSpan={9} className='px-6 py-8 text-center text-gray-500'>
+                                    <td colSpan={7} className='px-6 py-8 text-center text-gray-500'>
                                         暂无数据
                                     </td>
                                 </tr>
@@ -165,12 +159,8 @@ export default function FinancialDetailsPage() {
                                 data.map((row, index) => (
                                     <tr key={index} className='hover:bg-gray-50 transition'>
                                         <td className='px-4 py-3 text-gray-800'>{row.date}</td>
-                                        <td className='px-4 py-3 text-gray-600 text-xs max-w-xs truncate' title={row.income_accounts}>
-                                            {row.income_accounts || '-'}
-                                        </td>
-                                        <td className='px-4 py-3 text-gray-600 text-xs max-w-xs truncate' title={row.income_account_names}>
-                                            {row.income_account_names || '-'}
-                                        </td>
+                                        <td className='px-4 py-3 text-gray-600'>{row.account || '-'}</td>
+                                        <td className='px-4 py-3 text-gray-600'>{row.account_name || '-'}</td>
                                         <td className='px-4 py-3 text-right text-gray-600'>
                                             {row.total_cdr_count.toLocaleString()}
                                         </td>
@@ -182,12 +172,6 @@ export default function FinancialDetailsPage() {
                                         </td>
                                         <td className='px-4 py-3 text-right font-bold text-blue-600'>
                                             {formatMoney(row.profit)}
-                                        </td>
-                                        <td className='px-4 py-3 text-gray-600 text-xs max-w-xs truncate' title={row.expense_accounts}>
-                                            {row.expense_accounts || '-'}
-                                        </td>
-                                        <td className='px-4 py-3 text-gray-600 text-xs max-w-xs truncate' title={row.expense_account_names}>
-                                            {row.expense_account_names || '-'}
                                         </td>
                                     </tr>
                                 ))
