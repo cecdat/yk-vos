@@ -107,6 +107,11 @@ class ClickHouseCDR:
                 'hold_time': safe_int(cdr.get('holdTime')),
                 'fee_time': safe_int(cdr.get('feeTime')),
                 'fee': safe_float(cdr.get('fee')),
+                'fee_prefix': safe_str(cdr.get('feePrefix')),  # 计费前缀
+                'call_level': safe_int(cdr.get('callLevel')),  # 通话级别
+                'agent_fee': safe_float(cdr.get('agentFee')),  # 代理商费用
+                'agent_account': safe_str(cdr.get('agentAccount')),  # 代理商账户
+                'suite_fee': safe_float(cdr.get('suiteFee')),  # 套餐费用
                 'end_reason': safe_str(cdr.get('endReason')),
                 'end_direction': safe_int(cdr.get('endDirection')),
                 'caller_gateway': safe_str(cdr.get('callerGateway') or ''),  # 对接网关（主叫网关）

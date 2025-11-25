@@ -34,6 +34,13 @@ CREATE TABLE IF NOT EXISTS cdrs
     hold_time UInt32 COMMENT '通话时长（秒）',
     fee_time UInt32 COMMENT '计费时长（秒）',
     fee Decimal(10, 4) COMMENT '通话费用（元）',
+    fee_prefix String COMMENT '计费前缀',
+    call_level UInt8 COMMENT '通话级别（1:网内 2:市话 4:国内 5:国际）',
+    
+    -- 代理商和套餐信息
+    agent_fee Decimal(10, 4) COMMENT '代理商费用',
+    agent_account String COMMENT '代理商账户',
+    suite_fee Decimal(10, 4) COMMENT '套餐费用',
     
     -- 终止信息
     end_reason String COMMENT '终止原因',
