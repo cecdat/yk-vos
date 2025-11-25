@@ -76,6 +76,7 @@ async def get_income_expense_report(
                     {date_format} as period_str,
                     account,
                     account_name,
+                    groupArray(DISTINCT caller_gateway) as gateways,
                     sum(fee) as amount,
                     sum(hold_time) as duration,
                     count(*) as cdr_count
@@ -91,6 +92,7 @@ async def get_income_expense_report(
                     {date_format} as period_str,
                     account,
                     account_name,
+                    groupArray(DISTINCT callee_gateway) as gateways,
                     sum(fee) as amount,
                     sum(hold_time) as duration,
                     count(*) as cdr_count
@@ -107,12 +109,14 @@ async def get_income_expense_report(
                 sum(CASE WHEN type = 'income' THEN amount ELSE 0 END) as income,
                 sum(CASE WHEN type = 'expense' THEN amount ELSE 0 END) as expense,
                 sum(CASE WHEN type = 'income' THEN cdr_count ELSE 0 END) as income_cdr_count,
-                sum(CASE WHEN type = 'expense' THEN cdr_count ELSE 0 END) as expense_cdr_count
+                sum(CASE WHEN type = 'expense' THEN cdr_count ELSE 0 END) as expense_cdr_count,
+                groupArray(CASE WHEN type = 'income' THEN arrayJoin(gateways) ELSE NULL END) as caller_gateways,
+                groupArray(CASE WHEN type = 'expense' THEN arrayJoin(gateways) ELSE NULL END) as callee_gateways
             FROM (
-                SELECT period, period_str, account, account_name, amount, duration, cdr_count, 'income' as type
+                SELECT period, period_str, account, account_name, gateways, amount, duration, cdr_count, 'income' as type
                 FROM income_data
                 UNION ALL
-                SELECT period, period_str, account, account_name, amount, duration, cdr_count, 'expense' as type
+                SELECT period, period_str, account, account_name, gateways, amount, duration, cdr_count, 'expense' as type
                 FROM expense_data
             )
             GROUP BY period_str, account, account_name
@@ -124,6 +128,10 @@ async def get_income_expense_report(
         # 处理数据
         all_data = []
         for row in rows:
+            # 过滤掉 None 值并去重
+            caller_gateways = list(set([g for g in row[7] if g]))
+            callee_gateways = list(set([g for g in row[8] if g]))
+            
             all_data.append({
                 'date': row[0],
                 'account': row[1] or '',
@@ -133,7 +141,9 @@ async def get_income_expense_report(
                 'profit': float(row[3]) - float(row[4]),
                 'income_cdr_count': row[5],
                 'expense_cdr_count': row[6],
-                'total_cdr_count': row[5] + row[6]
+                'total_cdr_count': row[5] + row[6],
+                'caller_gateways': ', '.join(caller_gateways),
+                'callee_gateways': ', '.join(callee_gateways)
             })
         
         # 分页

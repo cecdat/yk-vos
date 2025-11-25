@@ -13,6 +13,8 @@ interface FinancialRecord {
     income_cdr_count: number
     expense_cdr_count: number
     total_cdr_count: number
+    caller_gateways: string
+    callee_gateways: string
 }
 
 interface ApiResponse {
@@ -142,6 +144,8 @@ export default function FinancialDetailsPage() {
                                 <th className='px-4 py-3 font-semibold text-gray-700'>日期</th>
                                 <th className='px-4 py-3 font-semibold text-gray-700'>账户号码</th>
                                 <th className='px-4 py-3 font-semibold text-gray-700'>账户名称</th>
+                                <th className='px-4 py-3 font-semibold text-gray-700'>对接账户</th>
+                                <th className='px-4 py-3 font-semibold text-gray-700'>落地账户</th>
                                 <th className='px-4 py-3 font-semibold text-gray-700 text-right'>话单数量</th>
                                 <th className='px-4 py-3 font-semibold text-gray-700 text-right'>收入 (元)</th>
                                 <th className='px-4 py-3 font-semibold text-gray-700 text-right'>支出 (元)</th>
@@ -151,7 +155,7 @@ export default function FinancialDetailsPage() {
                         <tbody className='divide-y divide-gray-50'>
                             {data.length === 0 ? (
                                 <tr>
-                                    <td colSpan={7} className='px-6 py-8 text-center text-gray-500'>
+                                    <td colSpan={9} className='px-6 py-8 text-center text-gray-500'>
                                         暂无数据
                                     </td>
                                 </tr>
@@ -161,6 +165,12 @@ export default function FinancialDetailsPage() {
                                         <td className='px-4 py-3 text-gray-800'>{row.date}</td>
                                         <td className='px-4 py-3 text-gray-600'>{row.account || '-'}</td>
                                         <td className='px-4 py-3 text-gray-600'>{row.account_name || '-'}</td>
+                                        <td className='px-4 py-3 text-gray-600 text-xs max-w-xs truncate' title={row.caller_gateways}>
+                                            {row.caller_gateways || '-'}
+                                        </td>
+                                        <td className='px-4 py-3 text-gray-600 text-xs max-w-xs truncate' title={row.callee_gateways}>
+                                            {row.callee_gateways || '-'}
+                                        </td>
                                         <td className='px-4 py-3 text-right text-gray-600'>
                                             {row.total_cdr_count.toLocaleString()}
                                         </td>
