@@ -210,23 +210,6 @@ async def get_cdr_sync_status(
         # 获取每个实例的同步状态
         instance_stats = []
         total_count = 0
-        latest_sync_time = None
-        
-        for inst in instances:
-            try:
-                # 查询最近的话单数据（获取最后同步时间和数量）
-                count, last_sync = ClickHouseCDR.get_sync_status(vos_id=inst.id)
-            'success': False,
-            'error': str(e),
-            'status': 'error',
-            'total_cdrs': 0,
-            'last_sync_time': None,
-            'instances': []
-        }
-
-
-@router.get('/cdr-sync-progress')
-async def get_cdr_sync_progress(
     current_user: Annotated[User, Depends(get_current_user)]
 ):
     """
