@@ -205,22 +205,6 @@ async def get_cdr_sync_status(
                 'status': 'no_instances',
                 'message': '没有启用的VOS实例',
                 'instances': []
-            }
-        
-        # 获取每个实例的同步状态
-        instance_stats = []
-        total_count = 0
-    current_user: Annotated[User, Depends(get_current_user)]
-):
-    """
-    获取当前话单同步进度（实时）
-    
-    从 Redis 获取正在进行的同步任务的详细进度
-    """
-    try:
-        from app.core.config import settings
-        import redis
-        import json
         
         # 连接 Redis
         r = redis.from_url(settings.REDIS_URL)
