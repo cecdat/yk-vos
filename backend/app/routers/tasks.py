@@ -5,7 +5,7 @@
 from typing import Annotated
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 import logging
 
 from app.core.db import get_db
@@ -176,22 +176,13 @@ async def get_cdr_sync_status(
     db: Session = Depends(get_db)
 ):
     """
-    获取历史话单同步状态（带Redis缓存）
+    获取历史话单同步状态
     
     返回:
     - 最后同步时间
     - 同步的数据量
     - 任务状态（运行中/成功/失败）
     """
-    from app.core.redis_cache import RedisCache
-    
-    # Redis缓存键（缓存30秒，因为状态变化较快）
-    cache_key = 'cdr_sync_status'
-    cached_data = RedisCache.get(cache_key)
-    if cached_data is not None:
-        logger.debug("从Redis缓存读取CDR同步状态")
-        return cached_data
-    
     try:
         from app.models.clickhouse_cdr import ClickHouseCDR
         from app.models.vos_instance import VOSInstance
@@ -199,159 +190,100 @@ async def get_cdr_sync_status(
         # 获取所有启用的VOS实例
         instances = db.query(VOSInstance).filter(VOSInstance.enabled == True).all()
         
-):
-    """
-    获取所有同步任务的进度（统一接口）
-    
-    返回当前正在进行的同步任务信息，包括：
-    - CDR同步（历史话单）
-    - 客户数据同步
-    - 网关同步
-    - 账户明细报表同步
-    """
-    try:
-        from app.core.config import settings
-        import redis
-        import json
-        from celery.result import AsyncResult
+        if not instances:
+            return {
+                'success': True,
+                'status': 'no_instances',
+                'message': '没有启用的VOS实例',
+                'instances': []
+            }
         
-        # 连接 Redis
-        r = redis.from_url(settings.REDIS_URL)
+        # 获取每个实例的同步状态
+        instance_stats = []
+        total_count = 0
+        latest_sync_time = None
         
-        # 获取所有类型的同步任务进度
-        sync_tasks = []
-        
-        # 1. CDR同步进度
-        cdr_progress_data = r.get('cdr_sync_progress')
-        if cdr_progress_data:
+        for inst in instances:
             try:
-                cdr_progress = json.loads(cdr_progress_data)
-                status = cdr_progress.get('status', 'unknown')
-                if status != 'completed':
-                    # 计算进度百分比
-                    progress_percent = 0
-                    if status == 'task_created':
-                        progress_percent = 0
-                    elif status == 'syncing':
-                        total_tasks = cdr_progress.get('total_tasks')
-                        completed_tasks = cdr_progress.get('completed_tasks', 0)
-                        if total_tasks and total_tasks > 0:
-                            current_task_progress = 0
-                            if cdr_progress.get('current_customer_index') and cdr_progress.get('total_customers'):
-                                current_task_progress = (cdr_progress.get('current_customer_index', 0) / cdr_progress.get('total_customers', 1)) * (1 / total_tasks)
-                            progress_percent = round((completed_tasks / total_tasks) * 100 + current_task_progress * 100, 1)
-                            progress_percent = min(progress_percent, 100)
-                        else:
-                            if cdr_progress.get('current_customer_index') and cdr_progress.get('total_customers'):
-                                progress_percent = round((cdr_progress.get('current_customer_index', 0) / cdr_progress.get('total_customers', 1)) * 100, 1)
-                    
-                    sync_tasks.append({
-                        'task_type': 'cdr',
-                        'task_name': '历史话单同步',
-                        'status': status,
-                        'progress_percent': progress_percent,
-                        'current_instance': cdr_progress.get('current_instance'),
-                        'current_customer': cdr_progress.get('current_customer'),
-                        'current_customer_index': cdr_progress.get('current_customer_index'),
-                        'total_customers': cdr_progress.get('total_customers'),
-                        'total_tasks': cdr_progress.get('total_tasks'),
-                        'completed_tasks': cdr_progress.get('completed_tasks', 0),
-                        'synced_count': cdr_progress.get('synced_count', 0),
-                        'sync_date': cdr_progress.get('sync_date'),
-                        'days': cdr_progress.get('days'),
-                        'instances_count': cdr_progress.get('instances_count'),
-                        'start_time': cdr_progress.get('start_time'),
-                        'message': cdr_progress.get('message', '正在同步历史话单...')
-                    })
+                # 查询最近的话单数据（获取最后同步时间和数量）
+                count, last_sync = ClickHouseCDR.get_sync_status(vos_id=inst.id)
+                total_count += count
+                
+                if last_sync and (not latest_sync_time or last_sync > latest_sync_time):
+                    latest_sync_time = last_sync
+                
+                # 转换UTC时间到东八区（Asia/Shanghai）
+                last_sync_str = None
+                if last_sync:
+                    # 数据库中存储的已经是本地时间（UTC+8），直接使用
+                    last_sync_str = last_sync.isoformat()
+                
+                instance_stats.append({
+                    'instance_id': inst.id,
+                    'instance_name': inst.name,
+                    'total_cdrs': count,
+                    'last_sync_time': last_sync_str,
+                    'status': 'synced' if count > 0 else 'empty'
+                })
             except Exception as e:
-                logger.error(f'解析CDR同步进度失败: {e}')
+                logger.error(f'获取VOS实例 {inst.name} 同步状态失败: {e}')
+                instance_stats.append({
+                    'instance_id': inst.id,
+                    'instance_name': inst.name,
+                    'total_cdrs': 0,
+                    'last_sync_time': None,
+                    'status': 'error',
+                    'error': str(e)
+                })
         
-        # 2. 客户数据同步进度
-        customer_progress_data = r.get('customer_sync_progress')
-        if customer_progress_data:
-            try:
-                customer_progress = json.loads(customer_progress_data)
-                status = customer_progress.get('status', 'unknown')
-                if status != 'completed':
-                    progress_percent = customer_progress.get('progress_percent', 0)
-                    sync_tasks.append({
-                        'task_type': 'customer',
-                        'task_name': '客户数据同步',
-                        'status': status,
-                        'progress_percent': progress_percent,
-                        'current_instance': customer_progress.get('current_instance'),
-                        'current_instance_id': customer_progress.get('current_instance_id'),
-                        'total_instances': customer_progress.get('total_instances'),
-                        'completed_instances': customer_progress.get('completed_instances', 0),
-                        'synced_count': customer_progress.get('synced_count', 0),
-                        'start_time': customer_progress.get('start_time'),
-                        'message': customer_progress.get('message', '正在同步客户数据...')
-                    })
-            except Exception as e:
-                logger.error(f'解析客户数据同步进度失败: {e}')
+        # 检查任务是否正在运行
+        inspect = celery.control.inspect()
+        active_tasks = inspect.active()
+        is_syncing = False
         
-        # 3. 网关同步进度
-        gateway_progress_data = r.get('gateway_sync_progress')
-        if gateway_progress_data:
-            try:
-                gateway_progress = json.loads(gateway_progress_data)
-                status = gateway_progress.get('status', 'unknown')
-                if status != 'completed':
-                    progress_percent = gateway_progress.get('progress_percent', 0)
-                    sync_tasks.append({
-                        'task_type': 'gateway',
-                        'task_name': '网关数据同步',
-                        'status': status,
-                        'progress_percent': progress_percent,
-                        'current_instance': gateway_progress.get('current_instance'),
-                        'current_instance_id': gateway_progress.get('current_instance_id'),
-                        'total_instances': gateway_progress.get('total_instances'),
-                        'completed_instances': gateway_progress.get('completed_instances', 0),
-                        'synced_count': gateway_progress.get('synced_count', 0),
-                        'start_time': gateway_progress.get('start_time'),
-                        'message': gateway_progress.get('message', '正在同步网关数据...')
-                    })
-            except Exception as e:
-                logger.error(f'解析网关同步进度失败: {e}')
+        if active_tasks:
+            for worker, tasks in active_tasks.items():
+                for task in tasks:
+                    if 'sync_all_instances_cdrs' in task.get('name', '') or 'sync_cdrs_for_single_day' in task.get('name', ''):
+                        is_syncing = True
+                        break
         
-        # 4. 账户明细报表同步进度
-        account_report_progress_data = r.get('account_detail_report_sync_progress')
-        if account_report_progress_data:
-            try:
-                account_report_progress = json.loads(account_report_progress_data)
-                status = account_report_progress.get('status', 'unknown')
-                if status != 'completed':
-                    progress_percent = account_report_progress.get('progress_percent', 0)
-                    sync_tasks.append({
-                        'task_type': 'account_detail_report',
-                        'task_name': '账户明细报表同步',
-                        'status': status,
-                        'progress_percent': progress_percent,
-                        'current_instance': account_report_progress.get('current_instance'),
-                        'current_instance_id': account_report_progress.get('current_instance_id'),
-                        'current_account': account_report_progress.get('current_account'),
-                        'sync_date': account_report_progress.get('sync_date'),
-                        'total_tasks': account_report_progress.get('total_tasks'),
-                        'completed_tasks': account_report_progress.get('completed_tasks', 0),
-                        'synced_count': account_report_progress.get('synced_count', 0),
-                        'start_time': account_report_progress.get('start_time'),
-                        'message': account_report_progress.get('message', '正在同步账户明细报表...')
-                    })
-            except Exception as e:
-                logger.error(f'解析账户明细报表同步进度失败: {e}')
+        # 转换最后同步时间到东八区
+        latest_sync_str = None
+        if latest_sync_time:
+            # 数据库中存储的已经是本地时间（UTC+8），直接使用
+            latest_sync_str = latest_sync_time.isoformat()
+            
+        # 读取最近一次同步结果（从Redis持久化存储中获取）
+        last_synced_count = 0
+        try:
+            last_sync_result_json = RedisCache.get('last_cdr_sync_result')
+            if last_sync_result_json:
+                import json
+                last_sync_result = json.loads(last_sync_result_json)
+                last_synced_count = last_sync_result.get('synced_count', 0)
+        except Exception as e:
+            logger.error(f'读取最近同步结果失败: {e}')
         
         return {
             'success': True,
-            'has_active_tasks': len(sync_tasks) > 0,
-            'tasks': sync_tasks,
-            'tasks_count': len(sync_tasks)
+            'status': 'syncing' if is_syncing else 'idle',
+            'is_syncing': is_syncing,
+            'total_cdrs': total_count,
+            'last_sync_time': latest_sync_str,
+            'last_synced_count': last_synced_count,
+            'instances_count': len(instances),
+            'instances': instance_stats,
+            'next_sync': '每天凌晨 01:30 自动同步'
         }
         
     except Exception as e:
-        logger.exception(f'获取同步任务进度失败: {e}')
+        logger.exception(f'获取话单同步状态失败: {e}')
         return {
             'success': False,
             'error': str(e),
-            'has_active_tasks': False,
-            'tasks': []
+            'status': 'error',
+            'total_cdrs': 0,
+            'last_sync_time': None,
+            'instances': []
         }
