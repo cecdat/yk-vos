@@ -123,9 +123,31 @@ class ClickHouseCDR:
             }
             ch_cdrs.append(ch_cdr)
         
-        # 批量插入
+        # 去重：查询已存在的ID并过滤
+        if not ch_cdrs:
+            return 0
+        
         try:
-            count = ch_db.insert('cdrs', ch_cdrs)
+            # 提取所有ID
+            ids_to_insert = [cdr['id'] for cdr in ch_cdrs]
+            
+            # 查询已存在的ID
+            existing_ids_query = f"SELECT id FROM cdrs WHERE id IN ({','.join(map(str, ids_to_insert))})"
+            existing_ids_result = ch_db.execute(existing_ids_query)
+            existing_ids = set(row[0] for row in existing_ids_result)
+            
+            # 过滤掉已存在的记录
+            new_cdrs = [cdr for cdr in ch_cdrs if cdr['id'] not in existing_ids]
+            
+            if not new_cdrs:
+                logger.info(f'⚠️ 所有 {len(ch_cdrs)} 条话单已存在，跳过插入 (VOS ID: {vos_id})')
+                return 0
+            
+            if len(new_cdrs) < len(ch_cdrs):
+                logger.info(f'⚠️ 过滤掉 {len(ch_cdrs) - len(new_cdrs)} 条重复话单，准备插入 {len(new_cdrs)} 条新话单')
+            
+            # 批量插入新记录
+            count = ch_db.insert('cdrs', new_cdrs)
             logger.info(f'✅ 成功插入 {count} 条话单到 ClickHouse (VOS ID: {vos_id})')
             return count
         except Exception as e:
