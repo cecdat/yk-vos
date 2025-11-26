@@ -58,7 +58,8 @@ def sync_all_instances_online_phones():
 def check_and_run_cdr_sync():
     """
     检查是否到达配置的CDR同步时间，如果是则执行同步
-    每小时检查一次（在整点执行）
+    检查是否到达配置的CDR同步时间，如果是则执行同步
+    每分钟检查一次（精确匹配时间）
     """
     from app.models.app_config import AppConfig
     import redis
@@ -90,8 +91,8 @@ def check_and_run_cdr_sync():
         current_hour = now.hour
         current_minute = now.minute
         
-        # 判断是否到达同步时间（每小时检查一次，所以只要小时匹配即可）
-        if current_hour == hour:
+        # 判断是否到达同步时间（每分钟检查一次，精确匹配小时和分钟）
+        if current_hour == hour and current_minute == minute:
             logger.info(f'⏰ 到达配置的同步时间 {configured_time}，开始执行CDR自动同步')
             
             # 检查是否已有同步任务在运行（避免重复执行）

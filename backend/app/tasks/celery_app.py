@@ -8,8 +8,8 @@ celery.conf.timezone = 'Asia/Shanghai'
 celery.conf.beat_schedule = {
     # 原有任务
     'sync-phones-every-5min': {'task': 'app.tasks.sync_tasks.sync_all_instances_online_phones','schedule': 300.0},
-    # 修改为每小时检查是否到达配置的同步时间
-    'check-cdr-sync-schedule': {'task': 'app.tasks.sync_tasks.check_and_run_cdr_sync','schedule': crontab(minute=0)},
+    # 修改为每分钟检查是否到达配置的同步时间
+    'check-cdr-sync-schedule': {'task': 'app.tasks.sync_tasks.check_and_run_cdr_sync','schedule': crontab(minute='*')},
     'sync-customers-every-10min': {'task': 'app.tasks.sync_tasks.sync_all_instances_customers','schedule': 600.0},
     
     # 通用VOS API数据同步任务
