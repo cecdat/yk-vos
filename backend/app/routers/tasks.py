@@ -287,3 +287,250 @@ async def get_cdr_sync_status(
             'last_sync_time': None,
             'instances': []
         }
+
+
+@router.get('/cdr-sync-progress')
+async def get_cdr_sync_progress(
+    current_user: Annotated[User, Depends(get_current_user)]
+):
+    """
+    获取当前话单同步进度（实时）
+    
+    从 Redis 获取正在进行的同步任务的详细进度
+    """
+    try:
+        from app.core.config import settings
+        import redis
+        import json
+        
+        # 连接 Redis
+        r = redis.from_url(settings.REDIS_URL)
+        
+        # 获取同步进度
+        progress_data = r.get('cdr_sync_progress')
+        
+        if not progress_data:
+            return {
+                'success': True,
+                'is_syncing': False,
+                'message': '当前没有正在进行的同步任务'
+            }
+        
+        # 解析进度数据
+        progress = json.loads(progress_data)
+        
+        # 计算进度百分比
+        progress_percent = 0
+        status = progress.get('status', 'unknown')
+        
+        if status == 'task_created':
+            # 任务刚创建，还未开始执行
+            progress_percent = 0
+        elif status == 'completed':
+            # 所有任务已完成
+            progress_percent = 100
+        elif status == 'syncing':
+            # 正在同步中
+            total_tasks = progress.get('total_tasks')
+            completed_tasks = progress.get('completed_tasks', 0)
+            
+            if total_tasks and total_tasks > 0:
+                # 多任务模式：使用任务完成进度
+                # 计算已完成任务的进度 + 当前任务的进度
+                current_task_progress = 0
+                if progress.get('current_customer_index') and progress.get('total_customers'):
+                    # 当前任务的客户进度（按比例）
+                    current_task_progress = (progress.get('current_customer_index', 0) / progress.get('total_customers', 1)) * (1 / total_tasks)
+                
+                progress_percent = round((completed_tasks / total_tasks) * 100 + current_task_progress * 100, 1)
+                progress_percent = min(progress_percent, 100)  # 确保不超过100%
+            else:
+                # 单任务模式：使用客户进度
+                if progress.get('current_customer_index') and progress.get('total_customers'):
+                    progress_percent = round((progress.get('current_customer_index', 0) / progress.get('total_customers', 1)) * 100, 1)
+        
+        return {
+            'success': True,
+            'is_syncing': status != 'completed',
+            'status': status,
+            'current_instance': progress.get('current_instance'),
+            'current_instance_id': progress.get('current_instance_id'),
+            'current_customer': progress.get('current_customer'),
+            'current_customer_index': progress.get('current_customer_index'),
+            'total_customers': progress.get('total_customers'),
+            'synced_count': progress.get('synced_count', 0),
+            'start_time': progress.get('start_time'),
+            'progress_percent': progress_percent,
+            'total_tasks': progress.get('total_tasks'),
+            'completed_tasks': progress.get('completed_tasks', 0),
+            'message': progress.get('message')
+        }
+        
+    except Exception as e:
+        logger.exception(f'获取同步进度失败: {e}')
+        return {
+            'success': False,
+            'error': str(e),
+            'is_syncing': False
+        }
+
+
+@router.get('/sync-tasks-progress')
+async def get_sync_tasks_progress(
+    current_user: Annotated[User, Depends(get_current_user)]
+):
+    """
+    获取所有同步任务的进度（统一接口）
+    
+    返回当前正在进行的同步任务信息，包括：
+    - CDR同步（历史话单）
+    - 客户数据同步
+    - 网关同步
+    - 账户明细报表同步
+    """
+    try:
+        from app.core.config import settings
+        import redis
+        import json
+        from celery.result import AsyncResult
+        
+        # 连接 Redis
+        r = redis.from_url(settings.REDIS_URL)
+        
+        # 获取所有类型的同步任务进度
+        sync_tasks = []
+        
+        # 1. CDR同步进度
+        cdr_progress_data = r.get('cdr_sync_progress')
+        if cdr_progress_data:
+            try:
+                cdr_progress = json.loads(cdr_progress_data)
+                status = cdr_progress.get('status', 'unknown')
+                if status != 'completed':
+                    # 计算进度百分比
+                    progress_percent = 0
+                    if status == 'task_created':
+                        progress_percent = 0
+                    elif status == 'syncing':
+                        total_tasks = cdr_progress.get('total_tasks')
+                        completed_tasks = cdr_progress.get('completed_tasks', 0)
+                        if total_tasks and total_tasks > 0:
+                            current_task_progress = 0
+                            if cdr_progress.get('current_customer_index') and cdr_progress.get('total_customers'):
+                                current_task_progress = (cdr_progress.get('current_customer_index', 0) / cdr_progress.get('total_customers', 1)) * (1 / total_tasks)
+                            progress_percent = round((completed_tasks / total_tasks) * 100 + current_task_progress * 100, 1)
+                            progress_percent = min(progress_percent, 100)
+                        else:
+                            if cdr_progress.get('current_customer_index') and cdr_progress.get('total_customers'):
+                                progress_percent = round((cdr_progress.get('current_customer_index', 0) / cdr_progress.get('total_customers', 1)) * 100, 1)
+                    
+                    sync_tasks.append({
+                        'task_type': 'cdr',
+                        'task_name': '历史话单同步',
+                        'status': status,
+                        'progress_percent': progress_percent,
+                        'current_instance': cdr_progress.get('current_instance'),
+                        'current_customer': cdr_progress.get('current_customer'),
+                        'current_customer_index': cdr_progress.get('current_customer_index'),
+                        'total_customers': cdr_progress.get('total_customers'),
+                        'total_tasks': cdr_progress.get('total_tasks'),
+                        'completed_tasks': cdr_progress.get('completed_tasks', 0),
+                        'synced_count': cdr_progress.get('synced_count', 0),
+                        'sync_date': cdr_progress.get('sync_date'),
+                        'days': cdr_progress.get('days'),
+                        'instances_count': cdr_progress.get('instances_count'),
+                        'start_time': cdr_progress.get('start_time'),
+                        'message': cdr_progress.get('message', '正在同步历史话单...')
+                    })
+            except Exception as e:
+                logger.error(f'解析CDR同步进度失败: {e}')
+        
+        # 2. 客户数据同步进度
+        customer_progress_data = r.get('customer_sync_progress')
+        if customer_progress_data:
+            try:
+                customer_progress = json.loads(customer_progress_data)
+                status = customer_progress.get('status', 'unknown')
+                if status != 'completed':
+                    progress_percent = customer_progress.get('progress_percent', 0)
+                    sync_tasks.append({
+                        'task_type': 'customer',
+                        'task_name': '客户数据同步',
+                        'status': status,
+                        'progress_percent': progress_percent,
+                        'current_instance': customer_progress.get('current_instance'),
+                        'current_instance_id': customer_progress.get('current_instance_id'),
+                        'total_instances': customer_progress.get('total_instances'),
+                        'completed_instances': customer_progress.get('completed_instances', 0),
+                        'synced_count': customer_progress.get('synced_count', 0),
+                        'start_time': customer_progress.get('start_time'),
+                        'message': customer_progress.get('message', '正在同步客户数据...')
+                    })
+            except Exception as e:
+                logger.error(f'解析客户数据同步进度失败: {e}')
+        
+        # 3. 网关同步进度
+        gateway_progress_data = r.get('gateway_sync_progress')
+        if gateway_progress_data:
+            try:
+                gateway_progress = json.loads(gateway_progress_data)
+                status = gateway_progress.get('status', 'unknown')
+                if status != 'completed':
+                    progress_percent = gateway_progress.get('progress_percent', 0)
+                    sync_tasks.append({
+                        'task_type': 'gateway',
+                        'task_name': '网关数据同步',
+                        'status': status,
+                        'progress_percent': progress_percent,
+                        'current_instance': gateway_progress.get('current_instance'),
+                        'current_instance_id': gateway_progress.get('current_instance_id'),
+                        'total_instances': gateway_progress.get('total_instances'),
+                        'completed_instances': gateway_progress.get('completed_instances', 0),
+                        'synced_count': gateway_progress.get('synced_count', 0),
+                        'start_time': gateway_progress.get('start_time'),
+                        'message': gateway_progress.get('message', '正在同步网关数据...')
+                    })
+            except Exception as e:
+                logger.error(f'解析网关同步进度失败: {e}')
+        
+        # 4. 账户明细报表同步进度
+        account_report_progress_data = r.get('account_detail_report_sync_progress')
+        if account_report_progress_data:
+            try:
+                account_report_progress = json.loads(account_report_progress_data)
+                status = account_report_progress.get('status', 'unknown')
+                if status != 'completed':
+                    progress_percent = account_report_progress.get('progress_percent', 0)
+                    sync_tasks.append({
+                        'task_type': 'account_detail_report',
+                        'task_name': '账户明细报表同步',
+                        'status': status,
+                        'progress_percent': progress_percent,
+                        'current_instance': account_report_progress.get('current_instance'),
+                        'current_instance_id': account_report_progress.get('current_instance_id'),
+                        'current_account': account_report_progress.get('current_account'),
+                        'sync_date': account_report_progress.get('sync_date'),
+                        'total_tasks': account_report_progress.get('total_tasks'),
+                        'completed_tasks': account_report_progress.get('completed_tasks', 0),
+                        'synced_count': account_report_progress.get('synced_count', 0),
+                        'start_time': account_report_progress.get('start_time'),
+                        'message': account_report_progress.get('message', '正在同步账户明细报表...')
+                    })
+            except Exception as e:
+                logger.error(f'解析账户明细报表同步进度失败: {e}')
+        
+        return {
+            'success': True,
+            'has_active_tasks': len(sync_tasks) > 0,
+            'tasks': sync_tasks,
+            'tasks_count': len(sync_tasks)
+        }
+        
+    except Exception as e:
+        logger.exception(f'获取同步任务进度失败: {e}')
+        return {
+            'success': False,
+            'error': str(e),
+            'has_active_tasks': False,
+            'tasks': []
+        }
