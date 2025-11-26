@@ -365,7 +365,6 @@ def sync_all_instances_cdrs(days=None):
                     'end_time': datetime.now().isoformat(),
                     'message': f'自动同步完成，共同步 {total_synced_count} 条话单'
                 }, ensure_ascii=False)
-                }, ensure_ascii=False)
             )
             
             # 持久化保存最近一次同步结果（用于仪表盘显示）
