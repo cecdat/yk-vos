@@ -6,9 +6,22 @@
 import redis
 import json
 from datetime import datetime
+import sys
+import os
 
-# 连接Redis（根据实际配置修改）
-REDIS_URL = "redis://localhost:6379/0"
+# 添加项目路径
+sys.path.insert(0, '/srv')
+
+# 使用项目配置
+try:
+    from app.core.config import settings
+    REDIS_URL = settings.REDIS_URL
+    print(f"使用配置文件中的Redis URL: {REDIS_URL}")
+except ImportError:
+    # 如果无法导入配置，使用默认值
+    REDIS_URL = "redis://redis:6379/0"
+    print(f"使用默认Redis URL: {REDIS_URL}")
+
 r = redis.from_url(REDIS_URL)
 
 # 设置测试数据
