@@ -147,6 +147,8 @@ export default function Page() {
   async function fetchCDRSyncStatus() {
     try {
       const res = await api.get('/tasks/cdr-sync-status')
+      console.log('CDR Sync Status API Response:', res.data)
+      console.log('last_synced_count:', res.data.last_synced_count)
       setCdrSyncStatus(res.data)
 
       // 如果正在同步，立即获取进度
