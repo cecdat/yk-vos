@@ -365,7 +365,21 @@ def sync_all_instances_cdrs(days=None):
                     'end_time': datetime.now().isoformat(),
                     'message': f'自动同步完成，共同步 {total_synced_count} 条话单'
                 }, ensure_ascii=False)
+                }, ensure_ascii=False)
             )
+            
+            # 持久化保存最近一次同步结果（用于仪表盘显示）
+            try:
+                last_sync_result = {
+                    'synced_count': total_synced_count,
+                    'sync_time': datetime.now().isoformat(),
+                    'duration': (datetime.now() - datetime.strptime(start_time, '%Y-%m-%dT%H:%M:%S.%f')).total_seconds() if 'start_time' in locals() else 0,
+                    'status': 'success'
+                }
+                r.set('last_cdr_sync_result', json.dumps(last_sync_result))
+                logger.info(f'已保存最近一次同步结果: {last_sync_result}')
+            except Exception as e:
+                logger.error(f'保存最近同步结果失败: {e}')
         
         return {
             'success': True,

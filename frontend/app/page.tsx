@@ -22,6 +22,7 @@ interface CDRSyncStatus {
   is_syncing: boolean
   total_cdrs: number
   last_sync_time: string | null
+  last_synced_count?: number // 新增字段：最近一次同步数量
   instances_count: number
   instances: Array<{
     instance_id: number
@@ -31,6 +32,28 @@ interface CDRSyncStatus {
     status: string
   }>
   next_sync: string
+}
+
+// ... (中间代码保持不变)
+
+{/* 最近同步数量 */ }
+{
+  (cdrSyncStatus?.last_synced_count !== undefined && cdrSyncStatus.last_synced_count > 0) ||
+  (cdrSyncProgress?.synced_count !== undefined && cdrSyncProgress.synced_count > 0) ? (
+  <p className='text-xs text-white text-opacity-75 mt-0.5 whitespace-nowrap'>
+    最近同步: {(() => {
+      // 优先显示实时进度中的数量（如果在同步中），否则显示历史记录中的数量
+      const count = cdrSyncStatus?.is_syncing
+        ? (cdrSyncProgress?.synced_count || 0)
+        : (cdrSyncStatus?.last_synced_count || cdrSyncProgress?.synced_count || 0);
+
+      if (count >= 10000) {
+        return (count / 10000).toFixed(2) + '万';
+      }
+      return count.toLocaleString();
+    })()}
+  </p>
+) : null
 }
 
 interface CDRSyncProgress {
