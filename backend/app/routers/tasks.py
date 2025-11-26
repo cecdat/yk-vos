@@ -184,6 +184,7 @@ async def get_cdr_sync_status(
     - 任务状态（运行中/成功/失败）
     """
     try:
+        from app.core.redis_cache import RedisCache
         from app.models.clickhouse_cdr import ClickHouseCDR
         from app.models.vos_instance import VOSInstance
         
