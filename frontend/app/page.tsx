@@ -36,26 +36,6 @@ interface CDRSyncStatus {
 
 // ... (中间代码保持不变)
 
-{/* 最近同步数量 */ }
-{
-  (cdrSyncStatus?.last_synced_count !== undefined && cdrSyncStatus.last_synced_count > 0) ||
-  (cdrSyncProgress?.synced_count !== undefined && cdrSyncProgress.synced_count > 0) ? (
-  <p className='text-xs text-white text-opacity-75 mt-0.5 whitespace-nowrap'>
-    最近同步: {(() => {
-      // 优先显示实时进度中的数量（如果在同步中），否则显示历史记录中的数量
-      const count = cdrSyncStatus?.is_syncing
-        ? (cdrSyncProgress?.synced_count || 0)
-        : (cdrSyncStatus?.last_synced_count || cdrSyncProgress?.synced_count || 0);
-
-      if (count >= 10000) {
-        return (count / 10000).toFixed(2) + '万';
-      }
-      return count.toLocaleString();
-    })()}
-  </p>
-) : null
-}
-
 interface CDRSyncProgress {
   success: boolean
   is_syncing: boolean
@@ -302,17 +282,23 @@ export default function Page() {
                 {cdrSyncStatus?.last_sync_time ? formatDateTime(cdrSyncStatus.last_sync_time) : '暂无记录'}
               </p>
               {/* 最近同步数量 */}
-              {cdrSyncProgress?.synced_count !== undefined && cdrSyncProgress.synced_count > 0 && (
+              {/* 最近同步数量 */}
+              {(cdrSyncStatus?.last_synced_count !== undefined && cdrSyncStatus.last_synced_count > 0) ||
+                (cdrSyncProgress?.synced_count !== undefined && cdrSyncProgress.synced_count > 0) ? (
                 <p className='text-xs text-white text-opacity-75 mt-0.5 whitespace-nowrap'>
                   最近同步: {(() => {
-                    const count = cdrSyncProgress.synced_count;
+                    // 优先显示实时进度中的数量（如果在同步中），否则显示历史记录中的数量
+                    const count = cdrSyncStatus?.is_syncing
+                      ? (cdrSyncProgress?.synced_count || 0)
+                      : (cdrSyncStatus?.last_synced_count || cdrSyncProgress?.synced_count || 0);
+
                     if (count >= 10000) {
                       return (count / 10000).toFixed(2) + '万';
                     }
                     return count.toLocaleString();
                   })()}
                 </p>
-              )}
+              ) : null}
             </div>
             <div className='w-10 h-10 bg-white bg-opacity-20 rounded-lg flex items-center justify-center'>
               {cdrSyncStatus?.is_syncing ? (
