@@ -257,11 +257,11 @@ async def get_cdr_sync_status(
         # 读取最近一次同步结果（从Redis持久化存储中获取）
         last_synced_count = 0
         try:
-            last_sync_result_json = RedisCache.get('last_cdr_sync_result')
-            if last_sync_result_json:
-                import json
-                last_sync_result = json.loads(last_sync_result_json)
+            last_sync_result = RedisCache.get('last_cdr_sync_result')
+            if last_sync_result:
+                # RedisCache.get() 已经自动反序列化为字典，直接使用
                 last_synced_count = last_sync_result.get('synced_count', 0)
+                logger.info(f'从Redis读取到最近同步数量: {last_synced_count}')
         except Exception as e:
             logger.error(f'读取最近同步结果失败: {e}')
         
