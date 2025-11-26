@@ -106,13 +106,40 @@ def deduplicate_data(dry_run=True):
         print("执行去重操作")
     print("=" * 80)
     
+    # 先查询表结构，获取ORDER BY列
+    print("\n1. 查询表结构...")
+    try:
+        table_info_query = "SHOW CREATE TABLE cdrs"
+        table_info = ch_db.execute(table_info_query)
+        create_table_sql = table_info[0][0]
+        print(f"表定义:\n{create_table_sql}\n")
+        
+        # 从CREATE TABLE语句中提取ORDER BY列
+        # 通常格式为: ORDER BY (vos_id, start, id) 或类似
+        import re
+        order_by_match = re.search(r'ORDER BY \((.*?)\)', create_table_sql)
+        if order_by_match:
+            order_by_cols = order_by_match.group(1)
+            print(f"ORDER BY 列: {order_by_cols}")
+        else:
+            # 如果没有找到ORDER BY，尝试PRIMARY KEY
+            pk_match = re.search(r'PRIMARY KEY \((.*?)\)', create_table_sql)
+            if pk_match:
+                order_by_cols = pk_match.group(1)
+                print(f"PRIMARY KEY 列: {order_by_cols}")
+            else:
+                print("⚠️ 未找到ORDER BY或PRIMARY KEY，使用默认: vos_id, id")
+                order_by_cols = "vos_id, id"
+    except Exception as e:
+        print(f"⚠️ 查询表结构失败: {e}")
+        print("使用默认ORDER BY列: vos_id, id")
+        order_by_cols = "vos_id, id"
+    
     # ClickHouse去重方法：
-    # 方法1：使用 OPTIMIZE TABLE ... FINAL DEDUPLICATE BY id
-    # 这会保留每个ID的第一条记录，删除后续重复的记录
+    # DEDUPLICATE BY 必须包含所有ORDER BY/PRIMARY KEY列
+    deduplicate_query = f"OPTIMIZE TABLE cdrs FINAL DEDUPLICATE BY {order_by_cols}"
     
-    deduplicate_query = "OPTIMIZE TABLE cdrs FINAL DEDUPLICATE BY id"
-    
-    print(f"\n将执行SQL: {deduplicate_query}")
+    print(f"\n2. 将执行SQL: {deduplicate_query}")
     
     if dry_run:
         print("\n⚠️ 这是预览模式，不会实际执行去重操作")
