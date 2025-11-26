@@ -125,6 +125,67 @@ def check_and_run_cdr_sync():
         db.close()
 
 @celery.task
+def check_and_run_gateway_sync():
+    """
+    检查是否到达配置的网关同步时间，如果是则执行同步
+    每分钟检查一次（精确匹配时间）
+    """
+    from app.models.app_config import AppConfig
+    import redis
+    from app.core.config import settings
+    
+    db = SessionLocal()
+    
+    try:
+        # 读取配置的同步时间
+        config = db.query(AppConfig).filter(
+            AppConfig.config_key == 'gateway_sync_time'
+        ).first()
+        
+        if not config:
+            # 默认 02:00
+            configured_time = '02:00'
+        else:
+            configured_time = config.config_value
+        
+        # 解析配置的时间
+        try:
+            hour, minute = map(int, configured_time.split(':'))
+        except ValueError:
+            logger.error(f'配置的网关同步时间格式错误: {configured_time}，使用默认时间 02:00')
+            hour, minute = 2, 0
+        
+        # 获取当前时间
+        now = datetime.now()
+        current_hour = now.hour
+        current_minute = now.minute
+        
+        # 判断是否到达同步时间（每分钟检查一次，精确匹配小时和分钟）
+        if current_hour == hour and current_minute == minute:
+            logger.info(f'⏰ 到达配置的网关同步时间 {configured_time}，开始执行网关自动同步')
+            
+            # 检查是否已有同步任务在运行（避免重复执行）
+            try:
+                r = redis.from_url(settings.REDIS_URL)
+                if r.exists('gateway_sync_lock'):
+                    logger.warning('已有网关同步任务在运行，跳过本次自动同步')
+                    return {'success': False, 'message': '同步任务已在运行中', 'skipped': True}
+            except Exception as e:
+                logger.warning(f'检查同步锁失败: {e}，继续执行')
+            
+            # 执行同步任务
+            return sync_all_instances_gateways()
+        else:
+            logger.debug(f'当前时间 {current_hour:02d}:{current_minute:02d}，配置网关同步时间 {configured_time}，不执行同步')
+            return {'success': True, 'message': '未到同步时间', 'skipped': True}
+            
+    except Exception as e:
+        logger.exception(f'检查网关同步时间失败: {e}')
+        return {'success': False, 'error': str(e)}
+    finally:
+        db.close()
+
+@celery.task
 def sync_all_instances_cdrs(days=None):
     """
     定时同步所有VOS实例的历史话单到ClickHouse（按天创建任务，避免VOS卡死）

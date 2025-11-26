@@ -24,10 +24,10 @@ celery.conf.beat_schedule = {
         'schedule': 14400.0,  # 每4小时同步一次（话机、网关、费率、套餐）
     },
     
-    # 网关专用同步任务
-    'sync-all-gateways-every-4hours': {
-        'task': 'app.tasks.sync_tasks.sync_all_instances_gateways',
-        'schedule': 14400.0,  # 每4小时同步一次网关（对接+落地）
+    # 网关专用同步任务（改为每分钟检查是否到达配置时间）
+    'check-gateway-sync-schedule': {
+        'task': 'app.tasks.sync_tasks.check_and_run_gateway_sync',
+        'schedule': crontab(minute='*'),
     },
     
     # 清理过期缓存（每天凌晨2点）
@@ -54,12 +54,10 @@ celery.conf.beat_schedule = {
         'schedule': crontab(minute=0),  # 每小时的第0分钟执行
     },
     
-    # 账户明细报表同步（每天凌晨3点执行，在CDR统计之后）
-    # 注意：sync_days参数为None时，任务会从数据库读取配置
-    'sync-account-detail-reports-daily': {
-        'task': 'app.tasks.account_detail_report_tasks.sync_account_detail_reports_daily',
-        'schedule': crontab(minute=0, hour=3),  # 每天凌晨3点
-        'args': [None],  # sync_days=None，从数据库读取配置
+    # 账户明细报表同步（改为每分钟检查是否到达配置时间）
+    'check-account-detail-report-sync-schedule': {
+        'task': 'app.tasks.account_detail_report_tasks.check_and_run_account_detail_report_sync',
+        'schedule': crontab(minute='*'),
     },
 }
 
