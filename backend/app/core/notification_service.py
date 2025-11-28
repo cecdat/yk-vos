@@ -40,30 +40,46 @@ class NotificationService:
             notification_type: 通知类型，可选值：all, bark, email
             project_type: 项目类型，可选值：all, customers, cdrs, phones, gateways
             result_type: 结果类型，可选值：success, error
+        
+        Returns:
+            dict: 发送结果，包含各类型通知的发送状态
         """
+        results = {
+            'bark': {'success': False, 'message': '未配置或未发送'},
+            'email': {'success': False, 'message': '未配置或未发送'}
+        }
+        
         # 检查推送项目是否匹配
         if self.push_projects != 'all' and project_type != self.push_projects:
             logger.debug(f"跳过通知: 项目类型 {project_type} 不在配置的推送项目 {self.push_projects} 中")
-            return
+            return results
         
         # 检查推送类型是否匹配
         if self.push_types != 'all' and result_type != self.push_types:
             logger.debug(f"跳过通知: 结果类型 {result_type} 不在配置的推送类型 {self.push_types} 中")
-            return
+            return results
         
         # 发送Bark通知
         if notification_type in ["all", "bark"] and self.bark_url:
             try:
                 self._send_bark_notification(title, content)
+                results['bark'] = {'success': True, 'message': '发送成功'}
             except Exception as e:
-                logger.error(f"发送Bark通知失败: {e}")
+                error_msg = f"发送Bark通知失败: {e}"
+                logger.error(error_msg)
+                results['bark'] = {'success': False, 'message': error_msg}
 
         # 发送邮件通知
         if notification_type in ["all", "email"] and self.email_config:
             try:
                 self._send_email_notification(title, content)
+                results['email'] = {'success': True, 'message': '发送成功'}
             except Exception as e:
-                logger.error(f"发送邮件通知失败: {e}")
+                error_msg = f"发送邮件通知失败: {e}"
+                logger.error(error_msg)
+                results['email'] = {'success': False, 'message': error_msg}
+        
+        return results
 
     def _send_bark_notification(self, title: str, content: str):
         """
@@ -72,6 +88,9 @@ class NotificationService:
         Args:
             title: 通知标题
             content: 通知内容
+        
+        Raises:
+            httpx.RequestError: 发送失败时抛出异常
         """
         if not self.bark_url:
             logger.warning("Bark URL未配置，跳过发送Bark通知")
@@ -95,11 +114,15 @@ class NotificationService:
         Args:
             title: 通知标题
             content: 通知内容
+        
+        Raises:
+            Exception: 发送失败时抛出异常
         """
         if not self.email_config:
             logger.warning("邮件配置未设置，跳过发送邮件通知")
             return
 
+        server = None
         try:
             # 创建邮件
             msg = MIMEMultipart()
@@ -110,32 +133,30 @@ class NotificationService:
             # 添加邮件正文
             msg.attach(MIMEText(content, 'plain', 'utf-8'))
 
-            # 发送邮件，添加超时和重试机制
-            server = None
-            try:
-                server = smtplib.SMTP(self.email_config.get('smtp_server'), self.email_config.get('smtp_port'), timeout=15)
-                server.starttls()
-                server.login(self.email_config.get('username'), self.email_config.get('password'))
-                server.send_message(msg)
-                logger.info(f"邮件通知发送成功: {title}")
-            except smtplib.SMTPServerDisconnected as e:
-                logger.error(f"邮件服务器连接断开: {e}")
-                # 不抛出异常，避免影响其他功能
-            except smtplib.SMTPException as e:
-                logger.error(f"SMTP错误: {e}")
-                # 不抛出异常，避免影响其他功能
-            except Exception as e:
-                logger.error(f"发送邮件通知失败: {e}")
-                # 不抛出异常，避免影响其他功能
-            finally:
-                if server:
-                    try:
-                        server.quit()
-                    except:
-                        pass
+            # 发送邮件，添加超时
+            server = smtplib.SMTP(self.email_config.get('smtp_server'), self.email_config.get('smtp_port'), timeout=15)
+            server.starttls()
+            server.login(self.email_config.get('username'), self.email_config.get('password'))
+            server.send_message(msg)
+            logger.info(f"邮件通知发送成功: {title}")
+        except smtplib.SMTPServerDisconnected as e:
+            error_msg = f"邮件服务器连接断开: {e}"
+            logger.error(error_msg)
+            raise Exception(error_msg)
+        except smtplib.SMTPException as e:
+            error_msg = f"SMTP错误: {e}"
+            logger.error(error_msg)
+            raise Exception(error_msg)
         except Exception as e:
-            logger.error(f"邮件发送过程中发生错误: {e}")
-            # 不抛出异常，避免影响其他功能
+            error_msg = f"发送邮件通知失败: {e}"
+            logger.error(error_msg)
+            raise Exception(error_msg)
+        finally:
+            if server:
+                try:
+                    server.quit()
+                except:
+                    pass
 
 
 def get_notification_service(db):

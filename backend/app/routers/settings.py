@@ -131,13 +131,26 @@ async def test_notification(
         title = f"测试通知 - {sync_date}"
         content = "这是一条测试通知，用于验证推送配置是否正确。"
         
-        notification_service.send_notification(title, content, notification_type)
+        # 获取发送结果
+        results = notification_service.send_notification(title, content, notification_type)
+        
+        # 检查发送结果
+        if notification_type == 'all':
+            # 检查所有发送的通知类型是否成功
+            success = all(result['success'] for result in results.values() if result['message'] != '未配置或未发送')
+            messages = [f"{type}: {result['message']}" for type, result in results.items() if result['message'] != '未配置或未发送']
+        else:
+            # 只检查指定类型的通知是否成功
+            result = results[notification_type]
+            success = result['success']
+            messages = [result['message']]
         
         return {
-            'success': True,
-            'message': f'测试通知已发送 ({notification_type})',
+            'success': success,
+            'message': '; '.join(messages),
             'title': title,
-            'content': content
+            'content': content,
+            'results': results
         }
     except Exception as e:
         logger.error(f'测试通知发送失败: {e}')
