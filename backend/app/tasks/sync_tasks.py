@@ -203,6 +203,7 @@ def sync_all_instances_cdrs(days=None):
     from app.tasks.initial_sync_tasks import sync_cdrs_for_single_day
     from app.models.app_config import AppConfig
     from app.core.config import settings
+    from app.core.notification_service import get_notification_service
     import redis
     
     # 如果 days 为 None，从数据库读取配置
@@ -380,6 +381,13 @@ def sync_all_instances_cdrs(days=None):
             except Exception as e:
                 logger.error(f'保存最近同步结果失败: {e}')
         
+        # 发送同步完成通知
+        notification_service = get_notification_service(db)
+        sync_date = datetime.now().strftime('%Y-%m-%d')
+        title = f"话单同步完成 - {sync_date}"
+        content = f"同步完成（{len(instances)}个实例 × {days}天），共 {total_synced_count} 条话单"
+        notification_service.send_notification(title, content)
+        
         return {
             'success': True,
             'instances_count': len(instances),
@@ -393,6 +401,14 @@ def sync_all_instances_cdrs(days=None):
         # 清除同步进度（错误）
         if r:
             r.delete('cdr_sync_progress')
+        
+        # 发送同步失败通知
+        notification_service = get_notification_service(db)
+        sync_date = datetime.now().strftime('%Y-%m-%d')
+        title = f"话单同步失败 - {sync_date}"
+        content = f"同步失败：{str(e)}"
+        notification_service.send_notification(title, content)
+        
         return {'success': False, 'message': str(e)}
     finally:
         db.close()
@@ -502,8 +518,12 @@ def sync_customers_for_instance(instance_id: int):
 
 @celery.task
 def sync_all_instances_customers():
-    """同步所有启用的VOS实例的客户数据（定时任务）"""
+    """
+    同步所有启用的VOS实例的客户数据（定时任务）
+    """
     db = SessionLocal()
+    from app.core.notification_service import get_notification_service
+    
     try:
         instances = db.query(VOSInstance).filter(VOSInstance.enabled == True).all()
         if not instances:
@@ -511,6 +531,7 @@ def sync_all_instances_customers():
             return {'success': True, 'message': '没有VOS实例需要同步', 'instances_count': 0}
         
         results = []
+        total_synced = 0
         
         for inst in instances:
             logger.info(f'开始同步VOS实例客户数据: {inst.name}')
@@ -520,6 +541,15 @@ def sync_all_instances_customers():
                 'instance_name': inst.name,
                 **result
             })
+            if result.get('success'):
+                total_synced += 1
+        
+        # 发送同步完成通知
+        notification_service = get_notification_service(db)
+        sync_date = datetime.now().strftime('%Y-%m-%d')
+        title = f"客户数据同步完成 - {sync_date}"
+        content = f"同步完成，共处理 {len(instances)} 个VOS实例，成功 {total_synced} 个"
+        notification_service.send_notification(title, content)
         
         return {
             'success': True,
@@ -529,6 +559,14 @@ def sync_all_instances_customers():
         
     except Exception as e:
         logger.exception(f'同步所有VOS实例客户数据时发生错误: {e}')
+        
+        # 发送同步失败通知
+        notification_service = get_notification_service(db)
+        sync_date = datetime.now().strftime('%Y-%m-%d')
+        title = f"客户数据同步失败 - {sync_date}"
+        content = f"同步失败：{str(e)}"
+        notification_service.send_notification(title, content)
+        
         return {'success': False, 'message': str(e)}
     finally:
         db.close()
@@ -843,6 +881,8 @@ def sync_all_instances_gateways():
     每分钟运行一次，保持网关状态实时更新
     """
     db = SessionLocal()
+    from app.core.notification_service import get_notification_service
+    
     try:
         instances = db.query(VOSInstance).filter(VOSInstance.enabled == True).all()
         if not instances:
@@ -875,6 +915,14 @@ def sync_all_instances_gateways():
                 })
         
         success_count = sum(1 for r in results if r.get('success'))
+        
+        # 发送同步完成通知
+        notification_service = get_notification_service(db)
+        sync_date = datetime.now().strftime('%Y-%m-%d')
+        title = f"网关数据同步完成 - {sync_date}"
+        content = f"同步完成，共处理 {len(instances)} 个VOS实例，成功 {success_count} 个，失败 {len(instances) - success_count} 个"
+        notification_service.send_notification(title, content)
+        
         return {
             'success': True,
             'instances_count': len(instances),
@@ -885,6 +933,14 @@ def sync_all_instances_gateways():
         
     except Exception as e:
         logger.exception(f'同步所有实例网关失败: {e}')
+        
+        # 发送同步失败通知
+        notification_service = get_notification_service(db)
+        sync_date = datetime.now().strftime('%Y-%m-%d')
+        title = f"网关数据同步失败 - {sync_date}"
+        content = f"同步失败：{str(e)}"
+        notification_service.send_notification(title, content)
+        
         return {'success': False, 'message': str(e)}
     finally:
         db.close()

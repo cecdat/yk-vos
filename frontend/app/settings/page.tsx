@@ -33,7 +33,7 @@ export default function SettingsPage() {
   
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState('')
-  const [activeTab, setActiveTab] = useState<'vos' | 'password' | 'sync'>('vos')
+  const [activeTab, setActiveTab] = useState<'vos' | 'password' | 'sync' | 'notification'>('vos')
   
   // 同步配置相关状态
   const [syncConfigs, setSyncConfigs] = useState<any[]>([])
@@ -46,11 +46,35 @@ export default function SettingsPage() {
     enabled: true,
     sync_type: 'customers'
   })
+  
+  // 通知配置相关状态
+  const [notificationConfigs, setNotificationConfigs] = useState({
+    bark_url: '',
+    email_smtp_server: '',
+    email_smtp_port: '',
+    email_username: '',
+    email_password: '',
+    email_from: '',
+    email_to: ''
+  })
 
   useEffect(() => {
     fetchInstances()
     fetchSyncConfigs()
+    fetchNotificationConfigs()
   }, [])
+  
+  async function fetchNotificationConfigs() {
+    try {
+      const res = await api.get('/settings/notification')
+      if (res.data) {
+        setNotificationConfigs(res.data)
+      }
+    } catch (e: any) {
+      console.error('获取通知配置失败:', e)
+      // 忽略错误，使用默认值
+    }
+  }
 
   async function fetchInstances() {
     try {
@@ -242,6 +266,20 @@ export default function SettingsPage() {
       setMessage(e.response?.data?.detail || '删除失败')
     }
   }
+  
+  async function handleNotificationSave() {
+    setLoading(true)
+    setMessage('')
+    
+    try {
+      await api.post('/settings/notification', notificationConfigs)
+      setMessage('通知配置保存成功')
+    } catch (e: any) {
+      setMessage(e.response?.data?.detail || '保存失败')
+    } finally {
+      setLoading(false)
+    }
+  }
 
   return (
     <div className='max-w-7xl'>
@@ -286,6 +324,16 @@ export default function SettingsPage() {
           }`}
         >
           修改密码
+        </button>
+        <button
+          onClick={() => setActiveTab('notification')}
+          className={`px-6 py-3 rounded-lg font-medium transition ${
+            activeTab === 'notification'
+              ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-lg'
+              : 'bg-white text-gray-700 hover:bg-gray-50'
+          }`}
+        >
+          通知配置
         </button>
       </div>
 
@@ -519,6 +567,111 @@ export default function SettingsPage() {
               </p>
             </form>
           </Card>
+        </div>
+      )}
+      
+      {/* 通知配置 */}
+      {activeTab === 'notification' && (
+        <div className='space-y-6'>
+          <h2 className='text-xl font-bold text-gray-800'>通知配置</h2>
+          
+          {/* Bark 配置 */}
+          <Card>
+            <h3 className='text-lg font-semibold mb-4'>📱 Bark 推送配置</h3>
+            <div className='space-y-4'>
+              <div>
+                <label className='block text-sm font-medium mb-1'>Bark URL</label>
+                <input
+                  type='text'
+                  value={notificationConfigs.bark_url}
+                  onChange={e => setNotificationConfigs({ ...notificationConfigs, bark_url: e.target.value })}
+                  className='w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none'
+                  placeholder='例如: https://api.day.app/your-bark-key'
+                />
+                <p className='text-xs text-gray-500 mt-1'>
+                  Bark是iOS设备的推送服务，配置后同步结果会推送到您的iOS设备
+                </p>
+              </div>
+            </div>
+          </Card>
+          
+          {/* 邮件配置 */}
+          <Card>
+            <h3 className='text-lg font-semibold mb-4'>📧 邮件推送配置</h3>
+            <div className='grid grid-cols-1 md:grid-cols-2 gap-4'>
+              <div>
+                <label className='block text-sm font-medium mb-1'>SMTP 服务器</label>
+                <input
+                  type='text'
+                  value={notificationConfigs.email_smtp_server}
+                  onChange={e => setNotificationConfigs({ ...notificationConfigs, email_smtp_server: e.target.value })}
+                  className='w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none'
+                  placeholder='例如: smtp.qq.com'
+                />
+              </div>
+              <div>
+                <label className='block text-sm font-medium mb-1'>SMTP 端口</label>
+                <input
+                  type='number'
+                  value={notificationConfigs.email_smtp_port}
+                  onChange={e => setNotificationConfigs({ ...notificationConfigs, email_smtp_port: e.target.value })}
+                  className='w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none'
+                  placeholder='例如: 587'
+                />
+              </div>
+              <div>
+                <label className='block text-sm font-medium mb-1'>邮箱用户名</label>
+                <input
+                  type='text'
+                  value={notificationConfigs.email_username}
+                  onChange={e => setNotificationConfigs({ ...notificationConfigs, email_username: e.target.value })}
+                  className='w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none'
+                  placeholder='邮箱登录用户名'
+                />
+              </div>
+              <div>
+                <label className='block text-sm font-medium mb-1'>邮箱密码</label>
+                <input
+                  type='password'
+                  value={notificationConfigs.email_password}
+                  onChange={e => setNotificationConfigs({ ...notificationConfigs, email_password: e.target.value })}
+                  className='w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none'
+                  placeholder='邮箱登录密码'
+                />
+              </div>
+              <div>
+                <label className='block text-sm font-medium mb-1'>发件人邮箱</label>
+                <input
+                  type='email'
+                  value={notificationConfigs.email_from}
+                  onChange={e => setNotificationConfigs({ ...notificationConfigs, email_from: e.target.value })}
+                  className='w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none'
+                  placeholder='发件人邮箱地址'
+                />
+              </div>
+              <div>
+                <label className='block text-sm font-medium mb-1'>收件人邮箱</label>
+                <input
+                  type='email'
+                  value={notificationConfigs.email_to}
+                  onChange={e => setNotificationConfigs({ ...notificationConfigs, email_to: e.target.value })}
+                  className='w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none'
+                  placeholder='收件人邮箱地址'
+                />
+              </div>
+            </div>
+          </Card>
+          
+          {/* 保存按钮 */}
+          <div className='flex justify-end'>
+            <button
+              onClick={handleNotificationSave}
+              disabled={loading}
+              className='px-6 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg hover:from-blue-700 hover:to-purple-700 transition font-medium disabled:opacity-50'
+            >
+              {loading ? '保存中...' : '保存配置'}
+            </button>
+          </div>
         </div>
       )}
 
