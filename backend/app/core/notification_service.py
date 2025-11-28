@@ -131,14 +131,26 @@ def get_notification_service(db):
     from_email = db.query(AppConfig).filter(AppConfig.config_key == 'notification_email_from').first()
     to_email = db.query(AppConfig).filter(AppConfig.config_key == 'notification_email_to').first()
 
-    if all([smtp_server, smtp_port, username, password, from_email, to_email]):
-        email_config = {
-            'smtp_server': smtp_server.config_value,
-            'smtp_port': int(smtp_port.config_value),
-            'username': username.config_value,
-            'password': password.config_value,
-            'from_email': from_email.config_value,
-            'to_email': to_email.config_value
-        }
+    # 检查所有必要配置是否存在且非空
+    if all([
+        smtp_server and smtp_server.config_value and smtp_server.config_value.strip(),
+        smtp_port and smtp_port.config_value and smtp_port.config_value.strip(),
+        username and username.config_value and username.config_value.strip(),
+        password and password.config_value and password.config_value.strip(),
+        from_email and from_email.config_value and from_email.config_value.strip(),
+        to_email and to_email.config_value and to_email.config_value.strip()
+    ]):
+        try:
+            email_config = {
+                'smtp_server': smtp_server.config_value,
+                'smtp_port': int(smtp_port.config_value),
+                'username': username.config_value,
+                'password': password.config_value,
+                'from_email': from_email.config_value,
+                'to_email': to_email.config_value
+            }
+        except ValueError as e:
+            logger.error(f'邮件配置解析失败: {e}')
+            email_config = None
 
     return NotificationService(bark_url=bark_url, email_config=email_config)
