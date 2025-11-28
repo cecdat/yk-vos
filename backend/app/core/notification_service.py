@@ -1,5 +1,5 @@
 import logging
-import requests
+import httpx
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
@@ -63,10 +63,10 @@ class NotificationService:
             # Bark API格式：https://api.day.app/[key]/[title]/[content]
             # 或者：https://api.day.app/[key]?title=[title]&body=[content]
             url = f"{self.bark_url.rstrip('/')}/{title}/{content}"
-            response = requests.get(url, timeout=10)
+            response = httpx.get(url, timeout=10)
             response.raise_for_status()
             logger.info(f"Bark通知发送成功: {title}")
-        except requests.exceptions.RequestException as e:
+        except httpx.RequestError as e:
             logger.error(f"发送Bark通知失败: {e}")
             raise
 
