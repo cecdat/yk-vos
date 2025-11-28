@@ -55,7 +55,11 @@ export default function SettingsPage() {
     email_username: '',
     email_password: '',
     email_from: '',
-    email_to: ''
+    email_to: '',
+    // 推送项目配置
+    push_projects: 'all', // 可选值：all, customers, cdrs, phones, gateways
+    // 推送类型配置
+    push_types: 'all' // 可选值：all, success, error
   })
 
   useEffect(() => {
@@ -68,7 +72,12 @@ export default function SettingsPage() {
     try {
       const res = await api.get('/settings/notification')
       if (res.data) {
-        setNotificationConfigs(res.data)
+        setNotificationConfigs({
+          ...res.data,
+          // 确保推送项目和类型配置存在
+          push_projects: res.data.push_projects || 'all',
+          push_types: res.data.push_types || 'all'
+        })
       }
     } catch (e: any) {
       console.error('获取通知配置失败:', e)
@@ -286,6 +295,7 @@ export default function SettingsPage() {
     setMessage('')
     
     try {
+      // 确保只发送指定类型的通知
       await api.post('/settings/notification/test', {}, {
         params: { notification_type: type }
       })
@@ -678,9 +688,43 @@ export default function SettingsPage() {
             </div>
           </Card>
           
+          {/* 推送项目和类型配置 */}
+          <Card>
+            <h3 className='text-lg font-semibold mb-4'>⚙️ 推送配置</h3>
+            <div className='grid grid-cols-1 md:grid-cols-2 gap-4'>
+              <div>
+                <label className='block text-sm font-medium mb-1'>推送项目</label>
+                <select
+                  value={notificationConfigs.push_projects}
+                  onChange={e => setNotificationConfigs({ ...notificationConfigs, push_projects: e.target.value })}
+                  className='w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none'
+                >
+                  <option value='all'>全部项目</option>
+                  <option value='customers'>客户数据</option>
+                  <option value='cdrs'>话单记录</option>
+                  <option value='phones'>话机状态</option>
+                  <option value='gateways'>网关数据</option>
+                </select>
+              </div>
+              <div>
+                <label className='block text-sm font-medium mb-1'>推送类型</label>
+                <select
+                  value={notificationConfigs.push_types}
+                  onChange={e => setNotificationConfigs({ ...notificationConfigs, push_types: e.target.value })}
+                  className='w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none'
+                >
+                  <option value='all'>全部结果</option>
+                  <option value='success'>仅成功</option>
+                  <option value='error'>仅失败</option>
+                </select>
+              </div>
+            </div>
+          </Card>
+          
           {/* 测试和保存按钮 */}
           <div className='flex flex-wrap gap-4 justify-end'>
             <button
+              type='button'
               onClick={() => handleNotificationTest('bark')}
               disabled={loading}
               className='px-6 py-3 bg-gradient-to-r from-green-600 to-teal-600 text-white rounded-lg hover:from-green-700 hover:to-teal-700 transition font-medium disabled:opacity-50'
@@ -688,6 +732,7 @@ export default function SettingsPage() {
               {loading ? '测试中...' : '测试Bark推送'}
             </button>
             <button
+              type='button'
               onClick={() => handleNotificationTest('email')}
               disabled={loading}
               className='px-6 py-3 bg-gradient-to-r from-orange-600 to-amber-600 text-white rounded-lg hover:from-orange-700 hover:to-amber-700 transition font-medium disabled:opacity-50'
@@ -695,6 +740,7 @@ export default function SettingsPage() {
               {loading ? '测试中...' : '测试邮件推送'}
             </button>
             <button
+              type='button'
               onClick={handleNotificationSave}
               disabled={loading}
               className='px-6 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg hover:from-blue-700 hover:to-purple-700 transition font-medium disabled:opacity-50'

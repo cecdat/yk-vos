@@ -1,6 +1,6 @@
 import logging
 from datetime import datetime
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from app.core.db import get_db
 from app.models.app_config import AppConfig
@@ -24,7 +24,9 @@ async def get_notification_settings(db: Session = Depends(get_db)):
             'notification_email_username',
             'notification_email_password',
             'notification_email_from',
-            'notification_email_to'
+            'notification_email_to',
+            'notification_push_projects',
+            'notification_push_types'
         ])
     ).all()
     
@@ -36,7 +38,9 @@ async def get_notification_settings(db: Session = Depends(get_db)):
         'email_username': '',
         'email_password': '',
         'email_from': '',
-        'email_to': ''
+        'email_to': '',
+        'push_projects': 'all',
+        'push_types': 'all'
     }
     
     for config in configs:
@@ -54,6 +58,10 @@ async def get_notification_settings(db: Session = Depends(get_db)):
             result['email_from'] = config.config_value or ''
         elif config.config_key == 'notification_email_to':
             result['email_to'] = config.config_value or ''
+        elif config.config_key == 'notification_push_projects':
+            result['push_projects'] = config.config_value or 'all'
+        elif config.config_key == 'notification_push_types':
+            result['push_types'] = config.config_value or 'all'
     
     return result
 
@@ -74,7 +82,9 @@ async def save_notification_settings(
         'email_username': 'notification_email_username',
         'email_password': 'notification_email_password',
         'email_from': 'notification_email_from',
-        'email_to': 'notification_email_to'
+        'email_to': 'notification_email_to',
+        'push_projects': 'notification_push_projects',
+        'push_types': 'notification_push_types'
     }
     
     # 保存配置
@@ -101,7 +111,7 @@ async def save_notification_settings(
 
 @router.post('/notification/test')
 async def test_notification(
-    notification_type: str = 'all',
+    notification_type: str = Query('all', description='通知类型，可选值：all, bark, email'),
     db: Session = Depends(get_db)
 ):
     """

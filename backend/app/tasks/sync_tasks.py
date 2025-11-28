@@ -386,7 +386,7 @@ def sync_all_instances_cdrs(days=None):
         sync_date = datetime.now().strftime('%Y-%m-%d')
         title = f"话单同步完成 - {sync_date}"
         content = f"同步完成（{len(instances)}个实例 × {days}天），共 {total_synced_count} 条话单"
-        notification_service.send_notification(title, content)
+        notification_service.send_notification(title, content, project_type='cdrs', result_type='success')
         
         return {
             'success': True,
@@ -407,7 +407,7 @@ def sync_all_instances_cdrs(days=None):
         sync_date = datetime.now().strftime('%Y-%m-%d')
         title = f"话单同步失败 - {sync_date}"
         content = f"同步失败：{str(e)}"
-        notification_service.send_notification(title, content)
+        notification_service.send_notification(title, content, project_type='cdrs', result_type='error')
         
         return {'success': False, 'message': str(e)}
     finally:
@@ -549,7 +549,7 @@ def sync_all_instances_customers():
         sync_date = datetime.now().strftime('%Y-%m-%d')
         title = f"客户数据同步完成 - {sync_date}"
         content = f"同步完成，共处理 {len(instances)} 个VOS实例，成功 {total_synced} 个"
-        notification_service.send_notification(title, content)
+        notification_service.send_notification(title, content, project_type='customers', result_type='success')
         
         return {
             'success': True,
@@ -565,7 +565,7 @@ def sync_all_instances_customers():
         sync_date = datetime.now().strftime('%Y-%m-%d')
         title = f"客户数据同步失败 - {sync_date}"
         content = f"同步失败：{str(e)}"
-        notification_service.send_notification(title, content)
+        notification_service.send_notification(title, content, project_type='customers', result_type='error')
         
         return {'success': False, 'message': str(e)}
     finally:
@@ -921,7 +921,7 @@ def sync_all_instances_gateways():
         sync_date = datetime.now().strftime('%Y-%m-%d')
         title = f"网关数据同步完成 - {sync_date}"
         content = f"同步完成，共处理 {len(instances)} 个VOS实例，成功 {success_count} 个，失败 {len(instances) - success_count} 个"
-        notification_service.send_notification(title, content)
+        notification_service.send_notification(title, content, project_type='gateways', result_type='success')
         
         return {
             'success': True,
@@ -939,7 +939,7 @@ def sync_all_instances_gateways():
         sync_date = datetime.now().strftime('%Y-%m-%d')
         title = f"网关数据同步失败 - {sync_date}"
         content = f"同步失败：{str(e)}"
-        notification_service.send_notification(title, content)
+        notification_service.send_notification(title, content, project_type='gateways', result_type='error')
         
         return {'success': False, 'message': str(e)}
     finally:

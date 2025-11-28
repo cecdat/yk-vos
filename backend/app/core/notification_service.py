@@ -15,18 +15,22 @@ class NotificationService:
     - 邮件推送
     """
 
-    def __init__(self, bark_url: str = None, email_config: dict = None):
+    def __init__(self, bark_url: str = None, email_config: dict = None, push_projects: str = 'all', push_types: str = 'all'):
         """
         初始化通知服务
         
         Args:
             bark_url: Bark服务器URL
             email_config: 邮件配置，包含smtp_server, smtp_port, username, password, from_email
+            push_projects: 推送项目，可选值：all, customers, cdrs, phones, gateways
+            push_types: 推送类型，可选值：all, success, error
         """
         self.bark_url = bark_url
         self.email_config = email_config
+        self.push_projects = push_projects
+        self.push_types = push_types
 
-    def send_notification(self, title: str, content: str, notification_type: str = "all"):
+    def send_notification(self, title: str, content: str, notification_type: str = "all", project_type: str = "all", result_type: str = "success"):
         """
         发送通知
         
@@ -34,13 +38,27 @@ class NotificationService:
             title: 通知标题
             content: 通知内容
             notification_type: 通知类型，可选值：all, bark, email
+            project_type: 项目类型，可选值：all, customers, cdrs, phones, gateways
+            result_type: 结果类型，可选值：success, error
         """
+        # 检查推送项目是否匹配
+        if self.push_projects != 'all' and project_type != self.push_projects:
+            logger.debug(f"跳过通知: 项目类型 {project_type} 不在配置的推送项目 {self.push_projects} 中")
+            return
+        
+        # 检查推送类型是否匹配
+        if self.push_types != 'all' and result_type != self.push_types:
+            logger.debug(f"跳过通知: 结果类型 {result_type} 不在配置的推送类型 {self.push_types} 中")
+            return
+        
+        # 发送Bark通知
         if notification_type in ["all", "bark"] and self.bark_url:
             try:
                 self._send_bark_notification(title, content)
             except Exception as e:
                 logger.error(f"发送Bark通知失败: {e}")
 
+        # 发送邮件通知
         if notification_type in ["all", "email"] and self.email_config:
             try:
                 self._send_email_notification(title, content)
@@ -92,16 +110,32 @@ class NotificationService:
             # 添加邮件正文
             msg.attach(MIMEText(content, 'plain', 'utf-8'))
 
-            # 发送邮件
-            with smtplib.SMTP(self.email_config.get('smtp_server'), self.email_config.get('smtp_port')) as server:
+            # 发送邮件，添加超时和重试机制
+            server = None
+            try:
+                server = smtplib.SMTP(self.email_config.get('smtp_server'), self.email_config.get('smtp_port'), timeout=15)
                 server.starttls()
                 server.login(self.email_config.get('username'), self.email_config.get('password'))
                 server.send_message(msg)
-
-            logger.info(f"邮件通知发送成功: {title}")
+                logger.info(f"邮件通知发送成功: {title}")
+            except smtplib.SMTPServerDisconnected as e:
+                logger.error(f"邮件服务器连接断开: {e}")
+                # 不抛出异常，避免影响其他功能
+            except smtplib.SMTPException as e:
+                logger.error(f"SMTP错误: {e}")
+                # 不抛出异常，避免影响其他功能
+            except Exception as e:
+                logger.error(f"发送邮件通知失败: {e}")
+                # 不抛出异常，避免影响其他功能
+            finally:
+                if server:
+                    try:
+                        server.quit()
+                    except:
+                        pass
         except Exception as e:
-            logger.error(f"发送邮件通知失败: {e}")
-            raise
+            logger.error(f"邮件发送过程中发生错误: {e}")
+            # 不抛出异常，避免影响其他功能
 
 
 def get_notification_service(db):
@@ -153,4 +187,20 @@ def get_notification_service(db):
             logger.error(f'邮件配置解析失败: {e}')
             email_config = None
 
-    return NotificationService(bark_url=bark_url, email_config=email_config)
+    # 获取推送项目和类型配置
+    push_projects = 'all'
+    push_projects_config = db.query(AppConfig).filter(AppConfig.config_key == 'notification_push_projects').first()
+    if push_projects_config and push_projects_config.config_value:
+        push_projects = push_projects_config.config_value
+
+    push_types = 'all'
+    push_types_config = db.query(AppConfig).filter(AppConfig.config_key == 'notification_push_types').first()
+    if push_types_config and push_types_config.config_value:
+        push_types = push_types_config.config_value
+
+    return NotificationService(
+        bark_url=bark_url, 
+        email_config=email_config,
+        push_projects=push_projects,
+        push_types=push_types
+    )
