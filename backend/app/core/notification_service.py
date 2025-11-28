@@ -3,6 +3,7 @@ import httpx
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+from email.header import Header
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
@@ -128,15 +129,17 @@ class NotificationService:
             msg = MIMEMultipart()
             msg['From'] = self.email_config.get('from_email')
             msg['To'] = self.email_config.get('to_email')
-            msg['Subject'] = title
+            # 使用Header处理中文标题，确保正确编码
+            msg['Subject'] = Header(title, 'utf-8')
 
-            # 添加邮件正文
+            # 添加邮件正文，指定utf-8编码
             msg.attach(MIMEText(content, 'plain', 'utf-8'))
 
             # 发送邮件，添加超时
             server = smtplib.SMTP(self.email_config.get('smtp_server'), self.email_config.get('smtp_port'), timeout=15)
             server.starttls()
             server.login(self.email_config.get('username'), self.email_config.get('password'))
+            # 使用send_message代替sendmail，自动处理编码
             server.send_message(msg)
             logger.info(f"邮件通知发送成功: {title}")
         except smtplib.SMTPServerDisconnected as e:
