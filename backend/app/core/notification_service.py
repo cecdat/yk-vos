@@ -51,9 +51,15 @@ class NotificationService:
         }
         
         # 检查推送项目是否匹配
-        if self.push_projects != 'all' and project_type != self.push_projects:
-            logger.debug(f"跳过通知: 项目类型 {project_type} 不在配置的推送项目 {self.push_projects} 中")
-            return results
+        if self.push_projects != 'all':
+            # 支持多选，使用逗号分隔
+            allowed_projects = self.push_projects.split(',')
+            if not allowed_projects:
+                logger.debug(f"跳过通知: 未配置允许的推送项目")
+                return results
+            if project_type not in allowed_projects:
+                logger.debug(f"跳过通知: 项目类型 {project_type} 不在配置的推送项目 {self.push_projects} 中")
+                return results
         
         # 检查推送类型是否匹配
         if self.push_types != 'all' and result_type != self.push_types:

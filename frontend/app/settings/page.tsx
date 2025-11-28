@@ -56,7 +56,7 @@ export default function SettingsPage() {
     email_password: '',
     email_from: '',
     email_to: '',
-    // 推送项目配置
+    // 推送项目配置，支持多选，使用逗号分隔
     push_projects: 'all', // 可选值：all, customers, cdrs, phones, gateways
     // 推送类型配置
     push_types: 'all' // 可选值：all, success, error
@@ -693,18 +693,142 @@ export default function SettingsPage() {
             <h3 className='text-lg font-semibold mb-4'>⚙️ 推送配置</h3>
             <div className='grid grid-cols-1 md:grid-cols-2 gap-4'>
               <div>
-                <label className='block text-sm font-medium mb-1'>推送项目</label>
-                <select
-                  value={notificationConfigs.push_projects}
-                  onChange={e => setNotificationConfigs({ ...notificationConfigs, push_projects: e.target.value })}
-                  className='w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none'
-                >
-                  <option value='all'>全部项目</option>
-                  <option value='customers'>客户数据</option>
-                  <option value='cdrs'>话单记录</option>
-                  <option value='phones'>话机状态</option>
-                  <option value='gateways'>网关数据</option>
-                </select>
+                <label className='block text-sm font-medium mb-2'>推送项目</label>
+                <div className='space-y-2'>
+                  <div className='flex items-center'>
+                    <input
+                      type='checkbox'
+                      id='push_all'
+                      checked={notificationConfigs.push_projects === 'all'}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setNotificationConfigs({ ...notificationConfigs, push_projects: 'all' })
+                        } else {
+                          // 默认选择话单记录
+                          setNotificationConfigs({ ...notificationConfigs, push_projects: 'cdrs' })
+                        }
+                      }}
+                      className='w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500'
+                    />
+                    <label htmlFor='push_all' className='ml-2 text-sm font-medium'>全部项目</label>
+                  </div>
+                  <div className='flex items-center'>
+                    <input
+                      type='checkbox'
+                      id='push_customers'
+                      checked={notificationConfigs.push_projects !== 'all' && notificationConfigs.push_projects.split(',').includes('customers')}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          if (notificationConfigs.push_projects === 'all') {
+                            // 如果之前是全部，现在改为只选择当前项
+                            setNotificationConfigs({ ...notificationConfigs, push_projects: 'customers' })
+                          } else {
+                            // 添加到已选择的项目中
+                            const projects = new Set(notificationConfigs.push_projects.split(','))
+                            projects.add('customers')
+                            setNotificationConfigs({ ...notificationConfigs, push_projects: Array.from(projects).join(',') })
+                          }
+                        } else {
+                          // 从已选择的项目中移除
+                          const projects = new Set(notificationConfigs.push_projects.split(','))
+                          projects.delete('customers')
+                          const newProjects = Array.from(projects).join(',')
+                          setNotificationConfigs({ ...notificationConfigs, push_projects: newProjects || 'all' })
+                        }
+                      }}
+                      className='w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500'
+                      disabled={notificationConfigs.push_projects === 'all'}
+                    />
+                    <label htmlFor='push_customers' className='ml-2 text-sm font-medium'>客户数据</label>
+                  </div>
+                  <div className='flex items-center'>
+                    <input
+                      type='checkbox'
+                      id='push_cdrs'
+                      checked={notificationConfigs.push_projects !== 'all' && notificationConfigs.push_projects.split(',').includes('cdrs')}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          if (notificationConfigs.push_projects === 'all') {
+                            // 如果之前是全部，现在改为只选择当前项
+                            setNotificationConfigs({ ...notificationConfigs, push_projects: 'cdrs' })
+                          } else {
+                            // 添加到已选择的项目中
+                            const projects = new Set(notificationConfigs.push_projects.split(','))
+                            projects.add('cdrs')
+                            setNotificationConfigs({ ...notificationConfigs, push_projects: Array.from(projects).join(',') })
+                          }
+                        } else {
+                          // 从已选择的项目中移除
+                          const projects = new Set(notificationConfigs.push_projects.split(','))
+                          projects.delete('cdrs')
+                          const newProjects = Array.from(projects).join(',')
+                          setNotificationConfigs({ ...notificationConfigs, push_projects: newProjects || 'all' })
+                        }
+                      }}
+                      className='w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500'
+                      disabled={notificationConfigs.push_projects === 'all'}
+                    />
+                    <label htmlFor='push_cdrs' className='ml-2 text-sm font-medium'>话单记录</label>
+                  </div>
+                  <div className='flex items-center'>
+                    <input
+                      type='checkbox'
+                      id='push_phones'
+                      checked={notificationConfigs.push_projects !== 'all' && notificationConfigs.push_projects.split(',').includes('phones')}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          if (notificationConfigs.push_projects === 'all') {
+                            // 如果之前是全部，现在改为只选择当前项
+                            setNotificationConfigs({ ...notificationConfigs, push_projects: 'phones' })
+                          } else {
+                            // 添加到已选择的项目中
+                            const projects = new Set(notificationConfigs.push_projects.split(','))
+                            projects.add('phones')
+                            setNotificationConfigs({ ...notificationConfigs, push_projects: Array.from(projects).join(',') })
+                          }
+                        } else {
+                          // 从已选择的项目中移除
+                          const projects = new Set(notificationConfigs.push_projects.split(','))
+                          projects.delete('phones')
+                          const newProjects = Array.from(projects).join(',')
+                          setNotificationConfigs({ ...notificationConfigs, push_projects: newProjects || 'all' })
+                        }
+                      }}
+                      className='w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500'
+                      disabled={notificationConfigs.push_projects === 'all'}
+                    />
+                    <label htmlFor='push_phones' className='ml-2 text-sm font-medium'>话机状态</label>
+                  </div>
+                  <div className='flex items-center'>
+                    <input
+                      type='checkbox'
+                      id='push_gateways'
+                      checked={notificationConfigs.push_projects !== 'all' && notificationConfigs.push_projects.split(',').includes('gateways')}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          if (notificationConfigs.push_projects === 'all') {
+                            // 如果之前是全部，现在改为只选择当前项
+                            setNotificationConfigs({ ...notificationConfigs, push_projects: 'gateways' })
+                          } else {
+                            // 添加到已选择的项目中
+                            const projects = new Set(notificationConfigs.push_projects.split(','))
+                            projects.add('gateways')
+                            setNotificationConfigs({ ...notificationConfigs, push_projects: Array.from(projects).join(',') })
+                          }
+                        } else {
+                          // 从已选择的项目中移除
+                          const projects = new Set(notificationConfigs.push_projects.split(','))
+                          projects.delete('gateways')
+                          const newProjects = Array.from(projects).join(',')
+                          setNotificationConfigs({ ...notificationConfigs, push_projects: newProjects || 'all' })
+                        }
+                      }}
+                      className='w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500'
+                      disabled={notificationConfigs.push_projects === 'all'}
+                    />
+                    <label htmlFor='push_gateways' className='ml-2 text-sm font-medium'>网关数据</label>
+                  </div>
+                </div>
               </div>
               <div>
                 <label className='block text-sm font-medium mb-1'>推送类型</label>
