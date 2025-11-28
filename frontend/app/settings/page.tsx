@@ -280,6 +280,22 @@ export default function SettingsPage() {
       setLoading(false)
     }
   }
+  
+  async function handleNotificationTest(type: string) {
+    setLoading(true)
+    setMessage('')
+    
+    try {
+      await api.post('/settings/notification/test', {}, {
+        params: { notification_type: type }
+      })
+      setMessage(`测试${type === 'bark' ? 'Bark' : '邮件'}推送成功，请检查您的设备或邮箱`)
+    } catch (e: any) {
+      setMessage(e.response?.data?.detail || `测试${type === 'bark' ? 'Bark' : '邮件'}推送失败`)
+    } finally {
+      setLoading(false)
+    }
+  }
 
   return (
     <div className='max-w-7xl'>
@@ -662,8 +678,22 @@ export default function SettingsPage() {
             </div>
           </Card>
           
-          {/* 保存按钮 */}
-          <div className='flex justify-end'>
+          {/* 测试和保存按钮 */}
+          <div className='flex flex-wrap gap-4 justify-end'>
+            <button
+              onClick={() => handleNotificationTest('bark')}
+              disabled={loading}
+              className='px-6 py-3 bg-gradient-to-r from-green-600 to-teal-600 text-white rounded-lg hover:from-green-700 hover:to-teal-700 transition font-medium disabled:opacity-50'
+            >
+              {loading ? '测试中...' : '测试Bark推送'}
+            </button>
+            <button
+              onClick={() => handleNotificationTest('email')}
+              disabled={loading}
+              className='px-6 py-3 bg-gradient-to-r from-orange-600 to-amber-600 text-white rounded-lg hover:from-orange-700 hover:to-amber-700 transition font-medium disabled:opacity-50'
+            >
+              {loading ? '测试中...' : '测试邮件推送'}
+            </button>
             <button
               onClick={handleNotificationSave}
               disabled={loading}

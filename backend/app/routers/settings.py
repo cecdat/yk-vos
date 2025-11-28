@@ -93,3 +93,41 @@ async def save_notification_settings(
     
     db.commit()
     return {'success': True, 'message': '通知配置保存成功'}
+
+
+@router.post('/notification/test')
+async def test_notification(
+    notification_type: str = 'all',
+    db: Session = Depends(get_db)
+):
+    """
+    测试通知推送
+    
+    Args:
+        notification_type: 通知类型，可选值：all, bark, email
+    """
+    from app.core.notification_service import get_notification_service
+    
+    try:
+        # 获取通知服务实例
+        notification_service = get_notification_service(db)
+        
+        # 发送测试通知
+        sync_date = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        title = f"测试通知 - {sync_date}"
+        content = "这是一条测试通知，用于验证推送配置是否正确。"
+        
+        notification_service.send_notification(title, content, notification_type)
+        
+        return {
+            'success': True,
+            'message': f'测试通知已发送 ({notification_type})',
+            'title': title,
+            'content': content
+        }
+    except Exception as e:
+        logger.error(f'测试通知发送失败: {e}')
+        return {
+            'success': False,
+            'message': f'测试通知发送失败: {str(e)}'
+        }
