@@ -544,12 +544,12 @@ def sync_all_instances_customers():
             if result.get('success'):
                 total_synced += 1
         
-        # 发送同步完成通知
-        notification_service = get_notification_service(db)
-        sync_date = datetime.now().strftime('%Y-%m-%d')
-        title = f"客户数据同步完成 - {sync_date}"
-        content = f"同步完成，共处理 {len(instances)} 个VOS实例，成功 {total_synced} 个"
-        notification_service.send_notification(title, content, project_type='customers', result_type='success')
+        # 发送同步完成通知 (已禁用：避免每10分钟推送一次骚扰用户)
+        # notification_service = get_notification_service(db)
+        # sync_date = datetime.now().strftime('%Y-%m-%d')
+        # title = f"客户数据同步完成 - {sync_date}"
+        # content = f"同步完成，共处理 {len(instances)} 个VOS实例，成功 {total_synced} 个"
+        # notification_service.send_notification(title, content, project_type='customers', result_type='success')
         
         return {
             'success': True,
