@@ -246,6 +246,11 @@ def sync_all_instances_cdrs(days=None):
         today = datetime.now().date()
         total_synced_count = 0
         
+        # 保存每个实例每天的同步结果
+        sync_results = {}
+        for inst in instances:
+            sync_results[inst.name] = {}
+        
         logger.info(f'📞 步骤2: 开始顺序同步历史话单...')
         
         # 预先统计所有实例的总客户数（用于计算总体进度）
@@ -332,6 +337,11 @@ def sync_all_instances_cdrs(days=None):
                         total_synced_count += count
                         logger.info(f'      ✅ 同步成功: {count} 条记录')
                         
+                        # 保存同步结果
+                        if date_str not in sync_results[inst.name]:
+                            sync_results[inst.name][date_str] = 0
+                        sync_results[inst.name][date_str] += count
+                        
                         # 更新已同步总数
                         if r:
                             try:
@@ -342,8 +352,16 @@ def sync_all_instances_cdrs(days=None):
                                 pass
                     else:
                         logger.error(f'      ❌ 同步失败: {result.get("message")}')
+                        
+                        # 保存失败结果
+                        if date_str not in sync_results[inst.name]:
+                            sync_results[inst.name][date_str] = '失败'
                 except Exception as e:
                     logger.exception(f'      ❌ 执行同步出错: {e}')
+                    
+                    # 保存错误结果
+                    if date_str not in sync_results[inst.name]:
+                        sync_results[inst.name][date_str] = '错误'
                 
                 # 实例之间短暂休眠，避免压力过大
                 time.sleep(1)
@@ -385,7 +403,32 @@ def sync_all_instances_cdrs(days=None):
         notification_service = get_notification_service(db)
         sync_date = datetime.now().strftime('%Y-%m-%d')
         title = f"话单同步完成 - {sync_date}"
-        content = f"同步完成（{len(instances)}个实例 × {days}天），共 {total_synced_count} 条话单"
+        
+        # 生成详细的表格内容
+        content = f"📊 话单同步完成\n\n"
+        content += f"总同步结果：{len(instances)}个实例 × {days}天，共 {total_synced_count} 条话单\n\n"
+        
+        # 添加详细表格
+        content += "详细同步结果（按实例和日期）：\n"
+        content += "=" * 60 + "\n"
+        content += f"{'实例名称':<25} {'日期':<12} {'同步条数':<12} {'状态':<10}\n"
+        content += "=" * 60 + "\n"
+        
+        for instance_name, instance_results in sync_results.items():
+            for date_str, count in instance_results.items():
+                status = "成功" if isinstance(count, int) else count
+                content += f"{instance_name:<25} {date_str:<12} {str(count) if isinstance(count, int) else '-':<12} {status:<10}\n"
+        
+        content += "=" * 60 + "\n"
+        content += f"{'总计':<25} {'':<12} {total_synced_count:<12} {'成功':<10}\n"
+        content += "=" * 60 + "\n\n"
+        
+        # 添加同步时间
+        content += f"🔔 同步完成时间：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+        content += f"💡 同步天数：{days}天\n"
+        content += f"📋 涉及实例数：{len(instances)}个\n\n"
+        content += "👍 同步任务已完成，详细数据可登录系统查看！"
+        
         notification_service.send_notification(title, content, project_type='cdrs', result_type='success')
         
         return {
