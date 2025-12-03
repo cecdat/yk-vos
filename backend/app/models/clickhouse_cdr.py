@@ -131,10 +131,16 @@ class ClickHouseCDR:
             # 提取所有ID
             ids_to_insert = [cdr['id'] for cdr in ch_cdrs]
             
-            # 查询已存在的ID
-            existing_ids_query = f"SELECT id FROM cdrs WHERE id IN ({','.join(map(str, ids_to_insert))})"
-            existing_ids_result = ch_db.execute(existing_ids_query)
-            existing_ids = set(row[0] for row in existing_ids_result)
+            # 分批查询已存在的ID（每次查询1000个）
+            batch_size = 1000
+            existing_ids = set()
+            
+            for i in range(0, len(ids_to_insert), batch_size):
+                batch_ids = ids_to_insert[i:i+batch_size]
+                existing_ids_query = f"SELECT id FROM cdrs WHERE id IN ({','.join(map(str, batch_ids))})"
+                existing_ids_result = ch_db.execute(existing_ids_query)
+                batch_existing_ids = set(row[0] for row in existing_ids_result)
+                existing_ids.update(batch_existing_ids)
             
             # 过滤掉已存在的记录
             new_cdrs = [cdr for cdr in ch_cdrs if cdr['id'] not in existing_ids]
@@ -146,10 +152,17 @@ class ClickHouseCDR:
             if len(new_cdrs) < len(ch_cdrs):
                 logger.info(f'⚠️ 过滤掉 {len(ch_cdrs) - len(new_cdrs)} 条重复话单，准备插入 {len(new_cdrs)} 条新话单')
             
-            # 批量插入新记录
-            count = ch_db.insert('cdrs', new_cdrs)
-            logger.info(f'✅ 成功插入 {count} 条话单到 ClickHouse (VOS ID: {vos_id})')
-            return count
+            # 分批插入新记录（每次插入1000条）
+            total_count = 0
+            insert_batch_size = 1000
+            
+            for i in range(0, len(new_cdrs), insert_batch_size):
+                insert_batch = new_cdrs[i:i+insert_batch_size]
+                count = ch_db.insert('cdrs', insert_batch)
+                total_count += count
+            
+            logger.info(f'✅ 成功插入 {total_count} 条话单到 ClickHouse (VOS ID: {vos_id})')
+            return total_count
         except Exception as e:
             logger.error(f'❌ 插入话单失败: {e}')
             return 0
