@@ -52,8 +52,8 @@ class NotificationService:
         
         # 检查推送项目是否匹配
         if self.push_projects != 'all':
-            # 支持多选，使用逗号分隔
-            allowed_projects = self.push_projects.split(',')
+            # 支持多选，使用逗号分隔，去除空格
+            allowed_projects = [p.strip() for p in self.push_projects.split(',') if p.strip()]
             if not allowed_projects:
                 logger.debug(f"跳过通知: 未配置允许的推送项目")
                 return results
