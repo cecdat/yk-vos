@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IoT设备心跳包生成算法</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        h1 {
+            color: #2c3e50;
+            text-align: center;
+            margin-bottom: 30px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #3498db;
+        }
+        h2 {
+            color: #3498db;
+            margin-top: 30px;
+        }
+        .algorithm-section {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+        }
+        .code-block {
+            background: #2d2d2d;
+            color: #f8f8f2;
+            padding: 15px;
+            border-radius: 6px;
+            overflow-x: auto;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 14px;
+            line-height: 1.5;
+            margin: 15px 0;
+        }
+        .example {
+            background: #e8f4f8;
+            padding: 15px;
+            border-left: 4px solid #3498db;
+            border-radius: 4px;
+            margin: 15px 0;
+        }
+        .example h3 {
+            margin: 0 0 10px 0;
+            color: #2980b9;
+        }
+        .process-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 15px 0;
+            background: white;
+        }
+        .process-table th,
+        .process-table td {
+            border: 1px solid #ddd;
+            padding: 12px;
+            text-align: left;
+        }
+        .process-table th {
+            background-color: #3498db;
+            color: white;
+        }
+        .process-table tr:nth-child(even) {
+            background-color: #f2f2f2;
+        }
+        .output {
+            color: #27ae60;
+            font-weight: bold;
+        }
+        .input {
+            color: #e74c3c;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <h1>IoT设备心跳包生成算法</h1>
+
+    <div class="algorithm-section">
+        <h2>1. 算法概述</h2>
+        <p>心跳包生成算法用于生成IoT设备与服务器通信的心跳包，格式为：<strong>a + 设备SN十六进制 + a</strong></p>
+    </div>
+
+    <div class="algorithm-section">
+        <h2>2. 核心算法</h2>
+        <p>算法步骤：</p>
+        <ol>
+            <li>将设备SN转换为十六进制字符串</li>
+            <li>在十六进制字符串开头添加字符 <code>a</code></li>
+            <li>在十六进制字符串结尾添加字符 <code>a</code></li>
+            <li>返回完整的心跳包字符串</li>
+        </ol>
+    </div>
+
+    <div class="algorithm-section">
+        <h2>3. 算法实现</h2>
+        <div class="code-block">
+<pre>def generate_heartbeat(device_sn: str) -> str:
+    """
+    生成IoT设备心跳包
+    
+    Args:
+        device_sn: 设备唯一标识符，字符串类型
+        
+    Returns:
+        str: 完整的心跳包字符串
+    """
+    if not isinstance(device_sn, str):
+        raise TypeError("device_sn必须是字符串类型")
+    
+    if not device_sn.strip():
+        raise ValueError("device_sn不能为空")
+    
+    # 1. 去除SN前后空格
+    device_sn = device_sn.strip()
+    
+    # 2. 将设备SN转换为十六进制字符串
+    # 先将SN转换为字节数组，再转换为十六进制
+    sn_hex = device_sn.encode('utf-8').hex()
+    
+    # 3. 前后添加字符 'a'
+    heartbeat = f"a{sn_hex}a"
+    
+    return heartbeat</pre>
+        </div>
+    </div>
+
+    <div class="algorithm-section">
+        <h2>4. 输入输出示例</h2>
+        
+        <div class="example">
+            <h3>输入示例</h3>
+            <div class="code-block">
+<pre>device_sn = "ABC123"
+heartbeat = generate_heartbeat(device_sn)
+print(heartbeat)</pre>
+            </div>
+        </div>
+        
+        <div class="example">
+            <h3>输出示例</h3>
+            <div class="code-block">
+a414243313233a
+            </div>
+        </div>
+    </div>
+
+    <div class="algorithm-section">
+        <h2>5. 详细处理过程</h2>
+        <p>以设备SN <span class="input">"ABC123"</span> 为例，详细处理过程如下：</p>
+        
+        <table class="process-table">
+            <thead>
+                <tr>
+                    <th>步骤</th>
+                    <th>操作</th>
+                    <th>输入</th>
+                    <th>输出</th>
+                    <th>说明</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>1</td>
+                    <td>设备SN输入</td>
+                    <td><span class="input">"ABC123"</span></td>
+                    <td><span class="input">"ABC123"</span></td>
+                    <td>原始设备SN</td>
+                </tr>
+                <tr>
+                    <td>2</td>
+                    <td>去除空格</td>
+                    <td><span class="input">"ABC123"</span></td>
+                    <td><span class="input">"ABC123"</span></td>
+                    <td>确保无空格</td>
+                </tr>
+                <tr>
+                    <td>3</td>
+                    <td>转换为十六进制</td>
+                    <td><span class="input">"ABC123"</span></td>
+                    <td><span class="output">"414243313233"</span></td>
+                    <td>SN转换为十六进制字符串</td>
+                </tr>
+                <tr>
+                    <td>4</td>
+                    <td>添加前缀 'a'</td>
+                    <td><span class="output">"414243313233"</span></td>
+                    <td><span class="output">"a414243313233"</span></td>
+                    <td>在开头添加字符 'a'</td>
+                </tr>
+                <tr>
+                    <td>5</td>
+                    <td>添加后缀 'a'</td>
+                    <td><span class="output">"a414243313233"</span></td>
+                    <td><span class="output">"a414243313233a"</span></td>
+                    <td>在结尾添加字符 'a'</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <div class="algorithm-section">
+        <h2>6. 典型示例</h2>
+        
+        <div class="example">
+            <h3>示例1：基本设备SN</h3>
+            <p><strong>输入：</strong><span class="input">"ABC123"</span></p>
+            <p><strong>输出：</strong><span class="output">"a414243313233a"</span></p>
+        </div>
+        
+        <div class="example">
+            <h3>示例2：包含数字和字母的SN</h3>
+            <p><strong>输入：</strong><span class="input">"DEV001"</span></p>
+            <p><strong>输出：</strong><span class="output">"a444556303031a"</span></p>
+        </div>
+        
+        <div class="example">
+            <h3>示例3：包含下划线的SN</h3>
+            <p><strong>输入：</strong><span class="input">"IOT_DEVICE_001"</span></p>
+            <p><strong>输出：</strong><span class="output">"a494f545f4445564943455f303031a"</span></p>
+        </div>
+    </div>
+</body>
+</html>
