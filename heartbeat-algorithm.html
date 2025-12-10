@@ -88,7 +88,7 @@
 
     <div class="algorithm-section">
         <h2>1. 算法概述</h2>
-        <p>心跳包生成算法用于生成IoT设备与服务器通信的心跳包，格式为：<strong>a + 设备SN十六进制 + a</strong></p>
+        <p>心跳包生成算法用于生成IoT设备与服务器通信的心跳包，格式为：<strong>aa + 设备SN十六进制 + aa</strong></p>
     </div>
 
     <div class="algorithm-section">
@@ -96,8 +96,8 @@
         <p>算法步骤：</p>
         <ol>
             <li>将设备SN转换为十六进制字符串</li>
-            <li>在十六进制字符串开头添加字符 <code>a</code></li>
-            <li>在十六进制字符串结尾添加字符 <code>a</code></li>
+            <li>在十六进制字符串开头添加字符 <code>aa</code></li>
+            <li>在十六进制字符串结尾添加字符 <code>aa</code></li>
             <li>返回完整的心跳包字符串</li>
         </ol>
     </div>
@@ -128,8 +128,8 @@
     # 先将SN转换为字节数组，再转换为十六进制
     sn_hex = device_sn.encode('utf-8').hex()
     
-    # 3. 前后添加字符 'a'
-    heartbeat = f"a{sn_hex}a"
+    # 3. 前后添加字符 'aa'
+    heartbeat = f"aa{sn_hex}aa"
     
     return heartbeat</pre>
         </div>
@@ -150,7 +150,7 @@ print(heartbeat)</pre>
         <div class="example">
             <h3>输出示例</h3>
             <div class="code-block">
-a414243313233a
+aa414243313233aa
             </div>
         </div>
     </div>
@@ -193,17 +193,17 @@ a414243313233a
                 </tr>
                 <tr>
                     <td>4</td>
-                    <td>添加前缀 'a'</td>
+                    <td>添加前缀 'aa'</td>
                     <td><span class="output">"414243313233"</span></td>
-                    <td><span class="output">"a414243313233"</span></td>
-                    <td>在开头添加字符 'a'</td>
+                    <td><span class="output">"aa414243313233"</span></td>
+                    <td>在开头添加字符 'aa'</td>
                 </tr>
                 <tr>
                     <td>5</td>
-                    <td>添加后缀 'a'</td>
-                    <td><span class="output">"a414243313233"</span></td>
-                    <td><span class="output">"a414243313233a"</span></td>
-                    <td>在结尾添加字符 'a'</td>
+                    <td>添加后缀 'aa'</td>
+                    <td><span class="output">"aa414243313233"</span></td>
+                    <td><span class="output">"aa414243313233aa"</span></td>
+                    <td>在结尾添加字符 'aa'</td>
                 </tr>
             </tbody>
         </table>
@@ -215,20 +215,78 @@ a414243313233a
         <div class="example">
             <h3>示例1：基本设备SN</h3>
             <p><strong>输入：</strong><span class="input">"ABC123"</span></p>
-            <p><strong>输出：</strong><span class="output">"a414243313233a"</span></p>
+            <p><strong>输出：</strong><span class="output">"aa414243313233aa"</span></p>
         </div>
         
         <div class="example">
             <h3>示例2：包含数字和字母的SN</h3>
             <p><strong>输入：</strong><span class="input">"DEV001"</span></p>
-            <p><strong>输出：</strong><span class="output">"a444556303031a"</span></p>
+            <p><strong>输出：</strong><span class="output">"aa444556303031aa"</span></p>
         </div>
         
         <div class="example">
             <h3>示例3：包含下划线的SN</h3>
             <p><strong>输入：</strong><span class="input">"IOT_DEVICE_001"</span></p>
-            <p><strong>输出：</strong><span class="output">"a494f545f4445564943455f303031a"</span></p>
+            <p><strong>输出：</strong><span class="output">"aa494f545f4445564943455f303031aa"</span></p>
         </div>
     </div>
+
+    <div class="algorithm-section">
+        <h2>7. 测试窗口</h2>
+        <p>输入设备SN，点击生成按钮即可生成心跳包：</p>
+        
+        <div style="margin: 20px 0; padding: 20px; background: #f8f9fa; border-radius: 8px;">
+            <div style="margin-bottom: 15px;">
+                <label for="sn-input" style="display: block; margin-bottom: 8px; font-weight: bold;">设备SN：</label>
+                <input type="text" id="sn-input" placeholder="请输入设备SN" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 16px; box-sizing: border-box;">
+            </div>
+            
+            <div style="margin-bottom: 15px;">
+                <button onclick="generateHeartbeat()" style="background: #3498db; color: white; border: none; padding: 10px 20px; border-radius: 4px; font-size: 16px; cursor: pointer; margin-right: 10px;">生成心跳包</button>
+                <button onclick="clearInput()" style="background: #95a5a6; color: white; border: none; padding: 10px 20px; border-radius: 4px; font-size: 16px; cursor: pointer;">清空</button>
+            </div>
+            
+            <div>
+                <label for="result-output" style="display: block; margin-bottom: 8px; font-weight: bold;">生成结果：</label>
+                <textarea id="result-output" readonly style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 16px; min-height: 100px; font-family: 'Courier New', Courier, monospace; box-sizing: border-box;"></textarea>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function generateHeartbeat() {
+            // 获取输入的设备SN
+            const deviceSn = document.getElementById('sn-input').value.trim();
+            
+            // 验证输入
+            if (!deviceSn) {
+                alert('设备SN不能为空！');
+                return;
+            }
+            
+            try {
+                // 1. 将设备SN转换为十六进制字符串
+                // 先将SN转换为字节数组，再转换为十六进制
+                let snHex = '';
+                for (let i = 0; i < deviceSn.length; i++) {
+                    const hex = deviceSn.charCodeAt(i).toString(16).padStart(2, '0');
+                    snHex += hex;
+                }
+                
+                // 2. 前后添加字符 'aa'
+                const heartbeat = `aa${snHex}aa`;
+                
+                // 显示结果
+                document.getElementById('result-output').value = heartbeat;
+            } catch (error) {
+                alert('生成失败：' + error.message);
+            }
+        }
+        
+        function clearInput() {
+            document.getElementById('sn-input').value = '';
+            document.getElementById('result-output').value = '';
+        }
+    </script>
 </body>
 </html>
